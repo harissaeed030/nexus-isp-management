@@ -1,63 +1,80 @@
 # Nexus — ISP Management Platform
 
-**Professional multi-ISP operations platform** for FTTH providers.
+**Mobile-first ISP operations software for FTTH providers.**
 
-Nexus is being developed as a modular platform for managing subscribers, internet packages, billing, payments, support tickets, network equipment and multiple ISP tenants from one secure system.
+Nexus is being built as a multi-tenant platform for subscriber records, internet packages, billing, payments, support tickets and network operations.
 
-> Current status: **Foundation / Phase 1**. The repository currently contains the product blueprint and a responsive frontend prototype. It is not yet production-ready and does not connect to live MikroTik, OLT, ONU or ACS equipment.
+## Current development status
 
-## Product goals
-- Multi-tenant architecture: each ISP's data is isolated.
-- Customer and subscription lifecycle management.
-- Packages, invoices, payments and payment history.
-- MikroTik integration through a secure server-side adapter (RouterOS API).
-- OLT/ONU inventory and device status; vendor-specific integrations added incrementally.
-- TR-069 / GenieACS integration through an ACS adapter.
-- Complaints, support tickets, field operations and audit logs.
-- Mobile-first admin experience.
+The `build/nexus-isp-core` branch contains the first local API foundation:
+- Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
+- Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
+- Customer create/list/read/update/delete, package create/list/update, invoices, payments, support tickets, dashboard summary and audit log endpoints.
+- SQLite database is created automatically under `backend/data/`.
 
-## Technology direction
-- Frontend: responsive HTML/CSS/JavaScript prototype; later React/TypeScript if needed.
-- API: Node.js + TypeScript + Express.
-- Database: MongoDB Atlas (managed cloud database).
-- Authentication: secure sessions/JWT, role-based access control and tenant scoping.
-- Deployment: start with free-tier-compatible services; production hosting and limits must be reviewed before launch.
+This is an early development build, **not production-ready**. The existing HTML dashboard is still a prototype and has not yet been connected to all API modules. Role-based authorization beyond the initial owner account, full subscription lifecycle, billing automation, automated tests, backups and security review remain in progress. MikroTik, OLT/ONU and GenieACS/TR-069 are not connected to real equipment.
 
-## Repository structure
+## Local setup (Android Termux or desktop)
+
+Requirements: Node.js 22.13 or newer.
+
+```sh
+cd backend
+npm install
+cp .env.example .env
+npm run check
+npm start
 ```
-.
-├── index.html
-├── assets/
-│   ├── css/styles.css
-│   └── js/app.js
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── ROADMAP.md
-├── .env.example
-└── .gitignore
+
+API health check: `http://127.0.0.1:4000/api/v1/health`.
+
+The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep this file private and backed up. Do not commit it.
+
+## First owner setup
+
+Send a POST request to `/api/v1/setup` with JSON:
+```json
+{
+  "companyName": "Your ISP Name",
+  "fullName": "Owner Name",
+  "email": "owner@example.com",
+  "password": "use-a-long-private-password"
+}
 ```
+The first setup creates the tenant and owner. The API returns a bearer token. Keep it private. Setup is locked after the first user exists.
+
+## API overview
+
+All endpoints except health, root, initial setup and login require `Authorization: Bearer <token>`.
+
+- `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`
+- `GET /api/v1/dashboard`
+- `GET|POST /api/v1/customers`, `GET|PATCH|DELETE /api/v1/customers/:id`
+- `GET|POST /api/v1/packages`, `PATCH /api/v1/packages/:id`
+- `GET|POST /api/v1/invoices`
+- `GET|POST /api/v1/payments`
+- `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
+- `GET /api/v1/audit-logs`
+
+Money values are integer Pakistani rupees (PKR). Payments cannot exceed the outstanding invoice balance.
 
 ## Security rules
-- Never commit API keys, passwords, database URLs, router credentials or customer data.
-- Keep secrets in environment variables / hosting secret manager.
-- Never expose MikroTik, OLT or ACS credentials in browser JavaScript.
-- Enforce tenant isolation and authorization in the API, not only in the UI.
-- Use HTTPS, input validation, audit logging, backups and least-privilege accounts.
 
-## Development status
-- [x] Product foundation and architecture
-- [x] Responsive dashboard prototype
-- [ ] Backend API and database models
-- [ ] Authentication, roles and tenant isolation
-- [ ] Customer, package and subscription modules
-- [ ] Billing and payment ledger
-- [ ] MikroTik adapter
-- [ ] OLT/ONU inventory and vendor adapters
-- [ ] GenieACS / TR-069 adapter
-- [ ] Automated tests, monitoring and deployment hardening
+- Never commit passwords, tokens, database files, router credentials or customer records.
+- Do not expose network-device credentials in browser JavaScript.
+- Keep tenant scoping enforced in API queries.
+- Use HTTPS, proper role permissions, backups and security review before production use.
 
-## Preview
-Open `index.html` in a browser or enable GitHub Pages for a static preview. The current dashboard uses sample data only.
+## Roadmap
+
+1. Local SQLite API and data model.
+2. Connect dashboard UI to authentication and CRUD modules.
+3. Complete subscriptions, invoices, payment receipts and reports.
+4. Add staff roles, permissions, tests and backup/restore.
+5. Add MikroTik adapter and equipment inventory.
+6. Add vendor-specific OLT/ONU and GenieACS/TR-069 adapters.
+7. Review deployment architecture and production migration.
 
 ## License
+
 All rights reserved until a license is added. Do not assume this project is open source for reuse or resale.
