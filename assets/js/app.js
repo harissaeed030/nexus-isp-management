@@ -82,10 +82,19 @@ $("#nxAdd")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object
 $("#nxGenerate")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{let d=await call("/api/v1/billing/generate",{method:"POST",body:JSON.stringify(b)});msg(d.invoicesCreated+" invoices generated");load("billing")}catch(x){msg(x.message)}});
 $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{await call("/api/v1/payments",{method:"POST",body:JSON.stringify(b)});msg("Payment recorded");load("billing")}catch(x){msg(x.message)}});
 }catch(e){page("Could not load",e.message,'<div class="nx-panel" style="color:#b64e3b">'+esc(e.message)+'</div>')}}
-document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit"].includes(v)){e.preventDefault();load(v);$("#sidebar")?.classList.remove("open")}}));
+document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit"].includes(v)){e.preventDefault();load(v);closeMobileSidebar()}}));
 const nav=$(".nav");if(nav)nav.insertAdjacentHTML("beforeend",'<a class="nav-item" href="#packages"><span>◈</span> Packages</a><a class="nav-item" href="#routers"><span>⌘</span> Routers</a><a class="nav-item" href="#staff"><span>♙</span> Staff</a><a class="nav-item" href="#reports"><span>▤</span> Reports</a><a class="nav-item" href="#audit"><span>≡</span> Activity log</a>');
 nav?.querySelectorAll('a[href="#packages"],a[href="#routers"],a[href="#staff"],a[href="#reports"],a[href="#audit"]').forEach(a=>a.addEventListener("click",e=>{e.preventDefault();load(a.getAttribute("href").slice(1))}));
-$("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());$("#menuBtn")?.addEventListener("click",()=>$("#sidebar")?.classList.toggle("open"));
+$("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());const menuButton=$("#menuBtn"),sidebar=$("#sidebar");
+function closeMobileSidebar(){sidebar?.classList.remove("open");document.querySelector(".sidebar-backdrop")?.remove()}
+menuButton?.addEventListener("click",()=>{
+ if(window.matchMedia("(max-width:760px)").matches){
+  sidebar?.classList.toggle("open");
+  if(sidebar?.classList.contains("open")){
+   if(!document.querySelector(".sidebar-backdrop")){const shade=document.createElement("button");shade.type="button";shade.className="sidebar-backdrop";shade.setAttribute("aria-label","Close navigation");shade.onclick=closeMobileSidebar;document.body.append(shade)}
+  }else closeMobileSidebar();
+ }else shell?.classList.toggle("sidebar-collapsed");
+});
 const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
 
 const moduleGroups=[
