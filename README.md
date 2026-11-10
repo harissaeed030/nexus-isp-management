@@ -43,6 +43,16 @@ Send a POST request to `/api/v1/setup` with JSON:
 ```
 The first setup creates the tenant and owner. The API returns a bearer token. Keep it private. Setup is locked after the first user exists.
 
+### Recovering a local owner password
+
+If the owner login stops working, run this from the `backend` directory. It only resets a uniquely matching owner account in the configured SQLite database, asks for the new password without echoing it, and revokes existing sessions:
+
+```sh
+npm run auth:reset -- owner@example.com
+```
+
+Do not delete `backend/data/nexus.sqlite` to fix a login problem; that file contains the ISP's local data.
+
 ## API overview
 
 All endpoints except health, root, initial setup and login require `Authorization: Bearer <token>`.
