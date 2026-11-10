@@ -30,5 +30,68 @@ const nav=$(".nav");if(nav)nav.insertAdjacentHTML("beforeend",'<a class="nav-ite
 nav?.querySelectorAll('a[href="#packages"],a[href="#routers"],a[href="#staff"],a[href="#reports"],a[href="#audit"]').forEach(a=>a.addEventListener("click",e=>{e.preventDefault();load(a.getAttribute("href").slice(1))}));
 $("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());$("#menuBtn")?.addEventListener("click",()=>$("#sidebar")?.classList.toggle("open"));
 const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
+
+const moduleGroups=[
+["CUSTOMER MANAGEMENT",["Area / Coverage","Country, City & Locality","User Profiles","New Queries","Box / Media Inventory","Connection Providers","Radius Users"]],
+["FIELD OPERATIONS",["Dealers Profile","Recovery Officers","Area Allocation","Promise Dates","Operator Collections"]],
+["COMMERCIAL",["Transactions","Bills Creator","User Collections","Dealer Collections","Allocated Collections","Recharge System","Internet Recharge","Recharge Packages"]],
+["COMMUNICATION",["New Messages","Expiry Messages","WhatsApp Draft Messages","Sent Messages"]],
+["FINANCE & REPORTS",["Account Heads","Account Entries","One Day Accounts","Users Reports","Defaulter Reports","Package Wise Report","Monthly Collection Report","Unpaid Collection","Transaction Wise Report"]],
+["ADMINISTRATION",["Company Profile","User Rights","Configurations","Change Username / Password","Deleted Users","Activity Logs"]],
+["FIBER NETWORK",["OLT Devices","ONU / ONT Inventory","TR-069 / ACS","Connection Status"]]
+];
+const moduleSlug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+const moduleNav=moduleGroups.map(([group,items])=>'<div class="nav-label" style="margin-top:10px">'+group+'</div>'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span>•</span>'+esc(item)+'</a>').join("")).join("");
+nav?.insertAdjacentHTML("beforeend",moduleNav);
+nav?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
+ e.preventDefault();const name=a.dataset.module;
+ const descriptions={
+ "Area / Coverage":"Define service zones, neighborhoods and coverage boundaries.",
+ "Country, City & Locality":"Organize customer locations and service areas.",
+ "User Profiles":"Manage subscriber records, contact details and service status.",
+ "New Queries":"Capture new service requests and installation leads.",
+ "Box / Media Inventory":"Track splitters, distribution boxes and fiber materials.",
+ "Connection Providers":"Record upstream and connectivity providers.",
+ "Radius Users":"Prepare subscriber identity and PPP/RADIUS integration records.",
+ "Dealers Profile":"Manage dealer accounts, assigned areas and collections.",
+ "Recovery Officers":"Assign collection staff and recovery territories.",
+ "Area Allocation":"Allocate customers and collection responsibilities by area.",
+ "Promise Dates":"Track customer payment commitments and follow-up dates.",
+ "Operator Collections":"Record collections received by field operators.",
+ "Transactions":"Review financial transactions and payment records.",
+ "Bills Creator":"Create customer invoices and monthly billing runs.",
+ "User Collections":"Record and reconcile subscriber payments.",
+ "Dealer Collections":"Track dealer deposits and settlements.",
+ "Allocated Collections":"Review collections allocated to staff or dealers.",
+ "Recharge System":"Manage prepaid recharge workflows and package top-ups.",
+ "Internet Recharge":"Record internet package recharge activity.",
+ "Recharge Packages":"Configure prepaid recharge products.",
+ "New Messages":"Prepare customer notices and service announcements.",
+ "Expiry Messages":"Prepare package expiry and due-payment reminders.",
+ "WhatsApp Draft Messages":"Create WhatsApp-ready customer message drafts.",
+ "Sent Messages":"Review communication history.",
+ "Account Heads":"Configure income, expense and ledger categories.",
+ "Account Entries":"Record business income and expense entries.",
+ "One Day Accounts":"Review daily cash and account balances.",
+ "Users Reports":"Build subscriber activity and status reports.",
+ "Defaulter Reports":"Identify overdue invoices and unpaid subscribers.",
+ "Package Wise Report":"Analyze subscribers by internet package.",
+ "Monthly Collection Report":"Review monthly collection performance.",
+ "Unpaid Collection":"Track outstanding customer balances.",
+ "Transaction Wise Report":"Review payment transactions by date and method.",
+ "Company Profile":"Manage ISP company identity and contact information.",
+ "User Rights":"Control staff roles and module permissions.",
+ "Configurations":"Manage workspace settings and operational defaults.",
+ "Change Username / Password":"Update account credentials securely.",
+ "Deleted Users":"Review removed or deactivated subscriber records.",
+ "Activity Logs":"Review workspace actions and audit history.",
+ "OLT Devices":"Inventory optical line terminals and PON ports.",
+ "ONU / ONT Inventory":"Track customer optical network units and serial numbers.",
+ "TR-069 / ACS":"Plan ACS connectivity and remote ONU management.",
+ "Connection Status":"View live service state after network integrations are configured."
+ };
+ page(name,descriptions[name]||"Nexus module",'<div class="nx-panel"><b>Module setup is not connected yet.</b><p>'+esc(descriptions[name]||"This module is planned for the Nexus workspace.")+'</p><p style="color:#82918e">This section is listed for the complete ISP workflow. It will become operational after its database, API, permissions and tests are implemented. No sample records or fake live status are shown.</p></div>');
+}));
+
 if(token){if(shell)shell.style.display="";load("dashboard")}else auth(false);
 })();
