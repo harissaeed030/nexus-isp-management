@@ -9,10 +9,11 @@ Nexus is being built as a multi-tenant platform for subscriber records, internet
 The `build/nexus-isp-core` branch contains the first local API foundation:
 - Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
 - Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
-- Customer create/list/read/update/delete, package create/list/update, invoices, payments, support tickets, dashboard summary and audit log endpoints.
+- Customer CRUD, package management, subscription assignment/status, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
+- Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
 - SQLite database is created automatically under `backend/data/`.
 
-This is an early development build, **not production-ready**. The existing HTML dashboard is still a prototype and has not yet been connected to all API modules. Role-based authorization beyond the initial owner account, full subscription lifecycle, billing automation, automated tests, backups and security review remain in progress. MikroTik, OLT/ONU and GenieACS/TR-069 are not connected to real equipment.
+This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but advanced role-based authorization, automatic recurring billing, invoice PDF/receipts, reporting, automated integration tests, backup/restore and a security review remain unfinished. MikroTik, OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
 
 ## Local setup (Android Termux or desktop)
 
@@ -25,6 +26,8 @@ cp .env.example .env
 npm run check
 npm start
 ```
+
+Open the dashboard in your phone browser: `http://127.0.0.1:4000/`.
 
 API health check: `http://127.0.0.1:4000/api/v1/health`.
 
@@ -61,6 +64,7 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - `GET /api/v1/dashboard`
 - `GET|POST /api/v1/customers`, `GET|PATCH|DELETE /api/v1/customers/:id`
 - `GET|POST /api/v1/packages`, `PATCH /api/v1/packages/:id`
+- `GET|POST /api/v1/subscriptions`, `PATCH /api/v1/subscriptions/:id`
 - `GET|POST /api/v1/invoices`
 - `GET|POST /api/v1/payments`
 - `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
