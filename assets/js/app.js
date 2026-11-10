@@ -98,12 +98,12 @@ menuButton?.addEventListener("click",()=>{
 const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
 
 const moduleGroups=[
-["CUSTOMER MANAGEMENT",["Area / Coverage","Country, City & Locality","User Profiles","New Queries","Box / Media Inventory","Connection Providers","Radius Users"]],
+["CUSTOMER MANAGEMENT",["Area / Coverage","Country, City & Locality","New Queries","Box / Media Inventory","Connection Providers","Radius Users"]],
 ["FIELD OPERATIONS",["Dealers Profile","Recovery Officers","Area Allocation","Promise Dates","Operator Collections"]],
-["COMMERCIAL",["Transactions","Bills Creator","User Collections","Dealer Collections","Allocated Collections","Recharge System","Internet Recharge","Recharge Packages"]],
+["COMMERCIAL",["Dealer Collections","Allocated Collections","Recharge System","Internet Recharge","Recharge Packages"]],
 ["COMMUNICATION",["New Messages","Expiry Messages","WhatsApp Draft Messages","Sent Messages"]],
-["FINANCE & REPORTS",["Account Heads","Account Entries","One Day Accounts","Users Reports","Defaulter Reports","Package Wise Report","Monthly Collection Report","Unpaid Collection","Transaction Wise Report"]],
-["ADMINISTRATION",["Company Profile","User Rights","Configurations","Change Username / Password","Deleted Users","Activity Logs"]],
+["FINANCE & REPORTS",["Account Heads","Account Entries","One Day Accounts","Defaulter Reports","Package Wise Report","Monthly Collection Report","Unpaid Collection","Transaction Wise Report"]],
+["ADMINISTRATION",["Company Profile","User Rights","Configurations","Change Username / Password","Deleted Users"]],
 ["FIBER NETWORK",["OLT Devices","ONU / ONT Inventory","TR-069 / ACS","Connection Status"]]
 ];
 const moduleSlug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
