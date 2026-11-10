@@ -1,4 +1,6 @@
 import express from "express";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -6,6 +8,8 @@ import { randomUUID,randomBytes,createHash,scryptSync,timingSafeEqual } from "no
 import { db } from "./config/database.js";
 import { env } from "./config/env.js";
 const app=express();app.disable("x-powered-by");app.use(helmet());
+const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
+app.use("/assets",express.static(resolve(projectRoot,"assets"),{fallthrough:false,maxAge:"1h"}));
 app.use(cors({origin(origin,cb){if(!origin||env.corsOrigins.includes(origin))return cb(null,true);cb(new Error("Origin is not allowed by CORS."));}}));
 app.use(express.json({limit:"100kb"}));app.use(rateLimit({windowMs:15*60*1000,limit:300,standardHeaders:"draft-7",legacyHeaders:false}));
 const id=()=>randomUUID(),hashToken=v=>createHash("sha256").update(v).digest("hex"),required=v=>typeof v==="string"&&v.trim().length>0;
@@ -15,7 +19,7 @@ const cleanUser=u=>({id:u.id,tenantId:u.tenant_id,email:u.email,fullName:u.full_
 const fail=(res,status,error)=>res.status(status).json({success:false,error});
 function auth(req,res,next){const raw=(req.headers.authorization||"").replace(/^Bearer\s+/i,"");if(!raw)return fail(res,401,"Authentication required.");const u=db.prepare("SELECT u.*,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active'").get(hashToken(raw),new Date().toISOString());if(!u)return fail(res,401,"Session expired or invalid.");req.user=u;next();}
 function audit(u,action,type,rid){db.prepare("INSERT INTO audit_logs(id,tenant_id,actor_user_id,action,resource_type,resource_id) VALUES(?,?,?,?,?,?)").run(id(),u.tenant_id,u.id,action,type,rid||null);}
-app.get("/",(_q,r)=>r.json({service:"Nexus API",version:"0.2.0",database:"SQLite"}));
+app.get("/",(_q,r)=>r.sendFile(resolve(projectRoot,"index.html")));
 app.get("/api/v1/health",(_q,r)=>r.json({success:true,status:"running",database:"connected",timestamp:new Date().toISOString()}));
 app.post("/api/v1/setup",(req,res)=>{const b=req.body||{};if(!required(b.companyName)||!required(b.fullName)||!required(b.email)||!required(b.password)||b.password.length<10)return fail(res,400,"Company, name, email and password (minimum 10 characters) are required.");if(db.prepare("SELECT COUNT(*) n FROM users").get().n>0)return fail(res,409,"Initial setup is already complete. Sign in instead.");const tid=id(),uid=id(),slug=b.companyName.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-")+"-"+tid.slice(0,6);db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run(tid,b.companyName.trim(),slug);db.prepare("INSERT INTO users(id,tenant_id,email,password_hash,full_name,role) VALUES(?,?,?,?,?,'owner')").run(uid,tid,b.email.trim().toLowerCase(),passwordHash(b.password),b.fullName.trim());const token=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hashToken(token),uid,new Date(Date.now()+604800000).toISOString());audit({id:uid,tenant_id:tid},"initial_setup","tenant",tid);res.status(201).json({success:true,token,user:cleanUser(db.prepare("SELECT * FROM users WHERE id=?").get(uid)),tenant:{id:tid,name:b.companyName.trim()}});});
 app.post("/api/v1/auth/login",(req,res)=>{const b=req.body||{};if(!required(b.email)||!required(b.password))return fail(res,400,"Email and password are required.");const u=db.prepare("SELECT * FROM users WHERE email=? COLLATE NOCASE AND status='active' ORDER BY created_at LIMIT 1").get(b.email.trim());if(!u||!verifyPassword(b.password,u.password_hash))return fail(res,401,"Invalid email or password.");const token=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hashToken(token),u.id,new Date(Date.now()+604800000).toISOString());res.json({success:true,token,user:cleanUser(u)});});
