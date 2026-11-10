@@ -61,11 +61,15 @@ try {
 
   const update = db.prepare("UPDATE users SET password_hash = ? WHERE id = ?");
   const revoke = db.prepare("DELETE FROM sessions WHERE user_id = ?");
-  const save = db.transaction(() => {
+  db.exec("BEGIN IMMEDIATE");
+  try {
     update.run(passwordHash, user.id);
     revoke.run(user.id);
-  });
-  save();
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 
   console.log("Owner password updated. All existing sessions were signed out.");
 } catch (error) {
