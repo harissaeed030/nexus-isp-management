@@ -20,3 +20,5 @@ jobs:
         working-directory: backend
       - run: npm run check
         working-directory: backend
+      - run: node --check ../assets/js/app.js
+        working-directory: backend
