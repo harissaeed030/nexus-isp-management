@@ -243,3 +243,34 @@ body{background:var(--bg);color:var(--ink);font-family:'DM Sans',system-ui,sans-
   .was-feature-list{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){.sidebar,.main{transition:none!important}}
+
+
+/* Professional grouped navigation */
+.sidebar{padding-top:20px}
+.sidebar .brand{padding-bottom:18px}
+.sidebar .workspace{margin-bottom:19px}
+.sidebar .nav-label{font-size:9px;font-weight:800;letter-spacing:1.35px;margin:0 0 9px;padding:0 11px}
+.sidebar .nav{gap:3px;margin:0 0 17px}
+.sidebar .nav-item{min-height:39px;padding:9px 11px;gap:12px;border:1px solid transparent;border-radius:10px;font-size:11px;font-weight:600;transition:background .18s,border-color .18s,color .18s,transform .18s}
+.sidebar .nav-item span:first-child{width:19px;min-width:19px;height:19px;display:inline-grid;place-items:center;border-radius:6px;background:rgba(255,255,255,.07);font-size:13px;line-height:1}
+.sidebar .nav-item:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.07);transform:translateX(2px)}
+.sidebar .nav-item.active{background:linear-gradient(90deg,rgba(30,145,108,.24),rgba(30,145,108,.08));border-color:rgba(74,190,148,.17);box-shadow:inset 3px 0 #36b889;color:#f4fff9}
+.sidebar .nav-item.active span:first-child{background:rgba(54,184,137,.18);color:#73e0b6}
+.nav-extra{padding-top:2px}
+.nav-section{margin:0 0 13px}
+.nav-section-heading{display:flex;align-items:center;justify-content:space-between;padding:0 11px;margin:0 0 7px;color:#779488;font-size:9px;font-weight:800;letter-spacing:1.05px}
+.nav-section-heading i{font-style:normal;color:#779488;background:rgba(255,255,255,.07);border-radius:10px;padding:2px 6px;font-size:8px}
+.sidebar .nav-sub{margin-bottom:0}
+.sidebar .nav-sub .nav-item{min-height:35px;padding:7px 10px;font-size:10px;color:#afc3ba}
+.sidebar .nav-sub .nav-icon{width:19px;min-width:19px;height:19px;display:inline-grid;place-items:center;border-radius:6px;background:rgba(255,255,255,.055);color:#8eb7a5;font-size:12px}
+.sidebar .nav-sub .nav-text{width:auto!important;min-width:0!important;height:auto!important;display:inline!important;background:none!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar .nav-sub .nav-item.active{color:#f4fff9}
+.sidebar .nav-sub .nav-item.active .nav-icon{background:rgba(54,184,137,.18);color:#73e0b6}
+.sidebar .sidebar-bottom{position:sticky;bottom:0;padding-top:12px;background:linear-gradient(180deg,rgba(16,37,53,0),#102535 16%)}
+.sidebar-backdrop{border:0;padding:0}
+@media(max-width:760px){.sidebar{padding-top:17px}.sidebar .nav-item{min-height:40px}.nav-section{margin-bottom:12px}}
+.app-shell.sidebar-collapsed .nav-section-heading{justify-content:center;padding:0}
+.app-shell.sidebar-collapsed .nav-section-heading span,.app-shell.sidebar-collapsed .nav-section-heading i{display:none}
+.app-shell.sidebar-collapsed .nav-sub .nav-item{justify-content:center;padding:8px 5px}
+.app-shell.sidebar-collapsed .nav-sub .nav-icon{margin:0}
+.app-shell.sidebar-collapsed .nav-sub .nav-text{display:none!important}
