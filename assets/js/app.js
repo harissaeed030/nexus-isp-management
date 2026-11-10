@@ -24,5 +24,6 @@ document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>
 const nav=$(".nav");if(nav)nav.insertAdjacentHTML("beforeend",'<a class="nav-item" href="#packages"><span>◈</span> Packages</a><a class="nav-item" href="#audit"><span>≡</span> Activity log</a>');
 nav?.querySelectorAll('a[href="#packages"],a[href="#audit"]').forEach(a=>a.addEventListener("click",e=>{e.preventDefault();load(a.getAttribute("href").slice(1))}));
 $("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());$("#menuBtn")?.addEventListener("click",()=>$("#sidebar")?.classList.toggle("open"));
+const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
 if(token){if(shell)shell.style.display="";load("dashboard")}else auth(false);
 })();
