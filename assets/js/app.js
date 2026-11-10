@@ -83,8 +83,8 @@ $("#nxGenerate")?.addEventListener("submit",async e=>{e.preventDefault();let b=O
 $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{await call("/api/v1/payments",{method:"POST",body:JSON.stringify(b)});msg("Payment recorded");load("billing")}catch(x){msg(x.message)}});
 }catch(e){page("Could not load",e.message,'<div class="nx-panel" style="color:#b64e3b">'+esc(e.message)+'</div>')}}
 document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit"].includes(v)){e.preventDefault();load(v);closeMobileSidebar()}}));
-const nav=$(".nav");if(nav)nav.insertAdjacentHTML("beforeend",'<a class="nav-item" href="#packages"><span>◈</span> Packages</a><a class="nav-item" href="#routers"><span>⌘</span> Routers</a><a class="nav-item" href="#staff"><span>♙</span> Staff</a><a class="nav-item" href="#reports"><span>▤</span> Reports</a><a class="nav-item" href="#audit"><span>≡</span> Activity log</a>');
-nav?.querySelectorAll('a[href="#packages"],a[href="#routers"],a[href="#staff"],a[href="#reports"],a[href="#audit"]').forEach(a=>a.addEventListener("click",e=>{e.preventDefault();load(a.getAttribute("href").slice(1))}));
+const nav=$(".nav");
+nav?.querySelectorAll('a[href="#packages"],a[href="#routers"],a[href="#staff"],a[href="#reports"],a[href="#audit"]').forEach(a=>a.addEventListener("click",e=>{e.preventDefault();document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item===a));closeMobileSidebar();load(a.getAttribute("href").slice(1))}));
 $("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());const menuButton=$("#menuBtn"),sidebar=$("#sidebar");
 function closeMobileSidebar(){sidebar?.classList.remove("open");document.querySelector(".sidebar-backdrop")?.remove()}
 menuButton?.addEventListener("click",()=>{
@@ -107,10 +107,13 @@ const moduleGroups=[
 ["FIBER NETWORK",["OLT Devices","ONU / ONT Inventory","TR-069 / ACS","Connection Status"]]
 ];
 const moduleSlug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
-const moduleNav=moduleGroups.map(([group,items])=>'<div class="nav-label" style="margin-top:10px">'+group+'</div>'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span>•</span>'+esc(item)+'</a>').join("")).join("");
-nav?.insertAdjacentHTML("beforeend",moduleNav);
-nav?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
+const moduleIcons={"Area / Coverage":"⌖","Country, City & Locality":"⌂","User Profiles":"♙","New Queries":"✉","Box / Media Inventory":"▣","Connection Providers":"⇄","Radius Users":"◎","Dealers Profile":"♧","Recovery Officers":"♙","Area Allocation":"⌖","Promise Dates":"◷","Operator Collections":"▤","Transactions":"⇄","Bills Creator":"▤","User Collections":"▤","Dealer Collections":"♧","Allocated Collections":"▥","Recharge System":"↻","Internet Recharge":"⌁","Recharge Packages":"◈","New Messages":"✉","Expiry Messages":"◷","WhatsApp Draft Messages":"✎","Sent Messages":"➤","Account Heads":"▤","Account Entries":"≡","One Day Accounts":"▦","Users Reports":"▥","Defaulter Reports":"⚑","Package Wise Report":"◈","Monthly Collection Report":"▥","Unpaid Collection":"◷","Transaction Wise Report":"⇄","Company Profile":"▣","User Rights":"♙","Configurations":"⚙","Change Username / Password":"⚿","Deleted Users":"▱","Activity Logs":"≡"};
+const moduleNav=moduleGroups.filter(([group])=>group!=="FIBER NETWORK").map(([group,items])=>'<section class="nav-section"><div class="nav-section-heading"><span>'+group+'</span><i>'+items.length+'</i></div><nav class="nav nav-sub" aria-label="'+group+'">'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span class="nav-icon">'+(moduleIcons[item]||"◇")+'</span><span class="nav-text">'+esc(item)+'</span></a>').join("")+'</nav></section>').join("");
+sidebar?.querySelector(".sidebar-bottom")?.insertAdjacentHTML("beforebegin",'<div class="nav-extra">'+moduleNav+'</div>');
+sidebar?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
  e.preventDefault();const name=a.dataset.module;
+ document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item===a));
+ closeMobileSidebar();
  const descriptions={
  "Area / Coverage":"Define service zones, neighborhoods and coverage boundaries.",
  "Country, City & Locality":"Organize customer locations and service areas.",
