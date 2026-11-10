@@ -18,7 +18,7 @@ jobs:
           node-version: 22
       - run: npm install
         working-directory: backend
-      - run: npm run check
+      - run: npm run verify
         working-directory: backend
       - run: node --check ../assets/js/app.js
         working-directory: backend

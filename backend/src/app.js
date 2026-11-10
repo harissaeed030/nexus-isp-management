@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import { randomUUID,randomBytes,createHash,scryptSync,timingSafeEqual } from "node:crypto";
 import { db } from "./config/database.js";
 import { env } from "./config/env.js";
+import { registerOperationsRoutes } from "./routes/operations.routes.js";
 const app=express();app.disable("x-powered-by");app.use(helmet());
 const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
 app.use("/assets",express.static(resolve(projectRoot,"assets"),{fallthrough:false,maxAge:"1h"}));
@@ -17,7 +18,15 @@ const passwordHash=p=>{const salt=randomBytes(16).toString("hex");return salt+":
 const verifyPassword=(p,s)=>{try{const [salt,key]=s.split(":");const a=scryptSync(p,salt,64),b=Buffer.from(key,"hex");return a.length===b.length&&timingSafeEqual(a,b);}catch{return false;}};
 const cleanUser=u=>({id:u.id,tenantId:u.tenant_id,email:u.email,fullName:u.full_name,role:u.role});
 const fail=(res,status,error)=>res.status(status).json({success:false,error});
-function auth(req,res,next){const raw=(req.headers.authorization||"").replace(/^Bearer\s+/i,"");if(!raw)return fail(res,401,"Authentication required.");const u=db.prepare("SELECT u.*,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active'").get(hashToken(raw),new Date().toISOString());if(!u)return fail(res,401,"Session expired or invalid.");req.user=u;next();}
+function auth(req,res,next){const raw=(req.headers.authorization||"").replace(/^Bearer\s+/i,"");if(!raw)return fail(res,401,"Authentication required.");const u=db.prepare("SELECT u.*,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active'").get(hashToken(raw),new Date().toISOString());if(!u)return fail(res,401,"Session expired or invalid.");
+const path=req.path,method=req.method,role=u.role;
+const is=(prefix)=>path.startsWith(prefix);
+let allowed=role==="owner"||role==="admin";
+if(!allowed&&role==="billing") allowed=(method==="GET"&&(path==="/api/v1/dashboard"||path==="/api/v1/customers"||path==="/api/v1/packages"||path==="/api/v1/subscriptions"||is("/api/v1/invoices")||is("/api/v1/payments")||is("/api/v1/reports")||is("/api/v1/billing")))||(is("/api/v1/invoices")&&["POST"].includes(method))||(is("/api/v1/payments")&&method==="POST")||(path==="/api/v1/billing/generate"&&method==="POST");
+if(!allowed&&role==="noc") allowed=(method==="GET"&&(path==="/api/v1/dashboard"||path==="/api/v1/customers"||path==="/api/v1/packages"||is("/api/v1/subscriptions")||is("/api/v1/tickets")||is("/api/v1/routers")))||(is("/api/v1/subscriptions")&&method==="PATCH")||(is("/api/v1/tickets")&&["POST","PATCH"].includes(method));
+if(!allowed&&role==="support") allowed=(method==="GET"&&(path==="/api/v1/dashboard"||path==="/api/v1/customers"||path==="/api/v1/packages"||is("/api/v1/subscriptions")||is("/api/v1/tickets")))||(is("/api/v1/tickets")&&["POST","PATCH"].includes(method));
+if(!allowed)return fail(res,403,"Your staff role does not have permission for this action.");
+req.user=u;next();}
 function audit(u,action,type,rid){db.prepare("INSERT INTO audit_logs(id,tenant_id,actor_user_id,action,resource_type,resource_id) VALUES(?,?,?,?,?,?)").run(id(),u.tenant_id,u.id,action,type,rid||null);}
 app.get("/",(_q,r)=>r.sendFile(resolve(projectRoot,"index.html")));
 app.get("/api/v1/health",(_q,r)=>r.json({success:true,status:"running",database:"connected",timestamp:new Date().toISOString()}));
@@ -45,5 +54,6 @@ app.get("/api/v1/tickets",auth,(q,r)=>r.json({success:true,data:db.prepare("SELE
 app.post("/api/v1/tickets",auth,(q,r)=>{const b=q.body||{};if(!required(b.customerId)||!required(b.subject))return fail(r,400,"Customer and subject required.");if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,q.user.tenant_id))return fail(r,404,"Customer not found.");const tid=id(),p=["low","normal","high","urgent"].includes(b.priority)?b.priority:"normal";db.prepare("INSERT INTO support_tickets(id,tenant_id,customer_id,subject,description,priority) VALUES(?,?,?,?,?,?)").run(tid,q.user.tenant_id,b.customerId,b.subject.trim(),b.description||null,p);audit(q.user,"create","ticket",tid);r.status(201).json({success:true,data:db.prepare("SELECT * FROM support_tickets WHERE id=?").get(tid)});});
 app.patch("/api/v1/tickets/:id",auth,(q,r)=>{const t=db.prepare("SELECT * FROM support_tickets WHERE id=? AND tenant_id=?").get(q.params.id,q.user.tenant_id);if(!t)return fail(r,404,"Ticket not found.");const s=q.body?.status;if(!["open","in_progress","resolved","closed"].includes(s))return fail(r,400,"Invalid ticket status.");db.prepare("UPDATE support_tickets SET status=? WHERE id=? AND tenant_id=?").run(s,t.id,q.user.tenant_id);audit(q.user,"update","ticket",t.id);r.json({success:true,data:db.prepare("SELECT * FROM support_tickets WHERE id=?").get(t.id)});});
 app.get("/api/v1/audit-logs",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT * FROM audit_logs WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200").all(q.user.tenant_id)}));
+registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash,cleanUser});
 app.use((req,res)=>fail(res,404,"Route not found."));app.use((err,_q,res,_n)=>{console.error(err);res.status(500).json({success:false,error:"Internal server error."});});
 export default app;

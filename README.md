@@ -10,10 +10,11 @@ The `build/nexus-isp-core` branch contains the first local API foundation:
 - Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
 - Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
 - Customer CRUD, package management, subscription assignment/status, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
+- Staff account management, router inventory, idempotent monthly invoice generation and financial summary reports.
 - Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
 - SQLite database is created automatically under `backend/data/`.
 
-This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but advanced role-based authorization, automatic recurring billing, invoice PDF/receipts, reporting, automated integration tests, backup/restore and a security review remain unfinished. MikroTik, OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
+This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, backup/restore, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
 
 ## Local setup (Android Termux or desktop)
 

@@ -16,6 +16,27 @@ CREATE TABLE IF NOT EXISTS invoices(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL 
 CREATE TABLE IF NOT EXISTS payments(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),invoice_id TEXT NOT NULL REFERENCES invoices(id),amount_pkr INTEGER NOT NULL,method TEXT NOT NULL,reference TEXT,received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS support_tickets(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),customer_id TEXT NOT NULL REFERENCES customers(id),subject TEXT NOT NULL,description TEXT,priority TEXT NOT NULL DEFAULT 'normal',status TEXT NOT NULL DEFAULT 'open',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS audit_logs(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),actor_user_id TEXT,action TEXT NOT NULL,resource_type TEXT NOT NULL,resource_id TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE INDEX IF NOT EXISTS idx_customers_tenant ON customers(tenant_id);CREATE INDEX IF NOT EXISTS idx_packages_tenant ON packages(tenant_id);CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id);CREATE INDEX IF NOT EXISTS idx_tickets_tenant ON support_tickets(tenant_id);
+
+CREATE TABLE IF NOT EXISTS routers(
+ id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ name TEXT NOT NULL, host TEXT NOT NULL, api_port INTEGER NOT NULL DEFAULT 8728,
+ location TEXT, status TEXT NOT NULL DEFAULT 'configured', notes TEXT,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE(tenant_id,host,api_port)
+);
+CREATE TABLE IF NOT EXISTS billing_runs(
+ id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ billing_period TEXT NOT NULL, invoices_created INTEGER NOT NULL DEFAULT 0,
+ created_by TEXT REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE(tenant_id,billing_period)
+);
+CREATE INDEX IF NOT EXISTS idx_customers_tenant ON customers(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_packages_tenant ON packages(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_tenant ON support_tickets(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_routers_tenant ON routers(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant_status ON subscriptions(tenant_id,status);
+CREATE INDEX IF NOT EXISTS idx_payments_tenant_received ON payments(tenant_id,received_at);
+
 `);
 export function getDatabaseStatus(){return "connected";}
