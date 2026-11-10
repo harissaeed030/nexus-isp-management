@@ -1,0 +1,12 @@
+name = "nexus-saas-api"
+main = "src/index.js"
+compatibility_date = "2026-11-10"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nexus-saas-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[observability]
+enabled = true
