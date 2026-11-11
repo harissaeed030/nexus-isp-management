@@ -7,6 +7,7 @@ import { once } from "node:events";
 const dir=mkdtempSync(join(tmpdir(),"nexus-smoke-"));
 process.env.SQLITE_PATH=join(dir,"test.sqlite");
 process.env.CORS_ORIGINS="http://localhost";
+process.env.GEMINI_API_KEY="";
 const {default:app}=await import("../src/app.js");
 const server=app.listen(0);
 await once(server,"listening");
