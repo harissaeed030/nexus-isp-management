@@ -8,6 +8,7 @@ import { randomUUID,randomBytes,createHash,scryptSync,timingSafeEqual } from "no
 import { db } from "./config/database.js";
 import { env } from "./config/env.js";
 import { registerOperationsRoutes } from "./routes/operations.routes.js";
+import { hasPermission, permissionFor } from "./lib/permissions.js";
 const app=express();app.disable("x-powered-by");app.use(helmet());
 const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
 app.use("/assets",express.static(resolve(projectRoot,"assets"),{fallthrough:false,maxAge:"1h"}));
@@ -18,15 +19,19 @@ const passwordHash=p=>{const salt=randomBytes(16).toString("hex");return salt+":
 const verifyPassword=(p,s)=>{try{const [salt,key]=s.split(":");const a=scryptSync(p,salt,64),b=Buffer.from(key,"hex");return a.length===b.length&&timingSafeEqual(a,b);}catch{return false;}};
 const cleanUser=u=>({id:u.id,tenantId:u.tenant_id,email:u.email,fullName:u.full_name,role:u.role});
 const fail=(res,status,error)=>res.status(status).json({success:false,error});
-function auth(req,res,next){const raw=(req.headers.authorization||"").replace(/^Bearer\s+/i,"");if(!raw)return fail(res,401,"Authentication required.");const u=db.prepare("SELECT u.*,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active'").get(hashToken(raw),new Date().toISOString());if(!u)return fail(res,401,"Session expired or invalid.");
-const path=req.path,method=req.method,role=u.role;
-const is=(prefix)=>path.startsWith(prefix);
-let allowed=role==="owner"||role==="admin";
-if(!allowed&&role==="billing") allowed=(method==="GET"&&(path==="/api/v1/dashboard"||path==="/api/v1/customers"||path==="/api/v1/packages"||path==="/api/v1/subscriptions"||is("/api/v1/invoices")||is("/api/v1/payments")||is("/api/v1/reports")||is("/api/v1/billing")))||(is("/api/v1/invoices")&&["POST"].includes(method))||(is("/api/v1/payments")&&method==="POST")||(path==="/api/v1/billing/generate"&&method==="POST");
-if(!allowed&&role==="noc") allowed=(method==="GET"&&(path==="/api/v1/dashboard"||path==="/api/v1/customers"||path==="/api/v1/packages"||is("/api/v1/subscriptions")||is("/api/v1/tickets")||is("/api/v1/routers")))||(is("/api/v1/subscriptions")&&method==="PATCH")||(is("/api/v1/tickets")&&["POST","PATCH"].includes(method));
-if(!allowed&&role==="support") allowed=(method==="GET"&&(path==="/api/v1/dashboard"||path==="/api/v1/customers"||path==="/api/v1/packages"||is("/api/v1/subscriptions")||is("/api/v1/tickets")))||(is("/api/v1/tickets")&&["POST","PATCH"].includes(method));
-if(!allowed)return fail(res,403,"Your staff role does not have permission for this action.");
-req.user=u;next();}
+function auth(req,res,next){
+  const raw=(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
+  if(!raw)return fail(res,401,"Authentication required.");
+  const u=db.prepare("SELECT u.*,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active'").get(hashToken(raw),new Date().toISOString());
+  if(!u)return fail(res,401,"Session expired or invalid.");
+  const selfRoute=req.path==="/api/v1/auth/me"||req.path==="/api/v1/auth/logout";
+  const staffAdminRoute=req.path==="/api/v1/staff"||req.path.startsWith("/api/v1/staff/");
+  if(!selfRoute&&!staffAdminRoute){
+    const permission=permissionFor(req.path,req.method);
+    if(!permission||!hasPermission(db,u,permission))return fail(res,403,"Your staff role does not have permission for this action.");
+  }
+  req.user=u;next();
+}
 function audit(u,action,type,rid){db.prepare("INSERT INTO audit_logs(id,tenant_id,actor_user_id,action,resource_type,resource_id) VALUES(?,?,?,?,?,?)").run(id(),u.tenant_id,u.id,action,type,rid||null);}
 app.get("/",(_q,r)=>r.sendFile(resolve(projectRoot,"index.html")));
 app.get("/api/v1/health",(_q,r)=>r.json({success:true,status:"running",database:"connected",timestamp:new Date().toISOString()}));

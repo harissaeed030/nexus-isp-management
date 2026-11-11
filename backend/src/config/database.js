@@ -30,6 +30,17 @@ CREATE TABLE IF NOT EXISTS billing_runs(
  created_by TEXT REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  UNIQUE(tenant_id,billing_period)
 );
+CREATE TABLE IF NOT EXISTS user_permissions(
+ id TEXT PRIMARY KEY,
+ tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ permission TEXT NOT NULL,
+ allowed INTEGER NOT NULL CHECK(allowed IN (0,1)),
+ updated_by TEXT REFERENCES users(id),
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE(tenant_id,user_id,permission)
+);
+CREATE INDEX IF NOT EXISTS idx_user_permissions_user ON user_permissions(tenant_id,user_id);
 CREATE INDEX IF NOT EXISTS idx_customers_tenant ON customers(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_packages_tenant ON packages(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id);

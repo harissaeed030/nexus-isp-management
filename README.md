@@ -10,7 +10,7 @@ The `build/nexus-isp-core` branch contains the first local API foundation:
 - Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
 - Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
 - Customer CRUD, package management, subscription assignment/status, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
-- Staff account management, router inventory, idempotent monthly invoice generation and financial summary reports.
+- Staff account management with role defaults and per-user module permission overrides, router inventory, idempotent monthly invoice generation and financial summary reports.
 - Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
 - SQLite database is created automatically under `backend/data/`.
 
@@ -70,8 +70,12 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - `GET|POST /api/v1/payments`
 - `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
 - `GET /api/v1/audit-logs`
+- `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
+- `GET|PUT /api/v1/staff/:id/permissions` (owner/admin only)
 
 Money values are integer Pakistani rupees (PKR). Payments cannot exceed the outstanding invoice balance.
+
+Staff roles have safe defaults (owner, admin, billing, NOC, support, technician and limited staff). Owners and administrators can grant or revoke individual module permissions for non-owner staff accounts. Permission changes are checked by the API on every request; dashboard checkboxes are not a security boundary.
 
 ## Security rules
 

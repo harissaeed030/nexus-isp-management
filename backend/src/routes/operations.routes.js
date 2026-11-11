@@ -1,21 +1,25 @@
 import { randomUUID } from "node:crypto";
+import { PERMISSIONS, getEffectivePermissions, hasPermission, permissionKeys, roleHasPermission } from "../lib/permissions.js";
 
 export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash,cleanUser}) {
   const roles=(...allowed)=>(req,res,next)=>allowed.includes(req.user.role)?next():fail(res,403,"Your staff role does not have permission for this action.");
   const ownerOrAdmin=roles("owner","admin");
-  const networkRoles=roles("owner","admin","noc");
-  const billingRoles=roles("owner","admin","billing");
-  const staffRoles=roles("owner","admin");
+  const permit=permission=>(req,res,next)=>hasPermission(db,req.user,permission)?next():fail(res,403,"Your staff role does not have permission for this action.");
+  const networkRead=permit("routers.read");
+  const networkManage=permit("routers.manage");
+  const billingGenerate=permit("billing.generate");
+  const billingRead=permit("billing.read");
+  const reportsRead=permit("reports.read");
   const validPeriod=v=>typeof v==="string"&&/^\d{4}-(0[1-9]|1[0-2])$/.test(v);
 
   // Staff accounts inherit tenant isolation from the authenticated owner workspace.
-  app.get("/api/v1/staff",auth,staffRoles,(req,res)=>{
+  app.get("/api/v1/staff",auth,ownerOrAdmin,(req,res)=>{
     const rows=db.prepare("SELECT id,email,full_name,role,status,created_at FROM users WHERE tenant_id=? ORDER BY created_at").all(req.user.tenant_id);
     res.json({success:true,data:rows});
   });
   app.post("/api/v1/staff",auth,ownerOrAdmin,(req,res)=>{
     const b=req.body||{};
-    if(!b.fullName?.trim()||!b.email?.trim()||typeof b.password!=="string"||b.password.length<10||!["admin","billing","noc","support"].includes(b.role))
+    if(!b.fullName?.trim()||!b.email?.trim()||typeof b.password!=="string"||b.password.length<10||!["admin","billing","noc","support","technician","staff"].includes(b.role))
       return fail(res,400,"Name, valid email, password (10+ characters) and a staff role are required.");
     if(req.user.role!=="owner"&&b.role==="admin") return fail(res,403,"Only the owner can create an administrator.");
     const uid=id();
@@ -32,19 +36,54 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
     if(target.role==="owner")return fail(res,403,"The owner account cannot be changed here.");
     if(req.user.role!=="owner"&&target.role==="admin")return fail(res,403,"Only the owner can manage administrators.");
     const role=req.body?.role??target.role,status=req.body?.status??target.status;
-    if(!["admin","billing","noc","support"].includes(role)||!["active","inactive"].includes(status))return fail(res,400,"Invalid role or status.");
+    if(!["admin","billing","noc","support","technician","staff"].includes(role)||!["active","inactive"].includes(status))return fail(res,400,"Invalid role or status.");
     if(req.user.role!=="owner"&&role==="admin")return fail(res,403,"Only the owner can assign administrator role.");
     db.prepare("UPDATE users SET role=?,status=? WHERE id=? AND tenant_id=?").run(role,status,target.id,req.user.tenant_id);
+    if(role!==target.role)db.prepare("DELETE FROM user_permissions WHERE tenant_id=? AND user_id=?").run(req.user.tenant_id,target.id);
     if(status==="inactive")db.prepare("DELETE FROM sessions WHERE user_id=?").run(target.id);
     audit(req.user,"update","staff",target.id);
     res.json({success:true,data:cleanUser(db.prepare("SELECT * FROM users WHERE id=?").get(target.id))});
   });
 
+  app.get("/api/v1/staff/:id/permissions",auth,ownerOrAdmin,(req,res)=>{
+    const target=db.prepare("SELECT * FROM users WHERE id=? AND tenant_id=?").get(req.params.id,req.user.tenant_id);
+    if(!target)return fail(res,404,"Staff account not found.");
+    if(target.role==="owner")return fail(res,403,"The owner account permissions cannot be changed here.");
+    if(req.user.role!=="owner"&&target.role==="admin")return fail(res,403,"Only the owner can manage administrators.");
+    res.json({success:true,data:{role:target.role,permissions:getEffectivePermissions(db,target)}});
+  });
+  app.put("/api/v1/staff/:id/permissions",auth,ownerOrAdmin,(req,res)=>{
+    const target=db.prepare("SELECT * FROM users WHERE id=? AND tenant_id=?").get(req.params.id,req.user.tenant_id);
+    if(!target)return fail(res,404,"Staff account not found.");
+    if(target.role==="owner")return fail(res,403,"The owner account permissions cannot be changed here.");
+    if(req.user.role!=="owner"&&target.role==="admin")return fail(res,403,"Only the owner can manage administrators.");
+    const allowed=req.body?.allowedPermissions;
+    if(!Array.isArray(allowed)||allowed.some(key=>typeof key!=="string"||!permissionKeys.has(key)))
+      return fail(res,400,"A valid allowedPermissions list is required.");
+    const selected=new Set(allowed);
+    try{
+      db.exec("BEGIN IMMEDIATE");
+      db.prepare("DELETE FROM user_permissions WHERE tenant_id=? AND user_id=?").run(req.user.tenant_id,target.id);
+      const insert=db.prepare("INSERT INTO user_permissions(id,tenant_id,user_id,permission,allowed,updated_by) VALUES(?,?,?,?,?,?)");
+      for(const item of PERMISSIONS){
+        const value=selected.has(item.key)?1:0;
+        if(Boolean(value)!==roleHasPermission(target.role,item.key))
+          insert.run(id(),req.user.tenant_id,target.id,item.key,value,req.user.id);
+      }
+      db.exec("COMMIT");
+    }catch(error){
+      try{db.exec("ROLLBACK")}catch{}
+      throw error;
+    }
+    audit(req.user,"update","staff_permissions",target.id);
+    res.json({success:true,data:{role:target.role,permissions:getEffectivePermissions(db,target)}});
+  });
+
   // Router inventory only. No RouterOS credentials are stored and no device commands are sent.
-  app.get("/api/v1/routers",auth,networkRoles,(req,res)=>{
+  app.get("/api/v1/routers",auth,networkRead,(req,res)=>{
     res.json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at,updated_at FROM routers WHERE tenant_id=? ORDER BY created_at DESC").all(req.user.tenant_id)});
   });
-  app.post("/api/v1/routers",auth,networkRoles,(req,res)=>{
+  app.post("/api/v1/routers",auth,networkManage,(req,res)=>{
     const b=req.body||{},port=Number(b.apiPort??8728);
     if(!b.name?.trim()||!b.host?.trim()||!Number.isInteger(port)||port<1||port>65535)return fail(res,400,"Router name, host/IP and valid API port are required.");
     const rid=id();
@@ -55,7 +94,7 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
       res.status(201).json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at FROM routers WHERE id=?").get(rid)});
     }catch(e){if(String(e.message).includes("UNIQUE"))return fail(res,409,"This router host and API port are already registered.");throw e;}
   });
-  app.patch("/api/v1/routers/:id",auth,networkRoles,(req,res)=>{
+  app.patch("/api/v1/routers/:id",auth,networkManage,(req,res)=>{
     const r=db.prepare("SELECT * FROM routers WHERE id=? AND tenant_id=?").get(req.params.id,req.user.tenant_id);
     if(!r)return fail(res,404,"Router not found.");
     const b=req.body||{},name=b.name??r.name,host=b.host??r.host,port=Number(b.apiPort??r.api_port),status=b.status??r.status;
@@ -67,7 +106,7 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
       res.json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at,updated_at FROM routers WHERE id=?").get(r.id)});
     }catch(e){if(String(e.message).includes("UNIQUE"))return fail(res,409,"This router host and API port are already registered.");throw e;}
   });
-  app.delete("/api/v1/routers/:id",auth,roles("owner","admin"),(req,res)=>{
+  app.delete("/api/v1/routers/:id",auth,networkManage,(req,res)=>{
     const result=db.prepare("DELETE FROM routers WHERE id=? AND tenant_id=?").run(req.params.id,req.user.tenant_id);
     if(!result.changes)return fail(res,404,"Router not found.");
     audit(req.user,"delete","router",req.params.id);
@@ -75,7 +114,7 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
   });
 
   // Generate one invoice per active subscription for a selected month; unique run prevents duplicates.
-  app.post("/api/v1/billing/generate",auth,billingRoles,(req,res)=>{
+  app.post("/api/v1/billing/generate",auth,billingGenerate,(req,res)=>{
     const period=req.body?.period;
     if(!validPeriod(period))return fail(res,400,"Billing period must use YYYY-MM format.");
     const tenant=req.user.tenant_id;
@@ -103,11 +142,11 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
       throw e;
     }
   });
-  app.get("/api/v1/billing/runs",auth,billingRoles,(req,res)=>{
+  app.get("/api/v1/billing/runs",auth,billingRead,(req,res)=>{
     res.json({success:true,data:db.prepare("SELECT billing_period,invoices_created,created_at FROM billing_runs WHERE tenant_id=? ORDER BY billing_period DESC LIMIT 24").all(req.user.tenant_id)});
   });
 
-  app.get("/api/v1/reports/summary",auth,billingRoles,(req,res)=>{
+  app.get("/api/v1/reports/summary",auth,reportsRead,(req,res)=>{
     const tenant=req.user.tenant_id;
     const revenue=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) total FROM payments WHERE tenant_id=?").get(tenant).total;
     const outstanding=db.prepare("SELECT COALESCE(SUM(i.amount_pkr-COALESCE(p.paid,0)),0) total FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount_pkr) paid FROM payments WHERE tenant_id=? GROUP BY invoice_id) p ON p.invoice_id=i.id WHERE i.tenant_id=? AND i.status IN ('unpaid','partial')").get(tenant,tenant).total;
