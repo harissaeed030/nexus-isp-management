@@ -57,11 +57,16 @@ npm run auth:reset -- owner@example.com
 
 Do not delete `backend/data/nexus.sqlite` to fix a login problem; that file contains the ISP's local data.
 
+## NEXUS AI Assistant (Gemini)
+
+The dashboard includes a floating NEXUS AI chat panel. The backend calls the Gemini `generateContent` REST API; the browser never receives the Gemini API key. Configure `GEMINI_API_KEY` in the backend environment (and optionally `GEMINI_MODEL`, default `gemini-3.8-flash`) then restart the API. Create a key in [Google AI Studio](https://aistudio.google.com/app/apikey). The AI endpoint requires the `ai.chat` permission, applies a per-user request limit, validates and bounds chat history, and does not send customer records or payment details to Gemini. It provides guidance only; it cannot execute router, billing, or subscriber actions. Chat history is held in the browser session only.
+
 ## API overview
 
 All endpoints except health, root, initial setup and login require `Authorization: Bearer <token>`.
 
 - `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`
+- `POST /api/v1/ai/chat` (authenticated; requires `ai.chat`; server-side Gemini proxy)
 - `GET /api/v1/dashboard`
 - `GET|POST /api/v1/customers`, `GET|PATCH|DELETE /api/v1/customers/:id`
 - `GET|POST /api/v1/packages`, `PATCH /api/v1/packages/:id`
