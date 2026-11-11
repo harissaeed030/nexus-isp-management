@@ -70,6 +70,7 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - `GET|POST /api/v1/payments`
 - `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
 - `GET /api/v1/audit-logs`
+- CSV downloads (authenticated, tenant-scoped and permission-checked): `GET /api/v1/exports/customers.csv`, `packages.csv`, `subscriptions.csv`, `invoices.csv`, `payments.csv`, `tickets.csv` and `routers.csv`. The matching Customers, Packages, Subscriptions, Billing, Complaints and Routers pages show an Export CSV action.
 - `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
 - `GET|PUT /api/v1/staff/:id/permissions` (owner/admin only)
 
