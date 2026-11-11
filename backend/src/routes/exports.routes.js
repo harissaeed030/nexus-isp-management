@@ -42,12 +42,11 @@ const csvCell = value => {
   return '"' + text.replace(/"/g, '""') + '"';
 };
 
-export function registerExportRoutes(app,{db,auth,fail}) {
+export function registerExportRoutes(app,{db,auth,fail,hasPermission}) {
   app.get("/api/v1/exports/:resource.csv",auth,(req,res)=>{
     const resource=EXPORTS[req.params.resource];
     if(!resource)return fail(res,404,"Export type not found.");
-    const {hasPermission}=globalThis.__nexusPermissionHelpers || {};
-    if(typeof hasPermission==="function"&&!hasPermission(db,req.user,resource.permission))
+    if(!hasPermission(db,req.user,resource.permission))
       return fail(res,403,"Your staff role does not have permission for this export.");
     const rows=db.prepare(resource.sql).all(req.user.tenant_id);
     const csv=[resource.headers,...rows.map(row=>Object.values(row))].map(row=>row.map(csvCell).join(",")).join("\r\n")+"\r\n";
