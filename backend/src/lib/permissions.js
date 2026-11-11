@@ -61,5 +61,18 @@ export function permissionFor(path,method) {
   if(matches("/api/v1/routers"))return verb==="GET"?"routers.read":["POST","PATCH","DELETE"].includes(verb)?"routers.manage":null;
   if(path==="/api/v1/reports/summary")return verb==="GET"?"reports.read":null;
   if(path==="/api/v1/audit-logs")return verb==="GET"?"audit.read":null;
+  if(path.startsWith("/api/v1/exports/")) {
+    if(verb!=="GET")return null;
+    const resource=path.slice("/api/v1/exports/".length);
+    return ({
+      "customers.csv":"customers.read",
+      "packages.csv":"packages.read",
+      "subscriptions.csv":"subscriptions.read",
+      "invoices.csv":"billing.read",
+      "payments.csv":"billing.read",
+      "tickets.csv":"tickets.read",
+      "routers.csv":"routers.read"
+    })[resource]||null;
+  }
   return null;
 }
