@@ -23,6 +23,8 @@ try{
  const setup=await request("/api/v1/setup","POST",{companyName:"Nexus Test ISP",fullName:"Test Owner",email:"owner@nexus.test",password:"Strong-Test-Password-123"});
  assert.equal(setup.status,201);
  const token=setup.data.token;
+ const aiUnconfigured=await request("/api/v1/ai/chat","POST",{messages:[{role:"user",content:"Hello"}]},token);
+ assert.equal(aiUnconfigured.status,503);
  const customer=await request("/api/v1/customers","POST",{fullName:"Test Subscriber"},token);
  assert.equal(customer.status,201);
  const customerCsv=await fetch(base+"/api/v1/exports/customers.csv",{headers:{Authorization:"Bearer "+token}});
