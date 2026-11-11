@@ -25,6 +25,10 @@ try{
  const token=setup.data.token;
  const customer=await request("/api/v1/customers","POST",{fullName:"Test Subscriber"},token);
  assert.equal(customer.status,201);
+ const customerCsv=await fetch(base+"/api/v1/exports/customers.csv",{headers:{Authorization:"Bearer "+token}});
+ assert.equal(customerCsv.status,200);
+ assert.match(customerCsv.headers.get("content-type"),/text\\/csv/);
+ assert.match(await customerCsv.text(),/Test Subscriber/);
  const pack=await request("/api/v1/packages","POST",{name:"Test 10M",speedDownMbps:10,speedUpMbps:10,monthlyPricePkr:1500},token);
  assert.equal(pack.status,201);
  const sub=await request("/api/v1/subscriptions","POST",{customerId:customer.data.data.id,packageId:pack.data.data.id,status:"active"},token);
@@ -54,6 +58,11 @@ try{
  assert.equal(revoked.status,200);
  assert.equal((await request("/api/v1/customers","POST",{fullName:"Revoked Subscriber"},billingToken)).status,403);
  assert.equal((await request("/api/v1/routers","GET",undefined,billingToken)).status,403);
+ const deniedRouterExport=await fetch(base+"/api/v1/exports/routers.csv",{headers:{Authorization:"Bearer "+billingToken}});
+ assert.equal(deniedRouterExport.status,403);
+ const allowedInvoiceExport=await fetch(base+"/api/v1/exports/invoices.csv",{headers:{Authorization:"Bearer "+billingToken}});
+ assert.equal(allowedInvoiceExport.status,200);
+ assert.match(allowedInvoiceExport.headers.get("content-type"),/text\\/csv/);
  const technician=await request("/api/v1/staff","POST",{fullName:"Field Technician",email:"tech@nexus.test",password:"Technician-Password-123",role:"technician"},token);
  assert.equal(technician.status,201);
  const techLogin=await request("/api/v1/auth/login","POST",{email:"tech@nexus.test",password:"Technician-Password-123"});
