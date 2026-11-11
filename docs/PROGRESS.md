@@ -14,7 +14,7 @@
 - Created `dev` and fast-forwarded it to the latest observed build branch commit.
 - Did not merge PR #1, modify `main`, deploy a Worker, apply migrations or touch live network equipment.
 
-## Not yet verified
+## Completed in the latest implementation pass\n- Added tenant-scoped CSV exports for customers, packages, subscriptions, invoices, payments, complaints and router inventory.\n- Added role-permission checks to every export and CSV formula-injection protection.\n- Added Export CSV controls to the corresponding mobile dashboard pages.\n- Extended smoke tests to check CSV output and role-based export denial; GitHub Actions CI runs the backend verification suite on `dev` pushes.\n\n## Not yet verified
 - Local `npm install`, `npm run check`, `npm test`, `npm run verify`, API startup and browser tests were not run from this session.
 - Real MikroTik, HSGQ OLT/ONU and GenieACS operations are not verified.
 
