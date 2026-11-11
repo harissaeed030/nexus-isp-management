@@ -9,6 +9,7 @@ import { db } from "./config/database.js";
 import { env } from "./config/env.js";
 import { registerOperationsRoutes } from "./routes/operations.routes.js";
 import { registerExportRoutes } from "./routes/exports.routes.js";
+import { registerAiRoutes } from "./routes/ai.routes.js";
 import { hasPermission, permissionFor } from "./lib/permissions.js";
 const app=express();app.disable("x-powered-by");app.use(helmet());
 const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
@@ -62,5 +63,6 @@ app.patch("/api/v1/tickets/:id",auth,(q,r)=>{const t=db.prepare("SELECT * FROM s
 app.get("/api/v1/audit-logs",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT * FROM audit_logs WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200").all(q.user.tenant_id)}));
 registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash,cleanUser});
 registerExportRoutes(app,{db,auth,fail,hasPermission});
+registerAiRoutes(app,{auth,env,fail});
 app.use((req,res)=>fail(res,404,"Route not found."));app.use((err,_q,res,_n)=>{console.error(err);res.status(500).json({success:false,error:"Internal server error."});});
 export default app;

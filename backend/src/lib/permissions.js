@@ -17,7 +17,8 @@ export const PERMISSIONS = [
   { key: "tickets.manage", group: "Support", label: "Create and update complaints" },
   { key: "routers.read", group: "Network", label: "View router inventory" },
   { key: "routers.manage", group: "Network", label: "Add, edit and delete router records" },
-  { key: "audit.read", group: "Administration", label: "View activity log" }
+  { key: "audit.read", group: "Administration", label: "View activity log" },
+  { key: "ai.chat", group: "AI Assistant", label: "Use NEXUS AI Assistant" }
 ];
 export const permissionKeys = new Set(PERMISSIONS.map(item => item.key));
 export const ROLE_PERMISSIONS = {
@@ -50,6 +51,7 @@ export function permissionFor(path,method) {
   const verb=String(method||"GET").toUpperCase();
   const matches=base=>path===base||path.startsWith(base+"/");
   if(path==="/api/v1/dashboard")return verb==="GET"?"dashboard.read":null;
+  if(path==="/api/v1/ai/chat")return verb==="POST"?"ai.chat":null;
   if(matches("/api/v1/customers"))return ({GET:"customers.read",POST:"customers.create",PATCH:"customers.update",DELETE:"customers.delete"})[verb]||null;
   if(matches("/api/v1/packages"))return verb==="GET"?"packages.read":["POST","PATCH"].includes(verb)?"packages.manage":null;
   if(matches("/api/v1/subscriptions"))return verb==="GET"?"subscriptions.read":["POST","PATCH"].includes(verb)?"subscriptions.manage":null;
