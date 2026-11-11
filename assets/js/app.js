@@ -9,7 +9,21 @@ function auth(setup=false){let p=$("#nxAuth");if(!p){p=document.createElement("d
 const money=n=>"₨ "+Number(n||0).toLocaleString("en-PK");
 function table(head,rows){return '<div class="nx-panel" style="overflow:auto"><table class="nx-table"><thead><tr>'+head.map(x=>"<th>"+x+"</th>").join("")+'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+head.length+'">No records found.</td></tr>')+'</tbody></table></div>'}
 function showCustomerPanel(title,body){content.querySelector("#nxCustomerPanel")?.remove();content.insertAdjacentHTML("beforeend",'<div class="nx-customer-overlay" id="nxCustomerPanel"><section class="nx-customer-dialog"><div class="nx-customer-dialog-head"><b>'+esc(title)+'</b><button type="button" id="nxCustomerClose">×</button></div><div class="nx-customer-dialog-body">'+body+'</div></section></div>');$("#nxCustomerClose").onclick=()=>$("#nxCustomerPanel").remove();$("#nxCustomerPanel").onclick=e=>{if(e.target.id==="nxCustomerPanel")e.currentTarget.remove()}}
-function page(title,sub,body){content.innerHTML='<div class="page-heading"><div><p class="eyebrow">NEXUS WORKSPACE</p><h1>'+title+'</h1><p class="subheading">'+sub+'</p></div><button class="nx-btn" id="nxRefresh">Refresh</button></div>'+body;$("#nxRefresh").onclick=()=>load(view)}
+function page(title,sub,body){
+ const exports={customers:"customers",packages:"packages",subscriptions:"subscriptions",billing:"invoices",tickets:"tickets",routers:"routers"};
+ const resource=exports[view];
+ content.innerHTML='<div class="page-heading"><div><p class="eyebrow">NEXUS WORKSPACE</p><h1>'+title+'</h1><p class="subheading">'+sub+'</p></div><div class="nx-row"><button class="nx-btn" id="nxRefresh">Refresh</button>'+(resource?'<button class="nx-btn" id="nxExport">Export CSV</button>':'')+'</div></div>'+body;
+ $("#nxRefresh").onclick=()=>load(view);
+ if(resource)$("#nxExport").onclick=async()=>{
+  try{
+   const response=await fetch(api.replace(/\/$/,"")+"/api/v1/exports/"+resource+".csv",{headers:{Authorization:"Bearer "+token}});
+   if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.error||"CSV export failed")}
+   const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement("a");
+   link.href=url;link.download="nexus-"+resource+"-"+new Date().toISOString().slice(0,10)+".csv";
+   document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);msg("CSV export downloaded");
+  }catch(error){msg(error.message)}
+ };
+}
 async function load(v){view=v;try{
 if(v==="dashboard"){
  const settled=await Promise.allSettled([call("/api/v1/dashboard"),call("/api/v1/reports/summary"),call("/api/v1/subscriptions"),call("/api/v1/invoices"),call("/api/v1/payments"),call("/api/v1/tickets")]);
