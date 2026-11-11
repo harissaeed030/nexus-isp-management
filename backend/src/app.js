@@ -8,6 +8,7 @@ import { randomUUID,randomBytes,createHash,scryptSync,timingSafeEqual } from "no
 import { db } from "./config/database.js";
 import { env } from "./config/env.js";
 import { registerOperationsRoutes } from "./routes/operations.routes.js";
+import { registerExportRoutes } from "./routes/exports.routes.js";
 import { hasPermission, permissionFor } from "./lib/permissions.js";
 const app=express();app.disable("x-powered-by");app.use(helmet());
 const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
@@ -60,5 +61,6 @@ app.post("/api/v1/tickets",auth,(q,r)=>{const b=q.body||{};if(!required(b.custom
 app.patch("/api/v1/tickets/:id",auth,(q,r)=>{const t=db.prepare("SELECT * FROM support_tickets WHERE id=? AND tenant_id=?").get(q.params.id,q.user.tenant_id);if(!t)return fail(r,404,"Ticket not found.");const s=q.body?.status;if(!["open","in_progress","resolved","closed"].includes(s))return fail(r,400,"Invalid ticket status.");db.prepare("UPDATE support_tickets SET status=? WHERE id=? AND tenant_id=?").run(s,t.id,q.user.tenant_id);audit(q.user,"update","ticket",t.id);r.json({success:true,data:db.prepare("SELECT * FROM support_tickets WHERE id=?").get(t.id)});});
 app.get("/api/v1/audit-logs",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT * FROM audit_logs WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200").all(q.user.tenant_id)}));
 registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash,cleanUser});
+registerExportRoutes(app,{db,auth,fail,hasPermission});
 app.use((req,res)=>fail(res,404,"Route not found."));app.use((err,_q,res,_n)=>{console.error(err);res.status(500).json({success:false,error:"Internal server error."});});
 export default app;
