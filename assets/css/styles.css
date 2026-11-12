@@ -412,3 +412,40 @@ footer{font-size:10px}
  .was-feature-list{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){.was-topcards article,.was-panel,.nx-kpi{transition:none}}
+
+
+/* Navigation refinement — compact, grouped and predictable on every screen */
+.nav-section-heading{padding:0!important;margin:8px 0 5px!important}
+.nav-group-toggle{width:100%;display:flex;align-items:center;gap:8px;border:0;background:transparent;color:#88a99a;text-align:left;padding:9px 10px;border-radius:9px;font:800 9px/1.2 inherit;letter-spacing:1.05px;cursor:pointer}
+.nav-group-toggle:hover,.nav-group-toggle:focus-visible{background:rgba(255,255,255,.075);color:#e9fff3;outline:none}
+.nav-group-toggle span{flex:1;min-width:0}
+.nav-group-toggle small{font-size:8px;color:#8eaa9c;background:rgba(255,255,255,.07);border-radius:20px;padding:3px 6px}
+.nav-group-toggle b{font-size:14px;font-weight:500;transition:transform .2s}
+.nav-section.is-expanded .nav-group-toggle b{transform:rotate(180deg)}
+.nav-section .nav-sub[hidden]{display:none!important}
+.sidebar{overscroll-behavior:contain;scrollbar-width:thin}
+.sidebar .nav{margin-bottom:12px}
+.sidebar .nav-item{min-height:42px}
+.menu-btn{display:grid;place-items:center;min-width:40px;min-height:40px;border:1px solid #e3ece7;border-radius:11px;background:#fff;color:#214b39;font-size:19px;cursor:pointer}
+.menu-btn:focus-visible,.nav-item:focus-visible,.nav-group-toggle:focus-visible{outline:2px solid #36b889;outline-offset:2px}
+.sidebar-backdrop{border:0!important;padding:0!important;cursor:pointer}
+@media(max-width:760px){
+ body.nx-menu-open{overflow:hidden;touch-action:none}
+ .sidebar{position:fixed!important;inset:0 auto 0 0!important;width:min(310px,88vw)!important;height:100dvh;max-height:100dvh;transform:translateX(-105%);transition:transform .24s ease;z-index:60!important;display:flex!important;overflow-y:auto!important;padding:17px 13px 14px!important;box-shadow:18px 0 42px rgba(4,25,17,.3)!important}
+ .sidebar.open{transform:translateX(0)!important}
+ .sidebar-backdrop{display:block!important;position:fixed!important;inset:0!important;z-index:55!important;background:rgba(7,25,17,.52)!important;backdrop-filter:blur(3px)}
+ .main,.app-shell.sidebar-collapsed .main{margin-left:0!important;width:100%!important;min-width:0}
+ .app-shell.sidebar-collapsed .sidebar{width:min(310px,88vw)!important}
+ .app-shell.sidebar-collapsed .sidebar .brand>span:last-child,
+ .app-shell.sidebar-collapsed .sidebar .workspace b,
+ .app-shell.sidebar-collapsed .sidebar .workspace small,
+ .app-shell.sidebar-collapsed .sidebar .nav-label,
+ .app-shell.sidebar-collapsed .sidebar .profile>span:not(.avatar),
+ .app-shell.sidebar-collapsed .sidebar .nav-sub .nav-text{display:initial!important}
+ .app-shell.sidebar-collapsed .sidebar .nav-item{justify-content:flex-start!important;gap:11px!important;font-size:11px!important}
+ .app-shell.sidebar-collapsed .sidebar .nav-sub .nav-item{justify-content:flex-start!important}
+ .nav-group-toggle{min-height:38px;padding:10px 11px;font-size:9px}
+ .sidebar .nav-item{min-height:42px!important;font-size:11px!important}
+ .menu-btn{flex:none}
+}
+@media(prefers-reduced-motion:reduce){.sidebar,.nav-group-toggle b{transition:none!important}}
