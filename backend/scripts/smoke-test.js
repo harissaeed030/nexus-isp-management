@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { randomBytes, randomUUID, scryptSync, createHash } from "node:crypto";
 
 const dir=mkdtempSync(join(tmpdir(),"nexus-smoke-"));
 process.env.SQLITE_PATH=join(dir,"test.sqlite");
 process.env.CORS_ORIGINS="http://localhost";
 const {default:app}=await import("../src/app.js");
+const {db}=await import("../src/config/database.js");
 const server=app.listen(0);
 await once(server,"listening");
 const address=server.address();
@@ -71,7 +73,47 @@ try{
  assert.equal((await request("/api/v1/routers","POST",{name:"Blocked Router",host:"192.0.2.2"},techLogin.data.token)).status,403);
  const reports=await request("/api/v1/reports/summary","GET",undefined,token);
  assert.equal(reports.status,200);
- console.log("Nexus smoke tests passed: core CRUD, role defaults, permission grants/revokes, staff controls, router access and monthly billing.");
+
+ // Administrator cannot create/promote another administrator or alter the owner.
+ const admin=await request("/api/v1/staff","POST",{fullName:"Workspace Admin",email:"admin@nexus.test",password:"Admin-Password-123",role:"admin"},token);
+ assert.equal(admin.status,201);
+ const adminLogin=await request("/api/v1/auth/login","POST",{email:"admin@nexus.test",password:"Admin-Password-123"});
+ assert.equal(adminLogin.status,200);
+ assert.equal((await request("/api/v1/staff","POST",{fullName:"Escalated Admin",email:"escalated@nexus.test",password:"Escalated-Password-123",role:"admin"},adminLogin.data.token)).status,403);
+ assert.equal((await request("/api/v1/staff/"+staff.data.data.id,"PATCH",{role:"admin"},adminLogin.data.token)).status,403);
+ assert.equal((await request("/api/v1/staff/"+setup.data.user.id,"PATCH",{status:"inactive"},token)).status,403);
+
+ // Create a second tenant independently and verify cross-tenant record isolation.
+ const tenantId=randomUUID(),tenantUserId=randomUUID(),salt=randomBytes(16).toString("hex");
+ const passwordHash=salt+":"+scryptSync("Tenant-Two-Password-123",salt,64).toString("hex");
+ db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run(tenantId,"Second ISP","second-isp-"+tenantId.slice(0,6));
+ db.prepare("INSERT INTO users(id,tenant_id,email,password_hash,full_name,role) VALUES(?,?,?,?,?,'owner')").run(tenantUserId,tenantId,"owner@second.test",passwordHash,"Second Owner");
+ const tenantLogin=await request("/api/v1/auth/login","POST",{email:"owner@second.test",password:"Tenant-Two-Password-123"});
+ assert.equal(tenantLogin.status,200);
+ const secondCustomer=await request("/api/v1/customers","POST",{fullName:"Private Second ISP Customer"},tenantLogin.data.token);
+ assert.equal(secondCustomer.status,201);
+ const secondCustomerId=secondCustomer.data.data.id;
+ assert.equal((await request("/api/v1/customers/"+secondCustomerId,"GET",undefined,token)).status,404);
+ assert.equal((await request("/api/v1/customers/"+secondCustomerId,"PATCH",{fullName:"Cross Tenant Edit"},token)).status,404);
+ assert.equal((await request("/api/v1/customers/"+secondCustomerId,"DELETE",undefined,token)).status,404);
+ const firstTenantRows=await request("/api/v1/customers","GET",undefined,token);
+ assert.ok(!firstTenantRows.data.data.some(row=>row.id===secondCustomerId));
+ const firstTenantCsv=await fetch(base+"/api/v1/exports/customers.csv",{headers:{Authorization:"Bearer "+token}});
+ assert.ok(!(await firstTenantCsv.text()).includes("Private Second ISP Customer"));
+ const secondTenantRows=await request("/api/v1/customers","GET",undefined,tenantLogin.data.token);
+ assert.ok(!secondTenantRows.data.data.some(row=>row.full_name==="Test Subscriber"));
+
+ // Deactivation revokes existing sessions; expired sessions are rejected.
+ assert.equal((await request("/api/v1/staff/"+staff.data.data.id,"PATCH",{status:"inactive"},token)).status,200);
+ assert.equal((await request("/api/v1/customers","GET",undefined,billingToken)).status,401);
+ const techHash=createHash("sha256").update(techLogin.data.token).digest("hex");
+ db.prepare("UPDATE sessions SET expires_at=? WHERE token_hash=?").run(new Date(Date.now()-1000).toISOString(),techHash);
+ assert.equal((await request("/api/v1/routers","GET",undefined,techLogin.data.token)).status,401);
+
+ // Dedicated login limiter allows five failed attempts and blocks the sixth.
+ for(let i=0;i<5;i++) assert.equal((await request("/api/v1/auth/login","POST",{email:"nobody@nexus.test",password:"Wrong-Password-123"})).status,401);
+ assert.equal((await request("/api/v1/auth/login","POST",{email:"nobody@nexus.test",password:"Wrong-Password-123"})).status,429);
+ console.log("Nexus security tests passed: tenant isolation, RBAC escalation guards, permission grants/revokes, session expiry/revocation, login rate limit, exports and billing.");
 }finally{
  await new Promise(resolve=>server.close(resolve));
  rmSync(dir,{recursive:true,force:true});
