@@ -33,3 +33,6 @@ jobs:
       - name: Run syntax checks and smoke tests
         working-directory: backend
         run: npm run verify
+
+      - name: Check frontend JavaScript syntax
+        run: node --check assets/js/app.js
