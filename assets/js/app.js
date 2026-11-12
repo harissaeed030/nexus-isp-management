@@ -9,7 +9,7 @@ function auth(setup=false){let p=$("#nxAuth");if(!p){p=document.createElement("d
 const money=n=>"₨ "+Number(n||0).toLocaleString("en-PK");
 function table(head,rows){return '<div class="nx-panel" style="overflow:auto"><table class="nx-table"><thead><tr>'+head.map(x=>"<th>"+x+"</th>").join("")+'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+head.length+'">No records found.</td></tr>')+'</tbody></table></div>'}
 function showCustomerPanel(title,body){content.querySelector("#nxCustomerPanel")?.remove();content.insertAdjacentHTML("beforeend",'<div class="nx-customer-overlay" id="nxCustomerPanel"><section class="nx-customer-dialog"><div class="nx-customer-dialog-head"><b>'+esc(title)+'</b><button type="button" id="nxCustomerClose">×</button></div><div class="nx-customer-dialog-body">'+body+'</div></section></div>');$("#nxCustomerClose").onclick=()=>$("#nxCustomerPanel").remove();$("#nxCustomerPanel").onclick=e=>{if(e.target.id==="nxCustomerPanel")e.currentTarget.remove()}}
-function page(title,sub,body){content.innerHTML='<div class="page-heading"><div><p class="eyebrow">NEXUS WORKSPACE</p><h1>'+title+'</h1><p class="subheading">'+sub+'</p></div><button class="nx-btn" id="nxRefresh">Refresh</button></div>'+body;$("#nxRefresh").onclick=()=>load(view)}
+function page(title,sub,body){content.classList.toggle("nx-dashboard",view==="dashboard");content.innerHTML='<div class="page-heading"><div><p class="eyebrow">'+(view==="dashboard"?"BUSINESS OVERVIEW":"NEXUS WORKSPACE")+'</p><h1>'+title+'</h1><p class="subheading">'+sub+'</p></div><button class="nx-btn" id="nxRefresh">↻ Refresh</button></div>'+body;$("#nxRefresh").onclick=()=>load(view)}
 async function load(v){view=v;try{
 if(v==="dashboard"){
  const settled=await Promise.allSettled([call("/api/v1/dashboard"),call("/api/v1/reports/summary"),call("/api/v1/subscriptions"),call("/api/v1/invoices"),call("/api/v1/payments"),call("/api/v1/tickets")]);
@@ -38,7 +38,7 @@ if(v==="dashboard"){
  const promiseBody=settled[3].status==="fulfilled"?table(["CUSTOMER","INVOICE","DUE DATE","AMOUNT","STATUS"],promiseRows):'<div class="was-empty">Invoice list is not available for this account role.</div>';
  const collectionBody=settled[4].status==="fulfilled"?table(["CUSTOMER","AMOUNT","METHOD","RECEIVED"],collectionRows):'<div class="was-empty">Payment list is not available for this account role.</div>';
  const complaintBody=settled[5].status==="fulfilled"?table(["CUSTOMER","COMPLAINT","PRIORITY","STATUS"],complaintRows):'<div class="was-empty">Complaint list is not available for this account role.</div>';
- page("Dashboard","ISP operations overview · Live data from your Nexus workspace.",'<div class="was-topcards"><article><small>Total Users</small><b>'+stats.customers+'</b><span>Registered customers</span></article><article><small>Active Connections</small><b>'+stats.activeCustomers+'</b><span>Active customer accounts</span></article><article><small>Not Active</small><b>'+inactive+'</b><span>Inactive / other status</span></article><article><small>Receivables</small><b>'+money(report.outstandingPkr)+'</b><span>Outstanding invoices</span></article><article><small>Total Received</small><b>'+money(stats.revenuePkr)+'</b><span>Recorded payments</span></article></div><section class="was-panel was-collections"><div class="was-tabs" role="tablist"><button type="button" class="selected" data-dash-tab="promise">▣ Promise Date / Due</button><button type="button" data-dash-tab="collection">▣ Today’s Collection</button><button type="button" data-dash-tab="operators">♟ Operators Collection</button><button type="button" data-dash-tab="complaints">⚠ Complaints</button></div><div class="was-toolbar"><b id="wasTabTitle">Due payments & follow-up</b><span>'+new Date().toLocaleDateString("en-GB")+'</span></div><div id="wasTabBody">'+promiseBody+'</div></section><div class="was-dashboard-grid"><section class="was-panel"><h3>Connection Summary</h3><p>Subscriber connection status overview</p><div class="was-donut" style="--active:'+(stats.customers?Math.round(stats.activeCustomers/stats.customers*100):0)+'%"></div><div class="was-legend"><span>● Active '+stats.activeCustomers+'</span><span>● Not active '+inactive+'</span></div></section><section class="was-panel"><h3>Exciting Features of <b>Nexus</b></h3><div class="was-feature-list">'+[["Customer details and subscriber management"],["New Queries","Track new connection requests"],["Area Allocation","Organize service areas and field teams"],["Generate monthly customer invoices"],["Users Collections","Record and reconcile payments"],["TR-069 / ACS","ONU remote management integration"]].map(x=>'<div class="was-feature"><i>✦</i><span><b>'+x[0]+'</b><small>'+x[1]+'</small></span></div>').join("")+'</div></section></div><section class="was-panel was-monthly"><h3>Last 6 Months Receiving</h3><p>Recorded customer payments · PKR</p><div class="was-bars">'+(bars||'<div class="was-empty">No monthly payment records available yet.</div>')+'</div></section><section class="was-panel"><h3>Users Package Wise</h3><p>Active subscriber distribution by internet package</p><div class="was-package-chart">'+(packageBars||'<div class="was-empty">No active package subscriptions found yet.</div>')+'</div></section>');
+ page("Dashboard","Your network, billing and support activity in one place.",'<div class="was-topcards"><article><small>Total Users</small><b>'+stats.customers+'</b><span>Registered customers</span></article><article><small>Active Connections</small><b>'+stats.activeCustomers+'</b><span>Active customer accounts</span></article><article><small>Not Active</small><b>'+inactive+'</b><span>Inactive / other status</span></article><article><small>Receivables</small><b>'+money(report.outstandingPkr)+'</b><span>Outstanding invoices</span></article><article><small>Total Received</small><b>'+money(stats.revenuePkr)+'</b><span>Recorded payments</span></article></div><section class="was-panel was-collections"><div class="was-tabs" role="tablist"><button type="button" class="selected" data-dash-tab="promise">▣ Due invoices</button><button type="button" data-dash-tab="collection">▣ Today’s payments</button><button type="button" data-dash-tab="operators">♟ Staff collections</button><button type="button" data-dash-tab="complaints">Support tickets</button></div><div class="was-toolbar"><b id="wasTabTitle">Outstanding invoices</b><span>'+new Date().toLocaleDateString("en-GB")+'</span></div><div id="wasTabBody">'+promiseBody+'</div></section><div class="was-dashboard-grid"><section class="was-panel"><div class="nx-panel-heading"><div><h3>Connection health</h3><p>Active subscribers across your network</p></div><span class="nx-live-label"><i></i> ACCOUNT DATA</span></div><div class="was-donut" style="--active:'+(stats.customers?Math.round(stats.activeCustomers/stats.customers*100):0)+'%"><span>'+(stats.customers?Math.round(stats.activeCustomers/stats.customers*100):0)+'%<small>ACTIVE</small></span></div><div class="was-legend"><span><i class="nx-dot active"></i> Active '+stats.activeCustomers+'</span><span><i class="nx-dot inactive"></i> Other '+inactive+'</span></div></section><section class="was-panel"><div class="nx-panel-heading"><div><h3>Daily operations</h3><p>Current workload from your account records</p></div></div><div class="nx-ops-grid"><div class="nx-ops-item"><span>Invoices to follow up</span><b>'+dueInvoices.length+'</b><small>Unpaid invoices</small></div><div class="nx-ops-item"><span>Today’s collections</span><b>'+todayPayments.length+'</b><small>Recorded payments</small></div><div class="nx-ops-item"><span>Open support tickets</span><b>'+openTickets.length+'</b><small>Needs attention</small></div><div class="nx-ops-item"><span>Active subscriptions</span><b>'+subscriptions.filter(x=>x.status==="active").length+'</b><small>Current service plans</small></div></div></section></div><section class="was-panel was-monthly"><h3>Payment history · 6 months</h3><p>Recorded customer payments · PKR</p><div class="was-bars">'+(bars||'<div class="was-empty">No monthly payment records available yet.</div>')+'</div></section><section class="was-panel"><h3>Subscribers by package</h3><p>Active subscriber distribution by internet package</p><div class="was-package-chart">'+(packageBars||'<div class="was-empty">No active package subscriptions found yet.</div>')+'</div></section>');
  const tabButtons=content.querySelectorAll("[data-dash-tab]");
  tabButtons.forEach(button=>button.addEventListener("click",()=>{
   tabButtons.forEach(b=>b.classList.toggle("selected",b===button));
@@ -84,81 +84,23 @@ $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object
 }catch(e){page("Could not load",e.message,'<div class="nx-panel" style="color:#b64e3b">'+esc(e.message)+'</div>')}}
 document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit"].includes(v)){e.preventDefault();load(v);closeMobileSidebar()}}));
 $("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());const menuButton=$("#menuBtn"),sidebar=$("#sidebar");
-function closeMobileSidebar(){sidebar?.classList.remove("open");document.querySelector(".sidebar-backdrop")?.remove()}
-menuButton?.addEventListener("click",()=>{
- if(window.matchMedia("(max-width:760px)").matches){
-  sidebar?.classList.toggle("open");
-  if(sidebar?.classList.contains("open")){
-   if(!document.querySelector(".sidebar-backdrop")){const shade=document.createElement("button");shade.type="button";shade.className="sidebar-backdrop";shade.setAttribute("aria-label","Close navigation");shade.onclick=closeMobileSidebar;document.body.append(shade)}
-  }else closeMobileSidebar();
- }else shell?.classList.toggle("sidebar-collapsed");
-});
+function closeMobileSidebar(){sidebar?.classList.remove("open");document.body.classList.remove("nx-menu-open");menuButton?.setAttribute("aria-expanded","false");document.querySelector(".sidebar-backdrop")?.remove()}
+/* Menu button behavior is registered once by the navigation controller below. */
 const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
 
-const moduleGroups=[
-["CUSTOMER MANAGEMENT",["Area / Coverage","Country, City & Locality","New Queries","Box / Media Inventory","Connection Providers","Radius Users"]],
-["FIELD OPERATIONS",["Dealers Profile","Recovery Officers","Area Allocation","Promise Dates","Operator Collections"]],
-["COMMERCIAL",["Dealer Collections","Allocated Collections","Recharge System","Internet Recharge","Recharge Packages"]],
-["COMMUNICATION",["New Messages","Expiry Messages","WhatsApp Draft Messages","Sent Messages"]],
-["FINANCE & REPORTS",["Account Heads","Account Entries","One Day Accounts","Defaulter Reports","Package Wise Report","Monthly Collection Report","Unpaid Collection","Transaction Wise Report"]],
-["ADMINISTRATION",["Company Profile","User Rights","Configurations","Change Username / Password","Deleted Users"]],
-["FIBER NETWORK",["OLT Devices","ONU / ONT Inventory","TR-069 / ACS","Connection Status"]]
-];
-const moduleSlug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
-const moduleIcons={"Area / Coverage":"⌖","Country, City & Locality":"⌂","User Profiles":"♙","New Queries":"✉","Box / Media Inventory":"▣","Connection Providers":"⇄","Radius Users":"◎","Dealers Profile":"♧","Recovery Officers":"♙","Area Allocation":"⌖","Promise Dates":"◷","Operator Collections":"▤","Transactions":"⇄","Bills Creator":"▤","User Collections":"▤","Dealer Collections":"♧","Allocated Collections":"▥","Recharge System":"↻","Internet Recharge":"⌁","Recharge Packages":"◈","New Messages":"✉","Expiry Messages":"◷","WhatsApp Draft Messages":"✎","Sent Messages":"➤","Account Heads":"▤","Account Entries":"≡","One Day Accounts":"▦","Users Reports":"▥","Defaulter Reports":"⚑","Package Wise Report":"◈","Monthly Collection Report":"▥","Unpaid Collection":"◷","Transaction Wise Report":"⇄","Company Profile":"▣","User Rights":"♙","Configurations":"⚙","Change Username / Password":"⚿","Deleted Users":"▱","Activity Log":"≡"};
-const moduleNav=moduleGroups.filter(([group])=>group!=="FIBER NETWORK").map(([group,items])=>'<section class="nav-section"><div class="nav-section-heading"><span>'+group+'</span><i>'+items.length+'</i></div><nav class="nav nav-sub" aria-label="'+group+'">'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span class="nav-icon">'+(moduleIcons[item]||"◇")+'</span><span class="nav-text">'+esc(item)+'</span></a>').join("")+'</nav></section>').join("");
-sidebar?.querySelector(".sidebar-bottom")?.insertAdjacentHTML("beforebegin",'<div class="nav-extra">'+moduleNav+'</div>');
-sidebar?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
- e.preventDefault();const name=a.dataset.module;
- document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item===a));
- closeMobileSidebar();
- const descriptions={
- "Area / Coverage":"Define service zones, neighborhoods and coverage boundaries.",
- "Country, City & Locality":"Organize customer locations and service areas.",
- "User Profiles":"Manage subscriber records, contact details and service status.",
- "New Queries":"Capture new service requests and installation leads.",
- "Box / Media Inventory":"Track splitters, distribution boxes and fiber materials.",
- "Connection Providers":"Record upstream and connectivity providers.",
- "Radius Users":"Prepare subscriber identity and PPP/RADIUS integration records.",
- "Dealers Profile":"Manage dealer accounts, assigned areas and collections.",
- "Recovery Officers":"Assign collection staff and recovery territories.",
- "Area Allocation":"Allocate customers and collection responsibilities by area.",
- "Promise Dates":"Track customer payment commitments and follow-up dates.",
- "Operator Collections":"Record collections received by field operators.",
- "Transactions":"Review financial transactions and payment records.",
- "Bills Creator":"Create customer invoices and monthly billing runs.",
- "User Collections":"Record and reconcile subscriber payments.",
- "Dealer Collections":"Track dealer deposits and settlements.",
- "Allocated Collections":"Review collections allocated to staff or dealers.",
- "Recharge System":"Manage prepaid recharge workflows and package top-ups.",
- "Internet Recharge":"Record internet package recharge activity.",
- "Recharge Packages":"Configure prepaid recharge products.",
- "New Messages":"Prepare customer notices and service announcements.",
- "Expiry Messages":"Prepare package expiry and due-payment reminders.",
- "WhatsApp Draft Messages":"Create WhatsApp-ready customer message drafts.",
- "Sent Messages":"Review communication history.",
- "Account Heads":"Configure income, expense and ledger categories.",
- "Account Entries":"Record business income and expense entries.",
- "One Day Accounts":"Review daily cash and account balances.",
- "Users Reports":"Build subscriber activity and status reports.",
- "Defaulter Reports":"Identify overdue invoices and unpaid subscribers.",
- "Package Wise Report":"Analyze subscribers by internet package.",
- "Monthly Collection Report":"Review monthly collection performance.",
- "Unpaid Collection":"Track outstanding customer balances.",
- "Transaction Wise Report":"Review payment transactions by date and method.",
- "Company Profile":"Manage ISP company identity and contact information.",
- "User Rights":"Control staff roles and module permissions.",
- "Configurations":"Manage workspace settings and operational defaults.",
- "Change Username / Password":"Update account credentials securely.",
- "Deleted Users":"Review removed or deactivated subscriber records.",
- "Activity Logs":"Review workspace actions and audit history.",
+/* Only the four network links remain as planned, not-yet-connected modules. */
+const networkDescriptions={
  "OLT Devices":"Inventory optical line terminals and PON ports.",
  "ONU / ONT Inventory":"Track customer optical network units and serial numbers.",
- "TR-069 / ACS":"Plan ACS connectivity and remote ONU management.",
- "Connection Status":"View live service state after network integrations are configured."
- };
- page(name,descriptions[name]||"Nexus module",'<div class="nx-panel"><b>Module setup is not connected yet.</b><p>'+esc(descriptions[name]||"This module is planned for the Nexus workspace.")+'</p><p style="color:#82918e">This section is listed for the complete ISP workflow. It will become operational after its database, API, permissions and tests are implemented. No sample records or fake live status are shown.</p></div>');
+ "TR-069 / ACS":"Configure ACS connectivity and remote ONU management.",
+ "Connection Status":"Live connection state will appear after network integrations are configured."
+};
+sidebar?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
+ e.preventDefault();
+ const name=a.dataset.module||"Network module";
+ document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item===a));
+ closeMobileSidebar();
+ page(name,networkDescriptions[name]||"Network management",'<div class="nx-panel"><b>Module setup is not connected yet.</b><p>'+esc(networkDescriptions[name]||"This network module is planned for the Nexus workspace.")+'</p><p style="color:#82918e">It will become operational after its database, API, permissions and tests are implemented. No sample records or fake live status are shown.</p></div>');
 }));
 
-if(token){if(shell)shell.style.display="";load("dashboard")}else auth(false);
 })();
