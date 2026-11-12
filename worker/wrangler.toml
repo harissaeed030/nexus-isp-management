@@ -4,7 +4,7 @@ compatibility_date = "2026-11-02"
 
 [vars]
 ENVIRONMENT = "production"
-# Set ALLOWED_ORIGINS in Worker Variables after the frontend URL is known.
+ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:4173,http://127.0.0.1:4173,https://*.pages.dev"
 
 [[d1_databases]]
 binding = "DB"
