@@ -84,15 +84,8 @@ $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object
 }catch(e){page("Could not load",e.message,'<div class="nx-panel" style="color:#b64e3b">'+esc(e.message)+'</div>')}}
 document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit"].includes(v)){e.preventDefault();load(v);closeMobileSidebar()}}));
 $("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());const menuButton=$("#menuBtn"),sidebar=$("#sidebar");
-function closeMobileSidebar(){sidebar?.classList.remove("open");document.querySelector(".sidebar-backdrop")?.remove()}
-menuButton?.addEventListener("click",()=>{
- if(window.matchMedia("(max-width:760px)").matches){
-  sidebar?.classList.toggle("open");
-  if(sidebar?.classList.contains("open")){
-   if(!document.querySelector(".sidebar-backdrop")){const shade=document.createElement("button");shade.type="button";shade.className="sidebar-backdrop";shade.setAttribute("aria-label","Close navigation");shade.onclick=closeMobileSidebar;document.body.append(shade)}
-  }else closeMobileSidebar();
- }else shell?.classList.toggle("sidebar-collapsed");
-});
+function closeMobileSidebar(){sidebar?.classList.remove("open");document.body.classList.remove("nx-menu-open");menuButton?.setAttribute("aria-expanded","false");document.querySelector(".sidebar-backdrop")?.remove()}
+/* Menu button behavior is registered once by the navigation controller below. */
 const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
 
 const moduleGroups=[
