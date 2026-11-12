@@ -42,6 +42,17 @@ try{
  assert.equal(billing.data.invoicesCreated,1);
  const duplicate=await request("/api/v1/billing/generate","POST",{period:"2026-11"},token);
  assert.equal(duplicate.status,409);
+ const invoiceList=await request("/api/v1/invoices","GET",undefined,token);
+ assert.equal(invoiceList.status,200);
+ const invoiceId=invoiceList.data.data[0].id;
+ const partialPayment=await request("/api/v1/payments","POST",{invoiceId,amountPkr:500,method:"cash"},token);
+ assert.equal(partialPayment.status,201);
+ const rejectedOverpayment=await request("/api/v1/payments","POST",{invoiceId,amountPkr:1001,method:"cash"},token);
+ assert.equal(rejectedOverpayment.status,400);
+ const finalPayment=await request("/api/v1/payments","POST",{invoiceId,amountPkr:1000,method:"cash"},token);
+ assert.equal(finalPayment.status,201);
+ const paidInvoice=(await request("/api/v1/invoices","GET",undefined,token)).data.data[0];
+ assert.equal(paidInvoice.status,"paid");
  const staff=await request("/api/v1/staff","POST",{fullName:"Billing Staff",email:"billing@nexus.test",password:"Billing-Password-123",role:"billing"},token);
  assert.equal(staff.status,201);
  const staffLogin=await request("/api/v1/auth/login","POST",{email:"billing@nexus.test",password:"Billing-Password-123"});

@@ -56,7 +56,27 @@ app.patch("/api/v1/subscriptions/:id",auth,(q,r)=>{const s=db.prepare("SELECT * 
 app.get("/api/v1/invoices",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT i.*,c.full_name customer_name FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.tenant_id=? ORDER BY i.created_at DESC").all(q.user.tenant_id)}));
 app.post("/api/v1/invoices",auth,(q,r)=>{const b=q.body||{},a=Number(b.amountPkr);if(!required(b.customerId)||!Number.isInteger(a)||a<0)return fail(r,400,"Customer and valid amount required.");if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,q.user.tenant_id))return fail(r,404,"Customer not found.");const iid=id(),no=required(b.invoiceNumber)?b.invoiceNumber.trim():"INV-"+Date.now();try{db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES(?,?,?,?,?,?)").run(iid,q.user.tenant_id,b.customerId,no,a,b.dueDate||null);audit(q.user,"create","invoice",iid);r.status(201).json({success:true,data:db.prepare("SELECT * FROM invoices WHERE id=?").get(iid)});}catch(e){if(String(e.message).includes("UNIQUE"))return fail(r,409,"Invoice number already exists.");throw e;}});
 app.get("/api/v1/payments",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT p.*,i.invoice_number,c.full_name customer_name FROM payments p JOIN invoices i ON i.id=p.invoice_id JOIN customers c ON c.id=i.customer_id WHERE p.tenant_id=? ORDER BY p.received_at DESC").all(q.user.tenant_id)}));
-app.post("/api/v1/payments",auth,(q,r)=>{const b=q.body||{},a=Number(b.amountPkr),methods=["cash","bank","jazzcash","easypaisa","other"],inv=db.prepare("SELECT * FROM invoices WHERE id=? AND tenant_id=?").get(b.invoiceId,q.user.tenant_id);if(!inv)return fail(r,404,"Invoice not found.");if(!Number.isInteger(a)||a<1||!methods.includes(b.method))return fail(r,400,"Valid payment amount and method required.");const paid=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) n FROM payments WHERE invoice_id=?").get(inv.id).n;if(paid+a>inv.amount_pkr)return fail(r,400,"Payment exceeds remaining balance.");const pid=id();db.prepare("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method,reference) VALUES(?,?,?,?,?,?)").run(pid,q.user.tenant_id,inv.id,a,b.method,b.reference||null);db.prepare("UPDATE invoices SET status=? WHERE id=?").run(paid+a>=inv.amount_pkr?"paid":"partial",inv.id);audit(q.user,"create","payment",pid);r.status(201).json({success:true,data:db.prepare("SELECT * FROM payments WHERE id=?").get(pid)});});
+app.post("/api/v1/payments",auth,(q,r)=>{
+ const b=q.body||{},a=Number(b.amountPkr),methods=["cash","bank","jazzcash","easypaisa","other"];
+ if(!Number.isInteger(a)||a<1||!methods.includes(b.method))return fail(r,400,"Valid payment amount and method required.");
+ const pid=id();
+ try{
+  // Serialize balance checks and writes so concurrent requests cannot overpay an invoice.
+  db.exec("BEGIN IMMEDIATE");
+  const inv=db.prepare("SELECT * FROM invoices WHERE id=? AND tenant_id=?").get(b.invoiceId,q.user.tenant_id);
+  if(!inv){db.exec("ROLLBACK");return fail(r,404,"Invoice not found.");}
+  const paid=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) n FROM payments WHERE invoice_id=? AND tenant_id=?").get(inv.id,q.user.tenant_id).n;
+  if(paid+a>inv.amount_pkr){db.exec("ROLLBACK");return fail(r,400,"Payment exceeds remaining balance.");}
+  db.prepare("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method,reference) VALUES(?,?,?,?,?,?)").run(pid,q.user.tenant_id,inv.id,a,b.method,b.reference||null);
+  db.prepare("UPDATE invoices SET status=? WHERE id=? AND tenant_id=?").run(paid+a>=inv.amount_pkr?"paid":"partial",inv.id,q.user.tenant_id);
+  audit(q.user,"create","payment",pid);
+  db.exec("COMMIT");
+  r.status(201).json({success:true,data:db.prepare("SELECT * FROM payments WHERE id=?").get(pid)});
+ }catch(e){
+  try{db.exec("ROLLBACK")}catch{}
+  throw e;
+ }
+});
 app.get("/api/v1/tickets",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT t.*,c.full_name customer_name FROM support_tickets t JOIN customers c ON c.id=t.customer_id WHERE t.tenant_id=? ORDER BY t.created_at DESC").all(q.user.tenant_id)}));
 app.post("/api/v1/tickets",auth,(q,r)=>{const b=q.body||{};if(!required(b.customerId)||!required(b.subject))return fail(r,400,"Customer and subject required.");if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,q.user.tenant_id))return fail(r,404,"Customer not found.");const tid=id(),p=["low","normal","high","urgent"].includes(b.priority)?b.priority:"normal";db.prepare("INSERT INTO support_tickets(id,tenant_id,customer_id,subject,description,priority) VALUES(?,?,?,?,?,?)").run(tid,q.user.tenant_id,b.customerId,b.subject.trim(),b.description||null,p);audit(q.user,"create","ticket",tid);r.status(201).json({success:true,data:db.prepare("SELECT * FROM support_tickets WHERE id=?").get(tid)});});
 app.patch("/api/v1/tickets/:id",auth,(q,r)=>{const t=db.prepare("SELECT * FROM support_tickets WHERE id=? AND tenant_id=?").get(q.params.id,q.user.tenant_id);if(!t)return fail(r,404,"Ticket not found.");const s=q.body?.status;if(!["open","in_progress","resolved","closed"].includes(s))return fail(r,400,"Invalid ticket status.");db.prepare("UPDATE support_tickets SET status=? WHERE id=? AND tenant_id=?").run(s,t.id,q.user.tenant_id);audit(q.user,"update","ticket",t.id);r.json({success:true,data:db.prepare("SELECT * FROM support_tickets WHERE id=?").get(t.id)});});
