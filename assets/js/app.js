@@ -88,130 +88,19 @@ function closeMobileSidebar(){sidebar?.classList.remove("open");document.body.cl
 /* Menu button behavior is registered once by the navigation controller below. */
 const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
 
-const moduleGroups=[
-["CUSTOMER MANAGEMENT",["Area / Coverage","Country, City & Locality","New Queries","Box / Media Inventory","Connection Providers","Radius Users"]],
-["FIELD OPERATIONS",["Dealers Profile","Recovery Officers","Area Allocation","Promise Dates","Operator Collections"]],
-["COMMERCIAL",["Dealer Collections","Allocated Collections","Recharge System","Internet Recharge","Recharge Packages"]],
-["COMMUNICATION",["New Messages","Expiry Messages","WhatsApp Draft Messages","Sent Messages"]],
-["FINANCE & REPORTS",["Account Heads","Account Entries","One Day Accounts","Defaulter Reports","Package Wise Report","Monthly Collection Report","Unpaid Collection","Transaction Wise Report"]],
-["ADMINISTRATION",["Company Profile","User Rights","Configurations","Change Username / Password","Deleted Users"]],
-["FIBER NETWORK",["OLT Devices","ONU / ONT Inventory","TR-069 / ACS","Connection Status"]]
-];
-const moduleSlug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
-const moduleIcons={"Area / Coverage":"⌖","Country, City & Locality":"⌂","User Profiles":"♙","New Queries":"✉","Box / Media Inventory":"▣","Connection Providers":"⇄","Radius Users":"◎","Dealers Profile":"♧","Recovery Officers":"♙","Area Allocation":"⌖","Promise Dates":"◷","Operator Collections":"▤","Transactions":"⇄","Bills Creator":"▤","User Collections":"▤","Dealer Collections":"♧","Allocated Collections":"▥","Recharge System":"↻","Internet Recharge":"⌁","Recharge Packages":"◈","New Messages":"✉","Expiry Messages":"◷","WhatsApp Draft Messages":"✎","Sent Messages":"➤","Account Heads":"▤","Account Entries":"≡","One Day Accounts":"▦","Users Reports":"▥","Defaulter Reports":"⚑","Package Wise Report":"◈","Monthly Collection Report":"▥","Unpaid Collection":"◷","Transaction Wise Report":"⇄","Company Profile":"▣","User Rights":"♙","Configurations":"⚙","Change Username / Password":"⚿","Deleted Users":"▱","Activity Log":"≡"};
-const moduleNav=moduleGroups.filter(([group])=>group!=="FIBER NETWORK").map(([group,items])=>'<section class="nav-section"><div class="nav-section-heading"><span>'+group+'</span><i>'+items.length+'</i></div><nav class="nav nav-sub" aria-label="'+group+'">'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span class="nav-icon">'+(moduleIcons[item]||"◇")+'</span><span class="nav-text">'+esc(item)+'</span></a>').join("")+'</nav></section>').join("");
-sidebar?.querySelector(".sidebar-bottom")?.insertAdjacentHTML("beforebegin",'<div class="nav-extra">'+moduleNav+'</div>');
-sidebar?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
- e.preventDefault();const name=a.dataset.module;
- document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item===a));
- closeMobileSidebar();
- const descriptions={
- "Area / Coverage":"Define service zones, neighborhoods and coverage boundaries.",
- "Country, City & Locality":"Organize customer locations and service areas.",
- "User Profiles":"Manage subscriber records, contact details and service status.",
- "New Queries":"Capture new service requests and installation leads.",
- "Box / Media Inventory":"Track splitters, distribution boxes and fiber materials.",
- "Connection Providers":"Record upstream and connectivity providers.",
- "Radius Users":"Prepare subscriber identity and PPP/RADIUS integration records.",
- "Dealers Profile":"Manage dealer accounts, assigned areas and collections.",
- "Recovery Officers":"Assign collection staff and recovery territories.",
- "Area Allocation":"Allocate customers and collection responsibilities by area.",
- "Promise Dates":"Track customer payment commitments and follow-up dates.",
- "Operator Collections":"Record collections received by field operators.",
- "Transactions":"Review financial transactions and payment records.",
- "Bills Creator":"Create customer invoices and monthly billing runs.",
- "User Collections":"Record and reconcile subscriber payments.",
- "Dealer Collections":"Track dealer deposits and settlements.",
- "Allocated Collections":"Review collections allocated to staff or dealers.",
- "Recharge System":"Manage prepaid recharge workflows and package top-ups.",
- "Internet Recharge":"Record internet package recharge activity.",
- "Recharge Packages":"Configure prepaid recharge products.",
- "New Messages":"Prepare customer notices and service announcements.",
- "Expiry Messages":"Prepare package expiry and due-payment reminders.",
- "WhatsApp Draft Messages":"Create WhatsApp-ready customer message drafts.",
- "Sent Messages":"Review communication history.",
- "Account Heads":"Configure income, expense and ledger categories.",
- "Account Entries":"Record business income and expense entries.",
- "One Day Accounts":"Review daily cash and account balances.",
- "Users Reports":"Build subscriber activity and status reports.",
- "Defaulter Reports":"Identify overdue invoices and unpaid subscribers.",
- "Package Wise Report":"Analyze subscribers by internet package.",
- "Monthly Collection Report":"Review monthly collection performance.",
- "Unpaid Collection":"Track outstanding customer balances.",
- "Transaction Wise Report":"Review payment transactions by date and method.",
- "Company Profile":"Manage ISP company identity and contact information.",
- "User Rights":"Control staff roles and module permissions.",
- "Configurations":"Manage workspace settings and operational defaults.",
- "Change Username / Password":"Update account credentials securely.",
- "Deleted Users":"Review removed or deactivated subscriber records.",
- "Activity Logs":"Review workspace actions and audit history.",
+/* Only the four network links remain as planned, not-yet-connected modules. */
+const networkDescriptions={
  "OLT Devices":"Inventory optical line terminals and PON ports.",
  "ONU / ONT Inventory":"Track customer optical network units and serial numbers.",
- "TR-069 / ACS":"Plan ACS connectivity and remote ONU management.",
- "Connection Status":"View live service state after network integrations are configured."
- };
- page(name,descriptions[name]||"Nexus module",'<div class="nx-panel"><b>Module setup is not connected yet.</b><p>'+esc(descriptions[name]||"This module is planned for the Nexus workspace.")+'</p><p style="color:#82918e">This section is listed for the complete ISP workflow. It will become operational after its database, API, permissions and tests are implemented. No sample records or fake live status are shown.</p></div>');
+ "TR-069 / ACS":"Configure ACS connectivity and remote ONU management.",
+ "Connection Status":"Live connection state will appear after network integrations are configured."
+};
+sidebar?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
+ e.preventDefault();
+ const name=a.dataset.module||"Network module";
+ document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item===a));
+ closeMobileSidebar();
+ page(name,networkDescriptions[name]||"Network management",'<div class="nx-panel"><b>Module setup is not connected yet.</b><p>'+esc(networkDescriptions[name]||"This network module is planned for the Nexus workspace.")+'</p><p style="color:#82918e">It will become operational after its database, API, permissions and tests are implemented. No sample records or fake live status are shown.</p></div>');
 }));
-
-if(token){if(shell)shell.style.display="";load("dashboard")}else auth(false);
-
-/* Navigation polish: compact groups, reliable mobile drawer and active states. */
-sidebar?.querySelectorAll(".nav-section").forEach((section,index)=>{
- const heading=section.querySelector(".nav-section-heading");
- const nav=section.querySelector(".nav-sub");
- if(!heading||!nav)return;
- const label=heading.querySelector("span")?.textContent?.trim()||"Navigation group";
- const count=heading.querySelector("i")?.textContent?.trim()||"";
- const id="nx-nav-group-"+index;
- nav.id=id;
- heading.innerHTML='<button class="nav-group-toggle" type="button" aria-expanded="false" aria-controls="'+id+'"><span>'+esc(label)+'</span><small>'+esc(count)+'</small><b aria-hidden="true">⌄</b></button>';
- heading.querySelector("button")?.addEventListener("click",()=>{
-  const button=heading.querySelector("button");
-  const expanded=button.getAttribute("aria-expanded")==="true";
-  button.setAttribute("aria-expanded",String(!expanded));
-  section.classList.toggle("is-expanded",!expanded);
-  nav.hidden=expanded;
- });
- nav.hidden=true;
-});
-function syncMenuState(open){
- const mobile=window.matchMedia("(max-width:760px)").matches;
- if(!sidebar)return;
- if(mobile){
-  sidebar.classList.toggle("open",open);
-  document.body.classList.toggle("nx-menu-open",open);
-  menuButton?.setAttribute("aria-expanded",String(open));
-  if(open&&!document.querySelector(".sidebar-backdrop")){
-   const shade=document.createElement("button");
-   shade.type="button";shade.className="sidebar-backdrop";
-   shade.setAttribute("aria-label","Close navigation menu");
-   shade.addEventListener("click",()=>syncMenuState(false));
-   document.body.append(shade);
-  }else if(!open)document.querySelector(".sidebar-backdrop")?.remove();
- }else{
-  sidebar.classList.remove("open");
-  document.body.classList.remove("nx-menu-open");
-  document.querySelector(".sidebar-backdrop")?.remove();
-  menuButton?.setAttribute("aria-expanded","false");
- }
-}
-menuButton?.setAttribute("aria-controls","sidebar");
-menuButton?.setAttribute("aria-expanded","false");
-menuButton?.addEventListener("click",()=>{
- if(window.matchMedia("(max-width:760px)").matches)syncMenuState(!sidebar?.classList.contains("open"));
- else shell?.classList.toggle("sidebar-collapsed");
-});
-document.addEventListener("keydown",event=>{
- if(event.key==="Escape"&&sidebar?.classList.contains("open"))syncMenuState(false);
-});
-sidebar?.addEventListener("click",event=>{
- const link=event.target.closest("a.nav-item");
- if(!link)return;
- sidebar.querySelectorAll("a.nav-item").forEach(item=>item.classList.toggle("active",item===link));
- if(window.matchMedia("(max-width:760px)").matches)syncMenuState(false);
-});
-window.addEventListener("resize",()=>{
- if(!window.matchMedia("(max-width:760px)").matches)syncMenuState(false);
-});
 
 })();
