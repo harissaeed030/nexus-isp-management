@@ -6,15 +6,25 @@ Nexus is being built as a multi-tenant platform for subscriber records, internet
 
 ## Current development status
 
-The `build/nexus-isp-core` branch contains the first local API foundation:
+**Phase 4 — Frontend: implementation branch prepared.** The responsive HTML/CSS/JavaScript dashboard is in `index.html`, `assets/css/styles.css` and `assets/js/app.js`. It includes:
+- Mobile navigation and responsive dashboard layout.
+- Owner sign-in and first-time setup screens.
+- Dashboard totals, collections, overdue invoices and complaints.
+- Customer records and customer detail, edit, status and delete actions.
+- Internet packages and subscriptions.
+- Invoices, payment recording and monthly invoice generation.
+- Support tickets, router inventory, staff, reports and audit-log views.
+- Planned network sections for OLT, ONU/ONT, TR-069/ACS and connection status, clearly marked as not yet connected to equipment.
+
+The current dashboard client uses the local API contract under `/api/v1`. It can be pointed at a different API address in the sign-in screen, but a remote service must implement the same routes, authentication format and CORS policy before it will work. **The Cloudflare Worker is not assumed to be frontend-compatible until those endpoints are verified.**
+
+The `build/nexus-isp-core` branch contains the local SQLite API foundation:
 - Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
 - Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
 - Customer CRUD, package management, subscription assignment/status, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
 - Staff account management, router inventory, idempotent monthly invoice generation and financial summary reports.
-- Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
-- SQLite database is created automatically under `backend/data/`.
 
-This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, backup/restore, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
+This is an early development build, **not production-ready**. Scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, backup/restore, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
 
 ## Local setup (Android Termux or desktop)
 
@@ -33,6 +43,10 @@ Open the dashboard in your phone browser: `http://127.0.0.1:4000/`.
 API health check: `http://127.0.0.1:4000/api/v1/health`.
 
 The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep this file private and backed up. Do not commit it.
+
+## Frontend verification
+
+Follow [the Phase 4 frontend checklist](docs/PHASE-4-FRONTEND.md) on a phone and desktop before merging or deploying. The dashboard must be tested against the local API first; do not enter production customer data during prototype testing.
 
 ## First owner setup
 
@@ -82,10 +96,10 @@ Money values are integer Pakistani rupees (PKR). Payments cannot exceed the outs
 
 ## Roadmap
 
-1. Local SQLite API and data model.
-2. Connect dashboard UI to authentication and CRUD modules.
-3. Complete subscriptions, invoices, payment receipts and reports.
-4. Add staff roles, permissions, tests and backup/restore.
+1. Complete Phase 4 browser testing and accessibility fixes.
+2. Verify and integrate the frontend with the intended deployed API.
+3. Complete invoice receipts, exports, backup/restore and regression tests.
+4. Add staff permissions and audit coverage.
 5. Add MikroTik adapter and equipment inventory.
 6. Add vendor-specific OLT/ONU and GenieACS/TR-069 adapters.
 7. Review deployment architecture and production migration.
