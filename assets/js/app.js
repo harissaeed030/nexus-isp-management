@@ -81,6 +81,8 @@ if(v==="dashboard"){
  const suspended=statusCount("suspended");
  const offline=statusCount("offline");
  const inactive=statusCount("inactive");
+ const currentMonth=new Date().toISOString().slice(0,7);
+ const monthRevenue=(report.monthlyRevenue||[]).filter(x=>x.month===currentMonth).reduce((sum,x)=>sum+Number(x.revenue||0),0);
  const today=new Date().toISOString().slice(0,10);
  const todayPayments=payments.filter(x=>String(x.received_at||"").slice(0,10)===today);
  const todayCollection=todayPayments.reduce((sum,x)=>sum+Number(x.amount_pkr||0),0);
@@ -99,9 +101,9 @@ if(v==="dashboard"){
  page("Dashboard","Executive overview · figures are loaded from your authenticated NEXUS workspace.",'<div class="nx-exec-grid">'+
  kpi("Total customers",Number(stats.customers||0).toLocaleString("en-PK"),"Registered customer accounts","♙","kpi-blue")+
  kpi("Active customers",Number(stats.activeCustomers||0).toLocaleString("en-PK"),"Customer status: active","●","kpi-green")+
- kpi("Offline customers",offline?offline.toLocaleString("en-PK"):(inactive?inactive.toLocaleString("en-PK"):"Not tracked"),offline?"Reported offline status":(inactive?"Inactive status · not live connectivity":"Live online status is not exposed by API"),"⌁","kpi-slate")+
+ kpi("Offline customers",offline?offline.toLocaleString("en-PK"):"Not tracked",offline?"Reported offline status":"Live online status is not exposed by API","⌁","kpi-slate")+
  kpi("Suspended customers",suspended.toLocaleString("en-PK"),"Reported suspended status","⊘","kpi-amber")+
- kpi("Monthly revenue",money(stats.revenuePkr),"Recorded completed payments","₨","kpi-violet")+
+ kpi("Monthly revenue",money(monthRevenue),"Current month · recorded completed payments","₨","kpi-violet")+
  kpi("Pending payments",money(stats.pendingAmount),"Invoices awaiting payment · "+Number(stats.pendingInvoices||0)+" invoices","◷","kpi-amber")+
  kpi("Today's collections",money(todayCollection),todayPayments.length+" recorded payments today","↗","kpi-green")+
  kpi("Monthly expenses","Not tracked","No expense endpoint is configured","−","kpi-slate")+
