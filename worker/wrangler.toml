@@ -1,4 +1,4 @@
-name = "nexus-api"
+name = "nexus-saas-api"
 main = "src/index.js"
 compatibility_date = "2026-11-02"
 
@@ -8,5 +8,5 @@ ENVIRONMENT = "production"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "nexus-db"
-database_id = "9f108166-244d-442e-9b0a-5a0efa4d1823"
+database_name = "nexus-saas-db"
+database_id = "ce88098b-bff4-4d06-a0df-7bf29622a085"
