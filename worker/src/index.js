@@ -264,7 +264,7 @@ if(path.startsWith('/api/exports/')&&m==='GET')return await exportCsv(env,path,o
 if(path==='/api/audit-logs'&&m==='GET')return await listAudit(env,url,orgId);
 if(path==='/api/notifications'&&m==='GET')return await listNotifications(env,url,orgId,userId);
 if(path==='/api/notifications/read-all'&&m==='PUT')return await markAllNotificationsRead(env,orgId,userId);
-if(path.match(/^\\/api\\/notifications\\/[^/]+\\/read$/)&&m==='PUT')return await markNotificationRead(env,path,orgId,userId);
+if(path.startsWith('/api/notifications/')&&path.endsWith('/read')&&m==='PUT')return await markNotificationRead(env,path,orgId,userId);
 if(path==='/api/settings'&&m==='GET')return await getSet(env,orgId);
 if(path==='/api/settings'&&m==='PUT')return await updSet(request,env,orgId,userId,ip);
 if(path==='/api/profile'&&m==='GET')return await getProf(env,auth);
