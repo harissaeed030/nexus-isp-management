@@ -336,3 +336,15 @@ CREATE TABLE onu_devices (
   UNIQUE (organization_id, serial_number)
 );
 CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id, status);
+
+
+CREATE TABLE user_permissions (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  permission TEXT NOT NULL,
+  allowed INTEGER NOT NULL CHECK (allowed IN (0, 1)),
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (organization_id, user_id, permission)
+);
