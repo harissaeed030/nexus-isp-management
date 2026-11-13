@@ -14,7 +14,7 @@ The `build/nexus-isp-core` branch contains the first local API foundation:
 - Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
 - SQLite database is created automatically under `backend/data/`.
 
-This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, backup/restore, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
+This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, restore workflow, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
 
 ## Local setup (Android Termux or desktop)
 
@@ -33,6 +33,24 @@ Open the dashboard in your phone browser: `http://127.0.0.1:4000/`.
 API health check: `http://127.0.0.1:4000/api/v1/health`.
 
 The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep this file private and backed up. Do not commit it.
+
+## Database backup
+
+Run this from the `backend` directory while the application is running or stopped:
+
+```sh
+npm run backup
+```
+
+The script uses SQLite's `VACUUM INTO` to create a consistent standalone snapshot, then opens the snapshot read-only and checks `PRAGMA integrity_check`. Successful backups are written to `backend/backups/` by default. To choose another directory, set `BACKUP_DIR` before running the command.
+
+Example:
+
+```sh
+BACKUP_DIR=./my-private-backups npm run backup
+```
+
+The backup directory is ignored by Git. Copy verified backups to a separate safe location. This command creates and verifies backups; it does not yet implement automated scheduling or restore.
 
 ## First owner setup
 

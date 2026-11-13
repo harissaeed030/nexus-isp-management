@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 
@@ -62,7 +63,21 @@ try{
  assert.equal((await request("/api/v1/routers","POST",{name:"Blocked Router",host:"192.0.2.2"},techLogin.data.token)).status,403);
  const reports=await request("/api/v1/reports/summary","GET",undefined,token);
  assert.equal(reports.status,200);
- console.log("Nexus smoke tests passed: core CRUD, role defaults, permission grants/revokes, staff controls, router access and monthly billing.");
+
+ const backupDir=join(dir,"backups");
+ const backup=spawnSync(process.execPath,["scripts/backup-database.js"],{
+  cwd:process.cwd(),
+  env:{...process.env,BACKUP_DIR:backupDir},
+  encoding:"utf8"
+ });
+ assert.equal(backup.status,0,backup.stderr||backup.stdout);
+ const backupResult=JSON.parse(backup.stdout);
+ assert.equal(backupResult.success,true);
+ assert.equal(backupResult.integrity,"ok");
+ assert.equal(existsSync(backupResult.backupPath),true);
+ assert.ok(statSync(backupResult.backupPath).size>0);
+
+ console.log("Nexus smoke tests passed: core CRUD, role defaults, permission grants/revokes, staff controls, router access, monthly billing and verified SQLite backup.");
 }finally{
  await new Promise(resolve=>server.close(resolve));
  rmSync(dir,{recursive:true,force:true});

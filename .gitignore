@@ -17,5 +17,6 @@ coverage/
 *.log
 *.sqlite
 *.db
+backend/backups/
 .DS_Store
 Thumbs.db
