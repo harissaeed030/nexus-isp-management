@@ -456,9 +456,11 @@ async function updateComp(r,env,path,oid,uid,ip){const id=path.split('/')[3];con
 
 
 async function notifyAdmins(env,oid,title,message,type='info'){
- const users=await env.DB.prepare("SELECT id FROM users WHERE organization_id=? AND role IN ('owner','admin') AND status='active'").bind(oid).all();
- const rows=users.results||[];if(!rows.length)return;
- await env.DB.batch(rows.map(user=>env.DB.prepare("INSERT INTO notifications(id,organization_id,user_id,title,message,type,is_read,created_at) VALUES(?,?,?,?,?,?,0,datetime('now'))").bind(uuid(),oid,user.id,String(title).slice(0,160),String(message||'').slice(0,1000),type)));
+ try{
+  const users=await env.DB.prepare("SELECT id FROM users WHERE organization_id=? AND role IN ('owner','admin') AND status='active'").bind(oid).all();
+  const rows=users.results||[];if(!rows.length)return;
+  await env.DB.batch(rows.map(user=>env.DB.prepare("INSERT INTO notifications(id,organization_id,user_id,title,message,type,is_read,created_at) VALUES(?,?,?,?,?,?,0,datetime('now'))").bind(uuid(),oid,user.id,String(title).slice(0,160),String(message||'').slice(0,1000),type)));
+ }catch{}
 }
 async function listNotifications(env,url,oid,uid){
  const {page,pp,off}=pg(url,20),unreadOnly=url.searchParams.get('unread_only')==='true';
