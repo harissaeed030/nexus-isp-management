@@ -13,7 +13,7 @@
 - No D1 migrations were applied to production during this implementation pass.
 - The production D1 database was inspected read-only. It currently has one organization (Vancom Networks) and one user; customer, package, subscription, invoice and payment tables had no records at audit time.
 - The existing organization currency is currently `USD`. The new Workspace Settings screen can change it; it was not changed automatically.
-- The Cloudflare Pages preview for the implementation branch is available at: https://3ebc8485.nexus-isp-management.pages.dev
+- The Cloudflare Pages preview for the implementation branch is available at: https://90c492bc.nexus-isp-management.pages.dev
 
 ## Implemented in the development branch
 
