@@ -149,22 +149,53 @@ async function decryptPppoePassword(value,env){
  return new TextDecoder().decode(plain)
 }
 
-async function runMigrations(env){const R=[];const tasks=[];const t=(l,q)=>tasks.push((async()=>{try{await env.DB.prepare(q).run();R.push(l+':OK')}catch(e){R.push(l+':'+(e.message.includes('duplicate')||e.message.includes('already')?'exists':e.message.slice(0,60)))}})());
-t('users.name','ALTER TABLE users ADD COLUMN name TEXT');t('users.phone','ALTER TABLE users ADD COLUMN phone TEXT');t('users.status','ALTER TABLE users ADD COLUMN status TEXT DEFAULT \'active\'');t('users.avatar','ALTER TABLE users ADD COLUMN avatar TEXT');t('users.pw_salt','ALTER TABLE users ADD COLUMN password_salt TEXT');t('users.last_login','ALTER TABLE users ADD COLUMN last_login TEXT');t('users.token_version','ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0');t('invoices.billing_period','ALTER TABLE invoices ADD COLUMN billing_period TEXT');
-t('org.email','ALTER TABLE organizations ADD COLUMN email TEXT');t('org.phone','ALTER TABLE organizations ADD COLUMN phone TEXT');t('org.address','ALTER TABLE organizations ADD COLUMN address TEXT');t('org.currency','ALTER TABLE organizations ADD COLUMN currency TEXT DEFAULT \'USD\'');
-t('cust.balance','ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0');t('cust.notes','ALTER TABLE customers ADD COLUMN notes TEXT');t('cust.inst_addr','ALTER TABLE customers ADD COLUMN installation_address TEXT');t('cust.inst_date','ALTER TABLE customers ADD COLUMN installation_date TEXT');t('cust.id_type','ALTER TABLE customers ADD COLUMN id_type TEXT');t('cust.id_num','ALTER TABLE customers ADD COLUMN id_number TEXT');
-t('sub.renew','ALTER TABLE subscriptions ADD COLUMN auto_renew INTEGER DEFAULT 0');t('pkg.sd','ALTER TABLE packages ADD COLUMN speed_down TEXT');t('pkg.su','ALTER TABLE packages ADD COLUMN speed_up TEXT');
-t('notif','CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,title TEXT NOT NULL,message TEXT,type TEXT DEFAULT \'info\',is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT(datetime(\'now\')))');
-t('settings','CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,key))');
-t('pppoe','CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT \'active\',created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,username))');
-t('network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT');t('network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT');t('network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER');
-t('onu_devices','CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT \'unknown\',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,serial_number))');
-t('user_permissions','CREATE TABLE IF NOT EXISTS user_permissions(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,permission TEXT NOT NULL,allowed INTEGER NOT NULL CHECK(allowed IN(0,1)),updated_by TEXT,updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,user_id,permission))');
-await Promise.all(tasks);try{await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL').run();R.push('invoices.period_index:OK')}catch(e){R.push('invoices.period_index:'+e.message.slice(0,60))}try{await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id,status)').run();R.push('onu_devices.index:OK')}catch(e){R.push('onu_devices.index:'+e.message.slice(0,60))}try{await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id,invoice_number)').run();R.push('invoices.number_index:OK')}catch(e){R.push('invoices.number_index:'+e.message.slice(0,60))}try{await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''").run();R.push('payments.reference_index:OK')}catch(e){R.push('payments.reference_index:'+e.message.slice(0,60))}return R}
+async function runMigrations(env){
+ const migrations=[
+ ['users.name','ALTER TABLE users ADD COLUMN name TEXT'],
+ ['users.phone','ALTER TABLE users ADD COLUMN phone TEXT'],
+ ['users.status',"ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'"],
+ ['users.avatar','ALTER TABLE users ADD COLUMN avatar TEXT'],
+ ['users.pw_salt','ALTER TABLE users ADD COLUMN password_salt TEXT'],
+ ['users.last_login','ALTER TABLE users ADD COLUMN last_login TEXT'],
+ ['users.token_version','ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0'],
+ ['invoices.billing_period','ALTER TABLE invoices ADD COLUMN billing_period TEXT'],
+ ['org.email','ALTER TABLE organizations ADD COLUMN email TEXT'],
+ ['org.phone','ALTER TABLE organizations ADD COLUMN phone TEXT'],
+ ['org.address','ALTER TABLE organizations ADD COLUMN address TEXT'],
+ ['org.currency',"ALTER TABLE organizations ADD COLUMN currency TEXT DEFAULT 'USD'"],
+ ['cust.balance','ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0'],
+ ['cust.notes','ALTER TABLE customers ADD COLUMN notes TEXT'],
+ ['cust.inst_addr','ALTER TABLE customers ADD COLUMN installation_address TEXT'],
+ ['cust.inst_date','ALTER TABLE customers ADD COLUMN installation_date TEXT'],
+ ['cust.id_type','ALTER TABLE customers ADD COLUMN id_type TEXT'],
+ ['cust.id_num','ALTER TABLE customers ADD COLUMN id_number TEXT'],
+ ['sub.renew','ALTER TABLE subscriptions ADD COLUMN auto_renew INTEGER DEFAULT 0'],
+ ['pkg.sd','ALTER TABLE packages ADD COLUMN speed_down TEXT'],
+ ['pkg.su','ALTER TABLE packages ADD COLUMN speed_up TEXT'],
+ ['notif',"CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,title TEXT NOT NULL,message TEXT,type TEXT DEFAULT 'info',is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT(datetime('now')))"],
+ ['settings',"CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,key))"],
+ ['pppoe',"CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT 'active',created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,username))"],
+ ['network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT'],
+ ['network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT'],
+ ['network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER'],
+ ['onu_devices',"CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT 'unknown',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,serial_number))"],
+ ['user_permissions',"CREATE TABLE IF NOT EXISTS user_permissions(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,permission TEXT NOT NULL,allowed INTEGER NOT NULL CHECK(allowed IN(0,1)),updated_by TEXT,updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,user_id,permission))"],
+ ['invoices.period_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL'],
+ ['onu_devices.index','CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id,status)'],
+ ['invoices.number_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id,invoice_number)'],
+ ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"]
+ ];
+ const results=[];
+ for(const[name,sql]of migrations){
+  try{await env.DB.prepare(sql).run();results.push(name+':OK')}
+  catch(e){const message=String(e?.message||'');if(/duplicate column name|already exists/i.test(message)){results.push(name+':EXISTS');continue}throw new Error('NEXUS migration '+name+' failed: '+message.slice(0,140))}
+ }
+ return results
+}
 
 let _migrated=false;
 export default{async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
-if(!_migrated){try{await runMigrations(env)}catch(e){}_migrated=true}
+if(!_migrated){await runMigrations(env);_migrated=true}
 if(m==='OPTIONS')return new Response(null,{status:204,headers:corsHeaders(request,env)});
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
 if(path.startsWith('/api/'))return withCors(await handleApi(request,env,url,path,m),request,env);
