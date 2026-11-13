@@ -317,7 +317,7 @@ async function generateBilling(r,env,oid,uid,ip){
  const eligible=await env.DB.prepare("SELECT s.id AS subscription_id,s.customer_id,p.price FROM subscriptions s JOIN packages p ON p.id=s.package_id AND p.organization_id=s.organization_id JOIN customers c ON c.id=s.customer_id AND c.organization_id=s.organization_id WHERE s.organization_id=? AND s.status='active' AND COALESCE(p.billing_cycle,'monthly')='monthly' AND (s.start_date IS NULL OR s.start_date<=?) AND (s.end_date IS NULL OR s.end_date>=?)").bind(oid,periodEnd,periodStart).all();
  let created=0;
  for(const row of eligible.results||[]){
-  const amount=Number(row.price);if(!Number.isSafeInteger(amount)||amount<0)continue;
+  const amount=Number(row.price);if(!Number.isSafeInteger(amount)||amount<=0)continue;
   const invoiceId=uuid(),invoiceNumber='INV-'+period.replace('-','')+'-'+uuid().slice(0,8).toUpperCase();
   const result=await env.DB.prepare("INSERT OR IGNORE INTO invoices(id,organization_id,customer_id,subscription_id,invoice_number,amount,tax,total,status,issue_date,due_date,notes,billing_period) VALUES(?,?,?,?,?,?,0,?,'pending',?,?,?,?)").bind(invoiceId,oid,row.customer_id,row.subscription_id,invoiceNumber,amount,amount,periodStart,dueDate,'Monthly subscription billing '+period,period).run();
   if(Number(result.meta?.changes||0)>0)created++;
