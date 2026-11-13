@@ -1,3 +1,5 @@
+> **Architecture decision update (2026-11-13):** The owner selected Cloudflare Workers + D1 as the hosted NEXUS SaaS architecture. The earlier SQLite-first recommendation below is superseded for the hosted product. The local SQLite backend is preserved only as an offline development foundation. See [Cloudflare implementation status](CLOUDFLARE-IMPLEMENTATION-STATUS.md) for the current source of truth and remaining implementation work.
+
 # NEXUS Implementation Plan and Decisions
 
 **Prepared:** 2026-11-11  
