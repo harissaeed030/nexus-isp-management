@@ -218,7 +218,7 @@ CREATE TABLE users (
   password_hash   TEXT,
   role            TEXT NOT NULL DEFAULT 'member',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at      TEXT NOT NULL DEFAULT (datetime('now')), name TEXT, phone TEXT, status TEXT DEFAULT 'active', avatar TEXT, password_salt TEXT, last_login TEXT,
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')), name TEXT, phone TEXT, status TEXT DEFAULT 'active', avatar TEXT, password_salt TEXT, last_login TEXT, token_version INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 
