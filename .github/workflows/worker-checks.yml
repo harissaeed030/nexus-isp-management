@@ -14,4 +14,6 @@ jobs:
         with:
           node-version: 22
       - name: Check Cloudflare Worker JavaScript syntax
-        run: node --check worker/src/index.js
+        run: |
+          node --check worker/src/index.js
+          node --check assets/js/app.js
