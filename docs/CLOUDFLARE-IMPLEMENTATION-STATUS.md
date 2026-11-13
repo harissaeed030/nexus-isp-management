@@ -35,6 +35,7 @@
 - Workspace settings and user profile screens, including currency selection.
 - Tenant/user-scoped notification inbox, read/unread actions and automatic admin alerts for tickets and payments.
 - Refund ledger with pending/completed/failed states, unique references, idempotency keys, over-refund protection and invoice balance reconciliation.
+- Invoice detail printing with browser Save as PDF and payment history; server-generated PDF/receipt service remains outstanding.
 - Owner/admin staff-management authorization corrected; owner account and administrator controls are protected.
 - Basic GitHub Actions syntax checks for Worker and frontend JavaScript.
 
@@ -45,7 +46,7 @@
 3. Authenticated GenieACS NBI integration and TR-069 remote operations. ACS screen is inventory only.
 4. A secure connector/VPN path from the Cloudflare Worker to private ISP network devices.
 5. Customer self-service portal, customer login, online registration, invoices and complaint tracking.
-6. PDF invoices, printable receipts and scheduled automatic recurring billing. Monthly invoice generation currently requires an authorized API action.
+6. Server-generated PDF invoices, printable payment receipts and scheduled automatic recurring billing; invoice browser print/Save as PDF is available. Monthly invoice generation currently requires an authorized API action.
 7. Email, WhatsApp, SMS and payment-gateway integrations.
 8. SaaS platform-owner tenant administration, subscription plans, usage limits and tenant billing.
 9. Backup/restore workflows and operational monitoring.
