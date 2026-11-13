@@ -40,7 +40,7 @@ const money=n=>"₨ "+Number(n||0).toLocaleString("en-PK");
 function table(head,rows){return '<div class="nx-panel" style="overflow:auto"><table class="nx-table"><thead><tr>'+head.map(x=>"<th>"+x+"</th>").join("")+'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+head.length+'">No records found.</td></tr>')+'</tbody></table></div>'}
 function showCustomerPanel(title,body){content.querySelector("#nxCustomerPanel")?.remove();content.insertAdjacentHTML("beforeend",'<div class="nx-customer-overlay" id="nxCustomerPanel"><section class="nx-customer-dialog"><div class="nx-customer-dialog-head"><b>'+esc(title)+'</b><button type="button" id="nxCustomerClose">×</button></div><div class="nx-customer-dialog-body">'+body+'</div></section></div>');$("#nxCustomerClose").onclick=()=>$("#nxCustomerPanel").remove();$("#nxCustomerPanel").onclick=e=>{if(e.target.id==="nxCustomerPanel")e.currentTarget.remove()}}
 function page(title,sub,body){
- const exports={customers:"customers",packages:"packages",subscriptions:"subscriptions",billing:"invoices",tickets:"tickets",routers:"routers"};
+ const exports={customers:"customers",packages:"packages",subscriptions:"subscriptions",billing:"invoices",tickets:"tickets",routers:"routers",pppoe:"pppoe",onus:"onus",olt:"olt",acs:"acs"};
  const resource=exports[view];
  content.innerHTML='<div class="page-heading"><div><p class="eyebrow">NEXUS WORKSPACE</p><h1>'+title+'</h1><p class="subheading">'+sub+'</p></div><div class="nx-row"><button class="nx-btn" id="nxRefresh">Refresh</button>'+(resource?'<button class="nx-btn" id="nxExport">Export CSV</button>':'')+'</div></div>'+body;
  $("#nxRefresh").onclick=()=>load(view);
