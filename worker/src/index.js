@@ -36,7 +36,7 @@ function roleAllowed(role,path,method){
  if(path==='/api/profile'&&(method==='GET'||method==='PUT'))return true;
  if(path==='/api/profile/password'&&method==='PUT')return true;
  const grants={
-  billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions'],POST:['/api/invoices'],PUT:['/api/invoices']},
+  billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions'],POST:['/api/invoices','/api/billing/generate'],PUT:['/api/invoices']},
   support:{GET:['/api/dashboard/stats','/api/customers','/api/complaints'],POST:['/api/complaints'],PUT:['/api/complaints']},
   technician:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/complaints','/api/pppoe','/api/network/devices','/api/network/status'],POST:['/api/complaints','/api/pppoe','/api/network/devices'],PUT:['/api/complaints','/api/pppoe','/api/network/devices'],DELETE:['/api/pppoe','/api/network/devices']},
   staff:{GET:['/api/dashboard/stats','/api/customers','/api/complaints'],POST:['/api/complaints']}
@@ -69,14 +69,14 @@ async function decryptPppoePassword(value,env){
 }
 
 async function runMigrations(env){const R=[];const tasks=[];const t=(l,q)=>tasks.push((async()=>{try{await env.DB.prepare(q).run();R.push(l+':OK')}catch(e){R.push(l+':'+(e.message.includes('duplicate')||e.message.includes('already')?'exists':e.message.slice(0,60)))}})());
-t('users.name','ALTER TABLE users ADD COLUMN name TEXT');t('users.phone','ALTER TABLE users ADD COLUMN phone TEXT');t('users.status','ALTER TABLE users ADD COLUMN status TEXT DEFAULT \'active\'');t('users.avatar','ALTER TABLE users ADD COLUMN avatar TEXT');t('users.pw_salt','ALTER TABLE users ADD COLUMN password_salt TEXT');t('users.last_login','ALTER TABLE users ADD COLUMN last_login TEXT');
+t('users.name','ALTER TABLE users ADD COLUMN name TEXT');t('users.phone','ALTER TABLE users ADD COLUMN phone TEXT');t('users.status','ALTER TABLE users ADD COLUMN status TEXT DEFAULT \'active\'');t('users.avatar','ALTER TABLE users ADD COLUMN avatar TEXT');t('users.pw_salt','ALTER TABLE users ADD COLUMN password_salt TEXT');t('users.last_login','ALTER TABLE users ADD COLUMN last_login TEXT');t('invoices.billing_period','ALTER TABLE invoices ADD COLUMN billing_period TEXT');
 t('org.email','ALTER TABLE organizations ADD COLUMN email TEXT');t('org.phone','ALTER TABLE organizations ADD COLUMN phone TEXT');t('org.address','ALTER TABLE organizations ADD COLUMN address TEXT');t('org.currency','ALTER TABLE organizations ADD COLUMN currency TEXT DEFAULT \'USD\'');
 t('cust.balance','ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0');t('cust.notes','ALTER TABLE customers ADD COLUMN notes TEXT');t('cust.inst_addr','ALTER TABLE customers ADD COLUMN installation_address TEXT');t('cust.inst_date','ALTER TABLE customers ADD COLUMN installation_date TEXT');t('cust.id_type','ALTER TABLE customers ADD COLUMN id_type TEXT');t('cust.id_num','ALTER TABLE customers ADD COLUMN id_number TEXT');
 t('sub.renew','ALTER TABLE subscriptions ADD COLUMN auto_renew INTEGER DEFAULT 0');t('pkg.sd','ALTER TABLE packages ADD COLUMN speed_down TEXT');t('pkg.su','ALTER TABLE packages ADD COLUMN speed_up TEXT');
 t('notif','CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,title TEXT NOT NULL,message TEXT,type TEXT DEFAULT \'info\',is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT(datetime(\'now\')))');
 t('settings','CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,key))');
 t('pppoe','CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT \'active\',created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,username))');
-await Promise.all(tasks);return R}
+await Promise.all(tasks);try{await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL').run();R.push('invoices.period_index:OK')}catch(e){R.push('invoices.period_index:'+e.message.slice(0,60))}return R}
 
 let _migrated=false;
 export default{async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
@@ -112,6 +112,7 @@ if(path.match(/^\/api\/subscriptions\/[^/]+$/)&&m==='PUT')return await updateSub
 if(path.match(/^\/api\/subscriptions\/[^/]+$/)&&m==='DELETE')return await delSub(env,path,orgId,userId,ip);
 if(path==='/api/invoices'&&m==='GET')return await listInv(env,url,orgId);
 if(path==='/api/invoices'&&m==='POST')return await createInv(request,env,orgId,userId,ip);
+if(path==='/api/billing/generate'&&m==='POST')return await generateBilling(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/invoices\/[^/]+$/)&&m==='GET')return await getInv(env,path,orgId);
 if(path.match(/^\/api\/invoices\/[^/]+\/payments$/)&&m==='POST')return await recPay(request,env,path,orgId,userId,ip);
 if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
@@ -198,6 +199,24 @@ async function delSub(env,path,oid,uid,ip){const id=path.split('/')[3];if(!await
 
 async function listInv(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM invoices WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT i.*,c.first_name,c.last_name FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id WHERE i.organization_id=? ORDER BY i.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 async function createInv(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['customer_id','amount']);if(ms.length)return json({error:'Missing fields',fields:ms},400);if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);const id=uuid();const amt=parseFloat(b.amount),tax=parseFloat(b.tax||0),total=amt+tax;const cnt=await env.DB.prepare('SELECT COUNT(*)c FROM invoices WHERE organization_id=?').bind(oid).first();const num='INV-'+String(cnt.c+1).padStart(5,'0');const idate=b.issue_date||new Date().toISOString().split('T')[0];let ddate=b.due_date;if(!ddate){const d=new Date(idate);d.setDate(d.getDate()+30);ddate=d.toISOString().split('T')[0]}await env.DB.prepare('INSERT INTO invoices(id,organization_id,customer_id,subscription_id,invoice_number,amount,tax,total,status,issue_date,due_date,notes)VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id,b.subscription_id||null,num,amt,tax,total,'pending',idate,ddate,b.notes||null).run();await audit(env,oid,uid,'create_invoice','Invoice:'+num,ip);return json(await env.DB.prepare('SELECT * FROM invoices WHERE id=?').bind(id).first(),201)}
+async function generateBilling(r,env,oid,uid,ip){
+ const b=await parseBody(r);if(!b||typeof b.period!=='string'||!/^\\d{4}-(0[1-9]|1[0-2])$/.test(b.period))return json({error:'A valid billing period (YYYY-MM) is required'},400);
+ const period=b.period,now=new Date(),currentMonth=now.toISOString().slice(0,7);
+ if(period>currentMonth)return json({error:'Future billing periods cannot be generated'},400);
+ const [year,month]=period.split('-').map(Number),periodStart=period+'-01';
+ const periodEnd=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);
+ const dueDate=new Date(Date.UTC(year,month-1,8)).toISOString().slice(0,10);
+ const eligible=await env.DB.prepare("SELECT s.id AS subscription_id,s.customer_id,p.price FROM subscriptions s JOIN packages p ON p.id=s.package_id AND p.organization_id=s.organization_id JOIN customers c ON c.id=s.customer_id AND c.organization_id=s.organization_id WHERE s.organization_id=? AND s.status='active' AND COALESCE(p.billing_cycle,'monthly')='monthly' AND (s.start_date IS NULL OR s.start_date<=?) AND (s.end_date IS NULL OR s.end_date>=?)").bind(oid,periodEnd,periodStart).all();
+ let created=0;
+ for(const row of eligible.results||[]){
+  const amount=Number(row.price);if(!Number.isSafeInteger(amount)||amount<0)continue;
+  const invoiceId=uuid(),invoiceNumber='INV-'+period.replace('-','')+'-'+uuid().slice(0,8).toUpperCase();
+  const result=await env.DB.prepare("INSERT OR IGNORE INTO invoices(id,organization_id,customer_id,subscription_id,invoice_number,amount,tax,total,status,issue_date,due_date,notes,billing_period) VALUES(?,?,?,?,?,?,0,?,'pending',?,?,?,?)").bind(invoiceId,oid,row.customer_id,row.subscription_id,invoiceNumber,amount,amount,periodStart,dueDate,'Monthly subscription billing '+period,period).run();
+  if(Number(result.meta?.changes||0)>0)created++;
+ }
+ if(created>0)await audit(env,oid,uid,'generate_monthly_invoices','Period:'+period+'; created:'+created,ip);
+ return json({success:true,billingPeriod:period,invoicesCreated:created,subscriptionsEligible:(eligible.results||[]).length,alreadyGenerated:created===0&&(eligible.results||[]).length>0});
+}
 async function getInv(env,path,oid){const id=path.split('/')[3];const inv=await env.DB.prepare('SELECT i.*,c.first_name,c.last_name,c.email,c.phone FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id WHERE i.id=? AND i.organization_id=?').bind(id,oid).first();if(!inv)return json({error:'Not found'},404);const pays=await env.DB.prepare('SELECT * FROM payments WHERE invoice_id=? AND organization_id=?').bind(id,oid).all();return json({...inv,payments:pays.results})}
 async function recPay(r,env,path,oid,uid,ip){const iid=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['amount']);if(ms.length)return json({error:'Missing fields',fields:ms},400);const inv=await env.DB.prepare('SELECT * FROM invoices WHERE id=? AND organization_id=?').bind(iid,oid).first();if(!inv)return json({error:'Invoice not found'},404);const pid=uuid();const amt=parseFloat(b.amount);await env.DB.prepare('INSERT INTO payments(id,organization_id,invoice_id,customer_id,amount,payment_method,transaction_ref,status,paid_at)VALUES(?,?,?,?,?,?,?,?,?)').bind(pid,oid,iid,inv.customer_id,amt,b.method||'cash',b.reference||null,'completed',b.payment_date||new Date().toISOString().split('T')[0]).run();const tp=await env.DB.prepare("SELECT COALESCE(SUM(amount),0)t FROM payments WHERE invoice_id=? AND organization_id=? AND status='completed'").bind(iid,oid).first();if(tp.t>=inv.total)await env.DB.prepare("UPDATE invoices SET status='paid',paid_at=datetime('now'),updated_at=datetime('now')WHERE id=?").bind(iid).run();await env.DB.prepare("UPDATE customers SET balance=MAX(0,balance-?),updated_at=datetime('now')WHERE id=? AND organization_id=?").bind(amt,inv.customer_id,oid).run();await audit(env,oid,uid,'record_payment','Payment for '+inv.invoice_number,ip);return json(await env.DB.prepare('SELECT * FROM payments WHERE id=?').bind(pid).first(),201)}
 
