@@ -348,3 +348,6 @@ CREATE TABLE user_permissions (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (organization_id, user_id, permission)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id, invoice_number);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id, transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref <> '';
