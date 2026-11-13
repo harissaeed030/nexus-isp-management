@@ -300,3 +300,53 @@ html{scroll-behavior:smooth}body{background:var(--bg);color:var(--ink);font-fami
 @media(max-width:760px){.sidebar{width:280px;max-height:100dvh;transform:translateX(-105%);box-shadow:15px 0 35px rgba(23,50,77,.18)}.sidebar.open{transform:translateX(0)}.sidebar-backdrop{display:block;position:fixed;inset:0;z-index:25;background:rgba(17,39,64,.30);backdrop-filter:blur(2px);border:0}.main,.app-shell.sidebar-collapsed .main{margin-left:0}.app-shell.sidebar-collapsed .sidebar{width:280px}.topbar{height:60px;padding:0 13px;gap:10px}.content{padding:19px 13px}.page-heading h1{font-size:22px}.was-panel{padding:14px}.was-topcards{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.was-dashboard-grid{grid-template-columns:1fr}.was-tabs{overflow-x:auto;flex-wrap:nowrap}.was-tabs button{flex:none}.nx-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:390px){.content{padding-right:10px;padding-left:10px}.was-topcards b{font-size:18px}.page-heading h1{font-size:20px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}}
+
+
+/* Premium executive dashboard additions */
+.nx-global-search{display:flex;align-items:center;gap:7px;width:min(250px,28vw);height:36px;padding:0 10px;border:1px solid #e2eaf0;border-radius:9px;background:#f8fafc;color:#80909a}
+.nx-global-search span{font-size:19px;line-height:1}
+.nx-global-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#243746;font-size:11px}
+.nx-global-search input::placeholder{color:#9aa8b1}
+.nx-exec-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.nx-exec-kpi{min-width:0;padding:15px 15px 14px;background:#fff;border:1px solid #e6edf2;border-radius:12px;box-shadow:0 6px 20px rgba(26,52,72,.045)}
+.nx-kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#7d8e99;font-size:10px;font-weight:700}
+.nx-kpi-top i{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;font-size:13px;font-style:normal}
+.nx-kpi-top .kpi-blue{background:#eaf4fc;color:#2c83bd}.nx-kpi-top .kpi-green{background:#e9f8f2;color:#1c9a72}.nx-kpi-top .kpi-slate{background:#eef2f6;color:#718397}.nx-kpi-top .kpi-amber{background:#fff5e8;color:#c48a35}.nx-kpi-top .kpi-violet{background:#f2edff;color:#8065c9}.nx-kpi-top .kpi-rose{background:#fff0f1;color:#c46a75}
+.nx-exec-kpi>b{display:block;margin-top:12px;color:#1e3548;font:800 22px Manrope,'DM Sans',sans-serif;letter-spacing:-.5px;overflow-wrap:anywhere}
+.nx-exec-kpi>small{display:block;margin-top:5px;color:#97a4ad;font-size:9px;line-height:1.45}
+.nx-dashboard-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(250px,.85fr);gap:14px;margin-bottom:14px}
+.nx-section-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.nx-dashboard-panel{min-width:0;margin:0 0 14px;padding:18px}
+.nx-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:13px}
+.nx-panel-head h3{margin:0;color:#243b4c;font:800 14px Manrope,'DM Sans',sans-serif}
+.nx-panel-head p{margin:5px 0 0;color:#91a0a9;font-size:10px}
+.nx-live-label{padding:5px 8px;border-radius:20px;background:#edf8f4;color:#218d6e;font-size:8px;font-weight:800;letter-spacing:.7px;white-space:nowrap}
+.nx-inline-link{color:#2787c3;text-decoration:none;font-size:10px;font-weight:700;white-space:nowrap}
+.nx-inline-link:hover{text-decoration:underline}
+.nx-revenue-bars{min-height:180px;align-items:end;padding-top:16px}
+.nx-revenue-bars .was-bar-col{min-width:0}
+.nx-status-list{display:grid;gap:12px;padding:7px 0}
+.nx-status-list>div{display:flex;justify-content:space-between;align-items:center;color:#647783;font-size:11px}
+.nx-status-list>div span{display:flex;align-items:center;gap:8px}
+.nx-status-list>div b{color:#263f50;font-size:12px}
+.nx-status-list i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.status-active{background:#26b486}.status-suspended{background:#d99546}.status-inactive{background:#93a4b1}.status-offline{background:#5d91c6}
+.nx-data-note{margin:9px 0 0;padding-top:10px;border-top:1px solid #edf1f4;color:#9aa6ad;font-size:9px;line-height:1.5}
+.nx-activity-list{display:grid;gap:0}
+.nx-activity-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #eff3f5}
+.nx-activity-item:last-child{border-bottom:0}
+.nx-activity-dot{width:8px;height:8px;margin-top:4px;flex:none;border-radius:50%;background:#369bd0;box-shadow:0 0 0 4px #eaf5fb}
+.nx-activity-item b{display:block;color:#405665;font-size:10px;text-transform:capitalize}
+.nx-activity-item small{display:block;margin-top:4px;color:#99a6ae;font-size:9px}
+.nx-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.nx-settings-form{display:grid;gap:11px}
+.nx-settings-form h3{margin:0 0 3px;color:#263d4d;font:800 14px Manrope,'DM Sans',sans-serif}
+.nx-settings-form label{display:grid;gap:6px;color:#6f818d;font-size:10px;font-weight:700}
+.nx-settings-form input{width:100%;min-width:0;padding:10px 11px;border:1px solid #dfe8ed;border-radius:8px;background:#fbfcfd;color:#263d4d;font-size:11px;outline:none}
+.nx-settings-form input:focus{border-color:#70b4dc;box-shadow:0 0 0 3px #e7f4fb}
+.nx-settings-form button{justify-self:start}
+.nx-dashboard-panel .nx-table{min-width:450px}
+.nx-dashboard-panel .nx-table td{white-space:nowrap}
+@media(max-width:1200px){.nx-exec-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:850px){.nx-dashboard-grid{grid-template-columns:1fr}.nx-section-grid{grid-template-columns:1fr}.nx-exec-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.nx-global-search{width:min(190px,34vw)}}
+@media(max-width:560px){.nx-exec-grid{gap:8px}.nx-exec-kpi{padding:12px}.nx-exec-kpi>b{font-size:19px}.nx-kpi-top{font-size:9px}.nx-kpi-top i{width:25px;height:25px}.nx-dashboard-panel{padding:13px}.nx-panel-head h3{font-size:13px}.nx-global-search{width:132px;height:32px}.nx-global-search input{font-size:10px}.nx-settings-grid{grid-template-columns:1fr}.topbar{padding:0 12px}.top-actions{gap:7px}.demo-pill{font-size:7px;padding:6px 7px}.crumb{font-size:10px}.nx-dashboard-panel .nx-table{min-width:390px}}
