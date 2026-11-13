@@ -485,13 +485,14 @@ async function markAllNotificationsRead(env,oid,uid){
 
 async function listStaff(env,oid){const rows=await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();return json({data:rows.results||[]})}
 async function createStaff(r,env,oid,uid,role,ip){
- if(role!=='admin')return json({error:'Admin only'},403);
+ if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ms=vReq(b,['email','password','name']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
  if(!vEmail(b.email))return json({error:'Invalid email'},400);
  if(typeof b.password!=='string'||b.password.length<8)return json({error:'Password must be at least 8 characters'},400);
  const allowed=['admin','billing','support','technician','staff'],assigned=b.role||'staff';
  if(!allowed.includes(assigned))return json({error:'Invalid role'},400);
+ if(assigned==='admin'&&role!=='owner')return json({error:'Only the owner can create administrators'},403);
  if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(b.email.toLowerCase()).first())return json({error:'Email exists'},409);
  const id=uuid(),{hash,salt}=await hashPw(b.password);
  await env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.email.toLowerCase(),hash,salt,s(b.name),assigned,b.phone||null).run();
@@ -499,9 +500,11 @@ async function createStaff(r,env,oid,uid,role,ip){
  return json({id,email:b.email,name:b.name,role:assigned},201)
 }
 async function updateStaff(r,env,path,oid,uid,role,ip){
- if(role!=='admin')return json({error:'Admin only'},403);
+ if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);
  const id=path.split('/')[3],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ex=await env.DB.prepare('SELECT * FROM users WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
+ if(ex.role==='owner')return json({error:'The owner account cannot be changed from staff management'},403);
+ if(role!=='owner'&&ex.role==='admin')return json({error:'Only the owner can manage administrators'},403);
  const allowed=['admin','billing','support','technician','staff'];
  if(b.role!==undefined&&!allowed.includes(b.role))return json({error:'Invalid role'},400);
  if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8))return json({error:'Password must be at least 8 characters'},400);
@@ -516,7 +519,7 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
  await audit(env,oid,uid,'update_staff','Staff:'+id,ip);
  return json(await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE id=? AND organization_id=?').bind(id,oid).first())
 }
-async function delStaff(env,path,oid,role,uid,ip){if(role!=='admin')return json({error:'Admin only'},403);const id=path.split('/')[3];if(id===uid)return json({error:'Cannot delete self'},400);if(!await env.DB.prepare('SELECT * FROM users WHERE id=? AND organization_id=?').bind(id,oid).first())return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM users WHERE id=? AND organization_id=?').bind(id,oid).run();return json({success:true})}
+async function delStaff(env,path,oid,role,uid,ip){if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);const id=path.split('/')[3];if(id===uid)return json({error:'Cannot delete self'},400);const target=await env.DB.prepare('SELECT id,role FROM users WHERE id=? AND organization_id=?').bind(id,oid).first();if(!target)return json({error:'Not found'},404);if(target.role==='owner')return json({error:'The owner account cannot be deleted from staff management'},403);if(role!=='owner'&&target.role==='admin')return json({error:'Only the owner can delete administrators'},403);await env.DB.prepare('DELETE FROM users WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_staff','Staff:'+id,ip);return json({success:true})}
 
 
 async function getSub(env,path,oid){
