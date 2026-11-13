@@ -34,7 +34,8 @@
 - Connection overview that explicitly reports live connectivity as untested until a real connector exists.
 - Workspace settings and user profile screens, including currency selection.
 - Tenant/user-scoped notification inbox, read/unread actions and automatic admin alerts for tickets and payments.
-- Refund ledger with pending/completed/failed states, unique references, over-refund protection and invoice balance reconciliation.
+- Refund ledger with pending/completed/failed states, unique references, idempotency keys, over-refund protection and invoice balance reconciliation.
+- Owner/admin staff-management authorization corrected; owner account and administrator controls are protected.
 - Basic GitHub Actions syntax checks for Worker and frontend JavaScript.
 
 ## Not yet implemented or connected
@@ -61,4 +62,4 @@
 
 ## Verification boundary
 
-Worker and frontend JavaScript syntax checks passed after notification/refund changes. Refund schema and indexes were applied and inspected in staging D1 only; the net-payment SQL query was accepted by D1. The earlier Pages preview deployment succeeded; the latest source commits have not been deployed. These are basic build checks only. No claim is made that the complete application has passed acceptance, security, integration or production-readiness testing.
+Worker and frontend JavaScript syntax checks passed after notification/refund changes. Refund schema, indexes and idempotency column were applied and inspected in staging D1 only; refund insert/reconciliation SQL plans and the net-payment SQL query were accepted by D1. The earlier Pages preview deployment succeeded; the latest source commits have not been deployed. These are basic build checks only. No claim is made that the complete application has passed acceptance, security, integration or production-readiness testing.
