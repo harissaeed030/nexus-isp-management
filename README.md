@@ -16,7 +16,7 @@ The selected SaaS backend is **Cloudflare Workers + Cloudflare D1**.
 
 The current isolated implementation preview is:
 
-https://3ebc8485.nexus-isp-management.pages.dev
+https://90c492bc.nexus-isp-management.pages.dev
 
 Do not merge the implementation branch into `dev` or deploy the Worker until the owner reviews the changes and approves the deployment/migration sequence.
 
