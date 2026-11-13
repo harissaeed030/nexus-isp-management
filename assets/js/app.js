@@ -26,7 +26,7 @@ async function call(path,opt={}){
  const headers={"Content-Type":"application/json",...(opt.headers||{})};if(token)headers.Authorization="Bearer "+token;
  const fetchOne=async(p,m,b)=>{let res;try{res=await fetch(api.replace(/\/$/,"")+p,{method:m,headers,body:b===null?undefined:JSON.stringify(b)})}catch{throw Error("API connect nahi hua. Worker URL aur internet check karein.")}const data=await res.json().catch(()=>({error:"Invalid server response"}));if(!res.ok)throw Error((data.error||("API error "+res.status))+(Array.isArray(data.fields)&&data.fields.length?": "+data.fields.join(", "):""));return data};
  let d;
- if(original==="/api/v1/reports/summary"){const [rev,stats]=await Promise.all([fetchOne("/api/reports/revenue","GET",null),fetchOne("/api/dashboard/stats","GET",null)]);d={data:{monthlyRevenue:(rev.data||[]).map(x=>({month:x.m,revenue:x.t})),outstandingPkr:stats.pendingAmount||0}}}
+ if(original==="/api/v1/reports/summary"){const [rev,stats,invoices]=await Promise.all([fetchOne("/api/reports/revenue","GET",null),fetchOne("/api/dashboard/stats","GET",null),fetchOne("/api/invoices","GET",null)]);const counts={};(invoices.data||[]).forEach(x=>{const k=x.status||"unknown";counts[k]=(counts[k]||0)+1});d={data:{monthlyRevenue:(rev.data||[]).map(x=>({month:x.m,revenue:x.t})),outstandingPkr:stats.pendingAmount||0,revenuePkr:stats.totalRevenue||0,invoiceCounts:Object.entries(counts).map(([status,count])=>({status,count}))}}}
  else d=await fetchOne(target,sendMethod,body);
  const customerName=x=>[x.first_name,x.last_name].filter(Boolean).join(" ")||x.name||"";
  const normalise=x=>{if(!x||typeof x!=="object")return x;const y={...x};if(y.first_name!==undefined||y.last_name!==undefined){y.full_name=customerName(y);y.customer_name=customerName(y)}if(y.speed_down!==undefined||y.speed_mbps!==undefined)y.speed_down_mbps=Number(y.speed_down||y.speed_mbps||0);if(y.speed_up!==undefined||y.speed_mbps!==undefined)y.speed_up_mbps=Number(y.speed_up||y.speed_mbps||0);if(y.price!==undefined)y.monthly_price_pkr=Number(y.price);if(y.is_active!==undefined)y.status=y.is_active?"active":"inactive";if(y.total!==undefined||y.amount!==undefined)y.amount_pkr=Number(y.total??y.amount);if(y.payment_method!==undefined)y.method=y.payment_method;if(y.paid_at!==undefined||y.created_at!==undefined)y.received_at=y.paid_at||y.created_at;if(y.name!==undefined&&y.role!==undefined)y.full_name=y.name;if(y.port!==undefined)y.api_port=y.port;if(y.notes!==undefined&&y.device_type!==undefined)y.location=y.notes;if(y.detail!==undefined){y.resource_type="activity";y.resource_id=y.detail}return y};
@@ -57,44 +57,67 @@ function page(title,sub,body){
 }
 async function load(v){view=v;try{
 if(v==="dashboard"){
- const settled=await Promise.allSettled([call("/api/v1/dashboard"),call("/api/v1/reports/summary"),call("/api/v1/subscriptions"),call("/api/v1/invoices"),call("/api/v1/payments"),call("/api/v1/tickets")]);
+ const settled=await Promise.allSettled([
+  call("/api/v1/dashboard"),call("/api/v1/reports/summary"),
+  call("/api/v1/subscriptions"),call("/api/v1/invoices"),
+  call("/api/v1/payments"),call("/api/v1/tickets"),
+  call("/api/v1/customers"),call("/api/v1/reports/customers"),
+  call("/api/v1/reports/subscriptions"),call("/api/v1/audit-logs")
+ ]);
  if(settled[0].status!=="fulfilled") throw settled[0].reason;
- const stats=settled[0].value.stats;
+ const stats=settled[0].value.stats||{};
  const report=settled[1].status==="fulfilled"?settled[1].value.data:{monthlyRevenue:[],outstandingPkr:0};
  const subscriptions=settled[2].status==="fulfilled"?settled[2].value.data:[];
  const invoices=settled[3].status==="fulfilled"?settled[3].value.data:[];
  const payments=settled[4].status==="fulfilled"?settled[4].value.data:[];
  const tickets=settled[5].status==="fulfilled"?settled[5].value.data:[];
+ const customers=settled[6].status==="fulfilled"?settled[6].value.data:[];
+ const customerReport=settled[7].status==="fulfilled"?settled[7].value:{byStatus:[]};
+ const subscriptionReport=settled[8].status==="fulfilled"?settled[8].value:{byStatus:[]};
+ const audit=settled[9].status==="fulfilled"?settled[9].value.data:[];
+ const statusCount=(key)=>Number((customerReport.byStatus||[]).find(x=>String(x.status||"").toLowerCase()===key)?.c||0);
+ const subCount=(key)=>Number((subscriptionReport.byStatus||[]).find(x=>String(x.status||"").toLowerCase()===key)?.c||0);
+ const activeSubs=subCount("active");
+ const suspended=statusCount("suspended");
+ const offline=statusCount("offline");
+ const inactive=statusCount("inactive");
  const today=new Date().toISOString().slice(0,10);
- const inactive=Math.max(0,Number(stats.customers||0)-Number(stats.activeCustomers||0));
- const months=Array.isArray(report.monthlyRevenue)?report.monthlyRevenue.slice(0,6).reverse():[];
+ const todayPayments=payments.filter(x=>String(x.received_at||"").slice(0,10)===today);
+ const todayCollection=todayPayments.reduce((sum,x)=>sum+Number(x.amount_pkr||0),0);
+ const dueInvoices=invoices.filter(x=>x.status!=="paid").sort((a,b)=>String(a.due_date||"").localeCompare(String(b.due_date||"")));
+ const openTickets=tickets.filter(x=>["open","in_progress"].includes(x.status));
+ const months=Array.isArray(report.monthlyRevenue)?report.monthlyRevenue.slice(-6):[];
  const maxRevenue=Math.max(1,...months.map(x=>Number(x.revenue)||0));
  const bars=months.map(x=>'<div class="was-bar-col"><b>'+money(x.revenue)+'</b><i style="height:'+Math.max(3,Math.round((Number(x.revenue)||0)/maxRevenue*100))+'%"></i><small>'+esc(x.month)+'</small></div>').join("");
- const packageCounts={};subscriptions.filter(x=>x.status==="active").forEach(x=>{const name=x.package_name||"Unassigned";packageCounts[name]=(packageCounts[name]||0)+1});
- const packageEntries=Object.entries(packageCounts).sort((a,b)=>b[1]-a[1]).slice(0,6);
- const maxPackage=Math.max(1,...packageEntries.map(x=>x[1]));
- const packageBars=packageEntries.map(([name,count])=>'<div class="was-package-row"><span>'+esc(name)+'</span><div><i style="width:'+Math.round(count/maxPackage*100)+'%"></i></div><b>'+count+'</b></div>').join("");
- const dueInvoices=invoices.filter(x=>x.status!=="paid").sort((a,b)=>String(a.due_date||"").localeCompare(String(b.due_date||"")));
- const todayPayments=payments.filter(x=>String(x.received_at||"").slice(0,10)===today);
- const openTickets=tickets.filter(x=>["open","in_progress"].includes(x.status));
- const promiseRows=dueInvoices.slice(0,8).map(x=>'<tr><td>'+esc(x.customer_name||"—")+'</td><td>'+esc(x.invoice_number||"—")+'</td><td>'+esc(x.due_date||"—")+'</td><td>'+money(x.amount_pkr)+'</td><td>'+esc(x.status)+'</td></tr>').join("");
- const collectionRows=todayPayments.slice(0,8).map(x=>'<tr><td>'+esc(x.customer_name||"—")+'</td><td>'+money(x.amount_pkr)+'</td><td>'+esc(x.method||"—")+'</td><td>'+esc(x.received_at||"—")+'</td></tr>').join("");
- const complaintRows=openTickets.slice(0,8).map(x=>'<tr><td>'+esc(x.customer_name||"—")+'</td><td>'+esc(x.subject||"—")+'</td><td>'+esc(x.priority||"normal")+'</td><td>'+esc(x.status||"open")+'</td></tr>').join("");
- const promiseBody=settled[3].status==="fulfilled"?table(["CUSTOMER","INVOICE","DUE DATE","AMOUNT","STATUS"],promiseRows):'<div class="was-empty">Invoice list is not available for this account role.</div>';
- const collectionBody=settled[4].status==="fulfilled"?table(["CUSTOMER","AMOUNT","METHOD","RECEIVED"],collectionRows):'<div class="was-empty">Payment list is not available for this account role.</div>';
- const complaintBody=settled[5].status==="fulfilled"?table(["CUSTOMER","COMPLAINT","PRIORITY","STATUS"],complaintRows):'<div class="was-empty">Complaint list is not available for this account role.</div>';
- page("Dashboard","ISP operations overview · Live data from your Nexus workspace.",'<div class="was-topcards"><article><small>Total Users</small><b>'+stats.customers+'</b><span>Registered customers</span></article><article><small>Active Connections</small><b>'+stats.activeCustomers+'</b><span>Active customer accounts</span></article><article><small>Not Active</small><b>'+inactive+'</b><span>Inactive / other status</span></article><article><small>Receivables</small><b>'+money(report.outstandingPkr)+'</b><span>Outstanding invoices</span></article><article><small>Total Received</small><b>'+money(stats.revenuePkr)+'</b><span>Recorded payments</span></article></div><section class="was-panel was-collections"><div class="was-tabs" role="tablist"><button type="button" class="selected" data-dash-tab="promise">▣ Promise Date / Due</button><button type="button" data-dash-tab="collection">▣ Today’s Collection</button><button type="button" data-dash-tab="operators">♟ Operators Collection</button><button type="button" data-dash-tab="complaints">⚠ Complaints</button></div><div class="was-toolbar"><b id="wasTabTitle">Due payments & follow-up</b><span>'+new Date().toLocaleDateString("en-GB")+'</span></div><div id="wasTabBody">'+promiseBody+'</div></section><div class="was-dashboard-grid"><section class="was-panel"><h3>Connection Summary</h3><p>Subscriber connection status overview</p><div class="was-donut" style="--active:'+(stats.customers?Math.round(stats.activeCustomers/stats.customers*100):0)+'%"></div><div class="was-legend"><span>● Active '+stats.activeCustomers+'</span><span>● Not active '+inactive+'</span></div></section><section class="was-panel"><h3>Exciting Features of <b>Nexus</b></h3><div class="was-feature-list">'+[["User Profiles","Customer details and subscriber management"],["New Queries","Track new connection requests"],["Area Allocation","Organize service areas and field teams"],["Bills Creator","Generate monthly customer invoices"],["Users Collections","Record and reconcile payments"],["TR-069 / ACS","ONU remote management integration"]].map(x=>'<div class="was-feature"><i>✦</i><span><b>'+x[0]+'</b><small>'+x[1]+'</small></span></div>').join("")+'</div></section></div><section class="was-panel was-monthly"><h3>Last 6 Months Receiving</h3><p>Recorded customer payments · PKR</p><div class="was-bars">'+(bars||'<div class="was-empty">No monthly payment records available yet.</div>')+'</div></section><section class="was-panel"><h3>Users Package Wise</h3><p>Active subscriber distribution by internet package</p><div class="was-package-chart">'+(packageBars||'<div class="was-empty">No active package subscriptions found yet.</div>')+'</div></section>');
- const tabButtons=content.querySelectorAll("[data-dash-tab]");
- tabButtons.forEach(button=>button.addEventListener("click",()=>{
-  tabButtons.forEach(b=>b.classList.toggle("selected",b===button));
-  const key=button.dataset.dashTab,body=$("#wasTabBody"),title=$("#wasTabTitle");
-  if(key==="promise"){title.textContent="Due payments & follow-up";body.innerHTML=promiseBody}
-  else if(key==="collection"){title.textContent="Payments received today";body.innerHTML=collectionBody}
-  else if(key==="complaints"){title.textContent="Open customer complaints";body.innerHTML=complaintBody}
-  else{title.textContent="Operator collections";body.innerHTML='<div class="was-empty">Operator-wise collection tracking will appear when staff collection allocation is added. No sample figures are shown.</div>'}
- }));
-}
-if(v==="customers"){
+ const paymentRows=payments.slice(0,6).map(x=>'<tr><td>'+esc(x.customer_name||"—")+'</td><td>'+money(x.amount_pkr)+'</td><td>'+esc(x.method||"—")+'</td><td>'+esc(x.received_at||"—")+'</td></tr>').join("");
+ const customerRows=customers.slice(0,6).map(x=>'<tr><td>'+esc(x.full_name||"—")+'</td><td>'+esc(x.phone||"—")+'</td><td>'+esc(x.status||"—")+'</td><td>'+esc(x.created_at||"—")+'</td></tr>').join("");
+ const complaintRows=openTickets.slice(0,6).map(x=>'<tr><td>'+esc(x.customer_name||"—")+'</td><td>'+esc(x.subject||"—")+'</td><td>'+esc(x.priority||"medium")+'</td><td>'+esc(x.status||"open")+'</td></tr>').join("");
+ const activityRows=audit.slice(0,7).map(x=>'<div class="nx-activity-item"><span class="nx-activity-dot"></span><div><b>'+esc(String(x.action||"Activity").replace(/_/g," "))+'</b><small>'+esc(x.user_name||"Workspace user")+' · '+esc(x.created_at||"")+'</small></div></div>').join("");
+ const dueRows=dueInvoices.slice(0,6).map(x=>'<tr><td>'+esc(x.customer_name||"—")+'</td><td>'+esc(x.invoice_number||"—")+'</td><td>'+esc(x.due_date||"—")+'</td><td>'+money(x.amount_pkr)+'</td><td>'+esc(x.status||"pending")+'</td></tr>').join("");
+ const tableOrEmpty=(headers,rows,label)=>rows?table(headers,rows):'<div class="was-empty">'+label+'</div>';
+ const kpi=(label,value,note,icon,kind)=>'<article class="nx-exec-kpi"><div class="nx-kpi-top"><span>'+label+'</span><i class="'+kind+'">'+icon+'</i></div><b>'+value+'</b><small>'+note+'</small></article>';
+ page("Dashboard","Executive overview · figures are loaded from your authenticated NEXUS workspace.",'<div class="nx-exec-grid">'+
+ kpi("Total customers",Number(stats.customers||0).toLocaleString("en-PK"),"Registered customer accounts","♙","kpi-blue")+
+ kpi("Active customers",Number(stats.activeCustomers||0).toLocaleString("en-PK"),"Customer status: active","●","kpi-green")+
+ kpi("Offline customers",offline?offline.toLocaleString("en-PK"):(inactive?inactive.toLocaleString("en-PK"):"Not tracked"),offline?"Reported offline status":(inactive?"Inactive status · not live connectivity":"Live online status is not exposed by API"),"⌁","kpi-slate")+
+ kpi("Suspended customers",suspended.toLocaleString("en-PK"),"Reported suspended status","⊘","kpi-amber")+
+ kpi("Monthly revenue",money(stats.revenuePkr),"Recorded completed payments","₨","kpi-violet")+
+ kpi("Pending payments",money(stats.pendingAmount),"Invoices awaiting payment · "+Number(stats.pendingInvoices||0)+" invoices","◷","kpi-amber")+
+ kpi("Today's collections",money(todayCollection),todayPayments.length+" recorded payments today","↗","kpi-green")+
+ kpi("Monthly expenses","Not tracked","No expense endpoint is configured","−","kpi-slate")+
+ kpi("Active subscriptions",activeSubs.toLocaleString("en-PK"),"Active subscription records","⌁","kpi-blue")+
+ kpi("Open complaints",Number(stats.openComplaints||openTickets.length).toLocaleString("en-PK"),"Open support tickets","!","kpi-rose")+
+ '</div>'+
+ '<div class="nx-dashboard-grid"><section class="was-panel nx-dashboard-panel"><div class="nx-panel-head"><div><h3>Revenue analytics</h3><p>Monthly payments received · PKR</p></div><span class="nx-live-label">LIVE API DATA</span></div><div class="was-bars nx-revenue-bars">'+(bars||'<div class="was-empty">No monthly payment records available yet.</div>')+'</div></section>'+
+ '<section class="was-panel nx-dashboard-panel"><div class="nx-panel-head"><div><h3>Customer status</h3><p>Counts reported by the customer status API</p></div></div><div class="nx-status-list"><div><span><i class="status-active"></i>Active</span><b>'+Number(stats.activeCustomers||0)+'</b></div><div><span><i class="status-suspended"></i>Suspended</span><b>'+suspended+'</b></div><div><span><i class="status-inactive"></i>Inactive</span><b>'+inactive+'</b></div><div><span><i class="status-offline"></i>Offline</span><b>'+(offline?offline:"Not tracked")+'</b></div></div><p class="nx-data-note">Online/offline reachability requires a live network session integration; customer status is not a substitute.</p></section></div>'+
+ '<section class="was-panel nx-dashboard-panel"><div class="nx-panel-head"><div><h3>Pending invoices</h3><p>Outstanding balances requiring follow-up</p></div><a href="#billing" class="nx-inline-link" data-go="billing">Open billing</a></div>'+tableOrEmpty(["CUSTOMER","INVOICE","DUE DATE","AMOUNT","STATUS"],dueRows,"No pending invoices found.")+'</section>'+
+ '<div class="nx-section-grid"><section class="was-panel nx-dashboard-panel"><div class="nx-panel-head"><div><h3>Recent payments</h3><p>Latest recorded collections</p></div><a href="#billing" class="nx-inline-link" data-go="billing">View ledger</a></div>'+tableOrEmpty(["CUSTOMER","AMOUNT","METHOD","RECEIVED"],paymentRows,"No payment records available.")+'</section>'+
+ '<section class="was-panel nx-dashboard-panel"><div class="nx-panel-head"><div><h3>Recent registrations</h3><p>Latest customer records returned by the API</p></div><a href="#customers" class="nx-inline-link" data-go="customers">View customers</a></div>'+tableOrEmpty(["CUSTOMER","PHONE","STATUS","CREATED"],customerRows,"No customer registrations available.")+'</section></div>'+
+ '<div class="nx-section-grid"><section class="was-panel nx-dashboard-panel"><div class="nx-panel-head"><div><h3>Latest complaints</h3><p>Open and in-progress support tickets</p></div><a href="#tickets" class="nx-inline-link" data-go="tickets">View support</a></div>'+tableOrEmpty(["CUSTOMER","SUBJECT","PRIORITY","STATUS"],complaintRows,"No open complaints found.")+'</section>'+
+ '<section class="was-panel nx-dashboard-panel"><div class="nx-panel-head"><div><h3>System activity</h3><p>Recent audit log events</p></div><a href="#audit" class="nx-inline-link" data-go="audit">View activity</a></div><div class="nx-activity-list">'+(activityRows||'<div class="was-empty">No activity events are available.</div>')+'</div></section></div>'+
+ '<section class="was-panel nx-dashboard-panel"><div class="nx-panel-head"><div><h3>Customer growth</h3><p>Historical monthly registrations</p></div></div><div class="was-empty">Customer growth history is not currently provided by the existing API. No estimated or fabricated chart is displayed.</div></section>');
+ content.querySelectorAll("[data-go]").forEach(link=>link.addEventListener("click",event=>{event.preventDefault();load(link.dataset.go)}));
+}if(v==="customers"){
  let d=(await call("/api/v1/customers")).data;
  const rows=d.map(x=>'<tr class="nx-customer-row"><td><button type="button" class="nx-customer-name" data-customer-open="'+esc(x.id)+'">'+esc(x.full_name)+' <span>⌄</span></button><div class="nx-customer-menu" id="customer-menu-'+esc(x.id)+'" hidden><button data-customer-action="details" data-id="'+esc(x.id)+'">Customer details</button><button data-customer-action="edit" data-id="'+esc(x.id)+'">Edit customer</button><button data-customer-action="subscriptions" data-id="'+esc(x.id)+'">Subscriptions / package</button><button data-customer-action="billing" data-id="'+esc(x.id)+'">Invoices & payments</button><button data-customer-action="tickets" data-id="'+esc(x.id)+'">Complaints</button><button data-customer-action="status" data-id="'+esc(x.id)+'">'+(x.status==="active"?"Suspend customer":"Activate customer")+'</button><button class="danger" data-customer-action="delete" data-id="'+esc(x.id)+'">Delete customer</button></div></td><td>'+esc(x.customer_code)+'</td><td>'+esc(x.phone||"—")+'</td><td>'+esc(x.email||"—")+'</td><td>'+esc(x.status)+'</td></tr>').join("");
  page("Customers","Customer ke naam par click karein — tamam options usi customer ke neeche khulenge.",'<form id="nxAdd" class="nx-panel nx-row"><input name="fullName" required placeholder="Full name"><input name="phone" placeholder="Phone"><input name="email" type="email" placeholder="Email"><input name="address" placeholder="Address"><button class="nx-btn">Add customer</button></form>'+table(["CUSTOMER / OPTIONS","CODE","PHONE","EMAIL","STATUS"],rows));
