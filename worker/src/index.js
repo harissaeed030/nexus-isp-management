@@ -136,9 +136,9 @@ if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='DELETE')return await del
 if(path==='/api/network/status'&&m==='GET')return await networkStatus(env,orgId);
 if(path==='/api/onus'&&m==='GET')return await listOnus(env,url,orgId);
 if(path==='/api/onus'&&m==='POST')return await createOnu(request,env,orgId,userId,ip);
-if(path.match(/^\\/api\\/onus\\/[^/]+$/)&&m==='GET')return await getOnu(env,path,orgId);
-if(path.match(/^\\/api\\/onus\\/[^/]+$/)&&m==='PUT')return await updateOnu(request,env,path,orgId,userId,ip);
-if(path.match(/^\\/api\\/onus\\/[^/]+$/)&&m==='DELETE')return await deleteOnu(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='GET')return await getOnu(env,path,orgId);
+if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='PUT')return await updateOnu(request,env,path,orgId,userId,ip);
+if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='DELETE')return await deleteOnu(env,path,orgId,userId,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
 if(path==='/api/reports/revenue'&&m==='GET')return await repRev(env,url,orgId);
