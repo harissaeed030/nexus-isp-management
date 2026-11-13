@@ -1,100 +1,48 @@
-# Nexus — ISP Management Platform
+# NEXUS — ISP Management SaaS
 
-**Mobile-first ISP operations software for FTTH providers.**
+**Mobile-first, multi-tenant ISP operations platform for FTTH providers.**
 
-Nexus is being built as a multi-tenant platform for subscriber records, internet packages, billing, payments, support tickets and network operations.
+## Active architecture
 
-## Current development status
+The selected SaaS backend is **Cloudflare Workers + Cloudflare D1**.
 
-The `build/nexus-isp-core` branch contains the first local API foundation:
-- Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
-- Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
-- Customer CRUD, package management, subscription assignment/status, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
-- Staff account management with role defaults and per-user module permission overrides, router inventory, idempotent monthly invoice generation and financial summary reports.
-- Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
-- SQLite database is created automatically under `backend/data/`.
+- Production API: `https://nexus-saas-api.harissaeed030.workers.dev`
+- Production Pages branch: `dev`
+- Active implementation branch: `cloudflare/complete-saas`
+- Cloudflare Pages production and Worker deployments are kept separate from feature development.
+- The `backend/` Node.js + SQLite project is retained as an offline/local development foundation; it is not the active hosted SaaS API.
 
-This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, backup/restore, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
+## Development preview
 
-## Local setup (Android Termux or desktop)
+The current isolated implementation preview is:
 
-Requirements: Node.js 22.13 or newer.
+https://3ebc8485.nexus-isp-management.pages.dev
 
-```sh
-cd backend
-npm install
-cp .env.example .env
-npm run check
-npm start
-```
+Do not merge the implementation branch into `dev` or deploy the Worker until the owner reviews the changes and approves the deployment/migration sequence.
 
-Open the dashboard in your phone browser: `http://127.0.0.1:4000/`.
+## Current status
 
-API health check: `http://127.0.0.1:4000/api/v1/health`.
+Core customer, package, subscription, billing, complaint, staff, dashboard and network inventory foundations exist. The active development branch is integrating them with the Cloudflare API and completing missing modules.
 
-The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep this file private and backed up. Do not commit it.
+Implemented work and the remaining development backlog are tracked in:
 
-## First owner setup
+- [Cloudflare implementation status](docs/CLOUDFLARE-IMPLEMENTATION-STATUS.md)
+- [Development progress](docs/PROGRESS.md)
 
-Send a POST request to `/api/v1/setup` with JSON:
-```json
-{
-  "companyName": "Your ISP Name",
-  "fullName": "Owner Name",
-  "email": "owner@example.com",
-  "password": "use-a-long-private-password"
-}
-```
-The first setup creates the tenant and owner. The API returns a bearer token. Keep it private. Setup is locked after the first user exists.
+The software is **not yet complete or production-ready**. Real MikroTik, HSGQ OLT and GenieACS operations, customer self-service, scheduled billing, PDF invoices, notifications, SaaS tenant administration and comprehensive final testing remain outstanding.
 
-### Recovering a local owner password
+## Basic development checks
 
-If the owner login stops working, run this from the `backend` directory. It only resets a uniquely matching owner account in the configured SQLite database, asks for the new password without echoing it, and revokes existing sessions:
+GitHub Actions checks syntax for:
+- `worker/src/index.js`
+- `assets/js/app.js`
 
-```sh
-npm run auth:reset -- owner@example.com
-```
+These checks do not replace integration or acceptance testing.
 
-Do not delete `backend/data/nexus.sqlite` to fix a login problem; that file contains the ISP's local data.
+## Safety rules
 
-## API overview
-
-All endpoints except health, root, initial setup and login require `Authorization: Bearer <token>`.
-
-- `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`
-- `GET /api/v1/dashboard`
-- `GET|POST /api/v1/customers`, `GET|PATCH|DELETE /api/v1/customers/:id`
-- `GET|POST /api/v1/packages`, `PATCH /api/v1/packages/:id`
-- `GET|POST /api/v1/subscriptions`, `PATCH /api/v1/subscriptions/:id`
-- `GET|POST /api/v1/invoices`
-- `GET|POST /api/v1/payments`
-- `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
-- `GET /api/v1/audit-logs`
-- CSV downloads (authenticated, tenant-scoped and permission-checked): `GET /api/v1/exports/customers.csv`, `packages.csv`, `subscriptions.csv`, `invoices.csv`, `payments.csv`, `tickets.csv` and `routers.csv`. The matching Customers, Packages, Subscriptions, Billing, Complaints and Routers pages show an Export CSV action.
-- `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
-- `GET|PUT /api/v1/staff/:id/permissions` (owner/admin only)
-
-Money values are integer Pakistani rupees (PKR). Payments cannot exceed the outstanding invoice balance.
-
-Staff roles have safe defaults (owner, admin, billing, NOC, support, technician and limited staff). Owners and administrators can grant or revoke individual module permissions for non-owner staff accounts. Permission changes are checked by the API on every request; dashboard checkboxes are not a security boundary.
-
-## Security rules
-
-- Never commit passwords, tokens, database files, router credentials or customer records.
-- Do not expose network-device credentials in browser JavaScript.
-- Keep tenant scoping enforced in API queries.
-- Use HTTPS, proper role permissions, backups and security review before production use.
-
-## Roadmap
-
-1. Local SQLite API and data model.
-2. Connect dashboard UI to authentication and CRUD modules.
-3. Complete subscriptions, invoices, payment receipts and reports.
-4. Add staff roles, permissions, tests and backup/restore.
-5. Add MikroTik adapter and equipment inventory.
-6. Add vendor-specific OLT/ONU and GenieACS/TR-069 adapters.
-7. Review deployment architecture and production migration.
-
-## License
-
-All rights reserved until a license is added. Do not assume this project is open source for reuse or resale.
+- Never commit API secrets, JWT secrets, router passwords, customer records or database files.
+- Keep network credentials server-side and encrypted.
+- Preserve tenant scoping on every API and database query.
+- Do not apply production D1 migrations or deploy the Worker without reviewing the migration and rollback plan.
+- Keep the final comprehensive testing phase until all planned modules are implemented.
