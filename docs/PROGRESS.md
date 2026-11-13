@@ -1,30 +1,51 @@
 # NEXUS Development Progress
 
-## Current status
-- Phase 0 repository inspection: source review completed through GitHub.
-- Phase 0 audit report: created in `docs/AUDIT.md`.
-- Phase 0 implementation plan: created in `docs/PLAN.md`.
-- Working branch: `dev`, based on current `build/nexus-isp-core` head.
-- First tenant: Vancom Networks (Pvt) Ltd.
+**Updated:** 2026-11-13  
+**Active branch:** `cloudflare/complete-saas`  
+**Production branch:** `dev` (unchanged)
 
-## Completed in this session
-- Confirmed repository metadata, default branch and permissions.
-- Inspected root tree, README, backend starter, SQLite core implementation, Worker/D1 scaffold, architecture/roadmap docs and open PR #1 metadata/patch.
-- Confirmed `build/nexus-isp-core` is the newer working foundation compared with `main`.
-- Created `dev` and fast-forwarded it to the latest observed build branch commit.
-- Did not merge PR #1, modify `main`, deploy a Worker, apply migrations or touch live network equipment.
+## Current architecture decision
 
-## Completed in the latest implementation pass\n- Added tenant-scoped CSV exports for customers, packages, subscriptions, invoices, payments, complaints and router inventory.\n- Added role-permission checks to every export and CSV formula-injection protection.\n- Added Export CSV controls to the corresponding mobile dashboard pages.\n- Extended smoke tests to check CSV output and role-based export denial; GitHub Actions CI runs the backend verification suite on `dev` pushes.\n\n## Not yet verified
-- Local `npm install`, `npm run check`, `npm test`, `npm run verify`, API startup and browser tests were not run from this session.
-- Real MikroTik, HSGQ OLT/ONU and GenieACS operations are not verified.
+The selected hosted SaaS architecture is Cloudflare Workers + D1. The local Node.js/SQLite backend remains in the repository as a preserved offline development foundation, not as the active hosted API.
 
-## Next
-1. Owner reviews and approves `docs/PLAN.md`.
-2. Run the local verification commands in Termux and paste the exact output.
-3. Start Phase 1 only after approval and baseline verification.
+## Implemented in the current development branch
 
-## Open decisions
-- Confirm SQLite local MVP / hosted database strategy.
-- Confirm HSGQ-G04R management method and firmware.
-- Confirm GenieACS endpoint/hosting approach.
-- Review PR #1 before any merge.
+- Cloudflare production Worker source synchronized into GitHub.
+- Additive sequential D1 migration runner.
+- Tenant-scoped staff permission overrides and server-side enforcement.
+- Token revocation on logout, password change and staff security changes.
+- Monthly subscription invoice generation with duplicate prevention.
+- Financial validation, atomic payment recording, overpayment protection and outstanding balances.
+- CSV exports with tenant scope and spreadsheet formula-injection protection.
+- PPPoE account management UI.
+- OLT and ONU/ONT inventory UI and APIs.
+- ACS endpoint inventory UI.
+- Connection status overview with no fabricated live state.
+- Company settings, currency and profile screens.
+- Basic JavaScript syntax checks and Pages preview deployment.
+
+## Basic verification
+
+- Worker JavaScript syntax: passed.
+- Frontend JavaScript syntax: passed.
+- Cloudflare Pages feature-branch preview: successful.
+- Production Worker deployment: unchanged.
+- Production D1 data: unchanged.
+
+These are build checks only. Comprehensive acceptance, security, integration, concurrency and load testing has not started.
+
+## Remaining development
+
+1. Secure live MikroTik RouterOS connector and PPPoE provisioning.
+2. HSGQ OLT management and automatic ONU discovery/telemetry.
+3. Authenticated GenieACS NBI / TR-069 operations.
+4. Customer self-service portal and online customer workflows.
+5. Scheduled recurring billing, PDF invoices and receipts.
+6. Notifications, WhatsApp/email/SMS and payment-gateway integrations.
+7. SaaS tenant administration, plans, usage limits and tenant billing.
+8. Backup/restore and operational monitoring.
+9. Finish all remaining frontend/API connections.
+
+## Final testing milestone
+
+Do not begin the comprehensive final testing phase until all planned software modules and integrations have been implemented. Continue essential security safeguards and basic syntax/build checks during development.
