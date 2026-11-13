@@ -71,7 +71,7 @@ function permissionForRoute(path,method){
  if(match('/api/packages'))return v==='GET'?'packages.read':['POST','PUT','DELETE'].includes(v)?'packages.manage':null;
  if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
  if(path==='/api/billing/generate')return v==='POST'?'billing.generate':null;
- if(path.match(/^\\/api\\/invoices\\/[^/]+\\/payments$/))return v==='POST'?'payments.create':null;
+ if(path.match(/^\/api\/invoices\/[^/]+\/payments$/))return v==='POST'?'payments.create':null;
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
  if(path==='/api/payments')return v==='GET'?'billing.read':null;
  if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
