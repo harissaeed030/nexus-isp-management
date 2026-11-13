@@ -24,7 +24,7 @@ async function call(path,opt={}){
  else if(original.startsWith("/api/v1/staff")&&body!==null){body=snake(body);if(body.full_name){body.name=body.full_name;delete body.full_name}if(body.role==="noc")body.role="technician"}
  else if(original==="/api/v1/payments"&&method==="POST"){target="/api/invoices/"+encodeURIComponent(body.invoiceId)+"/payments";body=snake(body);if(body.amount_pkr!==undefined){body.amount=body.amount_pkr;delete body.amount_pkr}delete body.invoice_id}
  const headers={"Content-Type":"application/json",...(opt.headers||{})};if(token)headers.Authorization="Bearer "+token;
- const fetchOne=async(p,m,b)=>{let res;try{res=await fetch(api.replace(/\/$/,"")+p,{method:m,headers,body:b===null?undefined:JSON.stringify(b)})}catch{throw Error("API connect nahi hua. Worker URL aur internet check karein.")}const data=await res.json().catch(()=>({error:"Invalid server response"}));if(!res.ok)throw Error(data.error||("API error "+res.status));return data};
+ const fetchOne=async(p,m,b)=>{let res;try{res=await fetch(api.replace(/\/$/,"")+p,{method:m,headers,body:b===null?undefined:JSON.stringify(b)})}catch{throw Error("API connect nahi hua. Worker URL aur internet check karein.")}const data=await res.json().catch(()=>({error:"Invalid server response"}));if(!res.ok)throw Error((data.error||("API error "+res.status))+(Array.isArray(data.fields)&&data.fields.length?": "+data.fields.join(", "):""));return data};
  let d;
  if(original==="/api/v1/reports/summary"){const [rev,stats]=await Promise.all([fetchOne("/api/reports/revenue","GET",null),fetchOne("/api/dashboard/stats","GET",null)]);d={data:{monthlyRevenue:(rev.data||[]).map(x=>({month:x.m,revenue:x.t})),outstandingPkr:stats.pendingAmount||0}}}
  else d=await fetchOne(target,sendMethod,body);
