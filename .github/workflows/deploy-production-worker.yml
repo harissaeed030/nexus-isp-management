@@ -6,7 +6,6 @@ on:
       - dev
     paths:
       - "worker/**"
-      - ".github/workflows/deploy-production-worker.yml"
   workflow_dispatch:
 
 permissions:
