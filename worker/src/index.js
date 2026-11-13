@@ -54,14 +54,15 @@ const PERMISSIONS=[
  {key:'onus.read',group:'Network',label:'View ONU / ONT inventory'},
  {key:'onus.manage',group:'Network',label:'Manage ONU / ONT inventory'},
  {key:'connection.read',group:'Network',label:'View connection status'},
- {key:'audit.read',group:'Administration',label:'View activity log'}
+ {key:'audit.read',group:'Administration',label:'View activity log'},
+ {key:'notifications.read',group:'Administration',label:'View notifications'}
 ];
 const ROLE_PERMISSIONS={
  owner:['*'],admin:['*'],
- billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read'],
- support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read'],
- technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read'],
- staff:['dashboard.read']
+ billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read'],
+ support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read','notifications.read'],
+ technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read'],
+ staff:['dashboard.read','notifications.read']
 };
 function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
 function permissionForRoute(path,method){
@@ -82,6 +83,7 @@ function permissionForRoute(path,method){
  if(match('/api/reports'))return v==='GET'?'reports.read':null;
  if(path.startsWith('/api/exports/')){if(v!=='GET')return null;const resource=path.slice('/api/exports/'.length);return ({'customers.csv':'customers.read','packages.csv':'packages.read','subscriptions.csv':'subscriptions.read','invoices.csv':'billing.read','payments.csv':'billing.read','tickets.csv':'tickets.read','routers.csv':'routers.read','olt.csv':'routers.read','acs.csv':'routers.read','pppoe.csv':'pppoe.read','onus.csv':'onus.read'})[resource]||null}
  if(path==='/api/audit-logs')return v==='GET'?'audit.read':null;
+ if(match('/api/notifications'))return ['GET','PUT'].includes(v)?'notifications.read':null;
  return null;
 }
 async function roleAllowedWithOverrides(env,orgId,userId,role,path,method){
@@ -260,6 +262,9 @@ if(path==='/api/reports/customers'&&m==='GET')return await repCust(env,orgId);
 if(path==='/api/reports/subscriptions'&&m==='GET')return await repSubs(env,orgId);
 if(path.startsWith('/api/exports/')&&m==='GET')return await exportCsv(env,path,orgId);
 if(path==='/api/audit-logs'&&m==='GET')return await listAudit(env,url,orgId);
+if(path==='/api/notifications'&&m==='GET')return await listNotifications(env,url,orgId,userId);
+if(path==='/api/notifications/read-all'&&m==='PUT')return await markAllNotificationsRead(env,orgId,userId);
+if(path.match(/^\\/api\\/notifications\\/[^/]+\\/read$/)&&m==='PUT')return await markNotificationRead(env,path,orgId,userId);
 if(path==='/api/settings'&&m==='GET')return await getSet(env,orgId);
 if(path==='/api/settings'&&m==='PUT')return await updSet(request,env,orgId,userId,ip);
 if(path==='/api/profile'&&m==='GET')return await getProf(env,auth);
@@ -381,6 +386,7 @@ async function recPay(r,env,path,oid,uid,ip){
  }catch(e){if(String(e.message).toLowerCase().includes('unique'))return json({error:'This transaction reference or payment has already been recorded'},409);throw e}
  if(!Number(results?.[0]?.meta?.changes||0))return json({error:'Invoice balance changed; refresh and enter the remaining balance'},409);
  await audit(env,oid,uid,'record_payment','Payment for '+inv.invoice_number,ip);
+ await notifyAdmins(env,oid,'Payment recorded',inv.invoice_number+' · '+amount+' PKR','billing');
  return json(await env.DB.prepare('SELECT * FROM payments WHERE id=? AND organization_id=?').bind(pid,oid).first(),201)
 }
 async function listPay(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM payments WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT p.*,c.first_name,c.last_name,i.invoice_number FROM payments p LEFT JOIN customers c ON p.customer_id=c.id AND c.organization_id=p.organization_id LEFT JOIN invoices i ON p.invoice_id=i.id AND i.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
@@ -394,9 +400,37 @@ async function createComp(r,env,oid,uid,ip){
  const id=uuid();
  await env.DB.prepare('INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status,assigned_to)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id||null,s(b.subject),b.description||null,b.priority||'medium','open',b.assigned_to||null).run();
  await audit(env,oid,uid,'create_ticket','Ticket:'+b.subject,ip);
+ await notifyAdmins(env,oid,'New support ticket',String(b.subject).slice(0,180),'support');
  return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first(),201)
 }
 async function updateComp(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);const f=['status','priority','assigned_to','resolution','description'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE support_tickets SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=?').bind(id).first())}
+
+
+async function notifyAdmins(env,oid,title,message,type='info'){
+ const users=await env.DB.prepare("SELECT id FROM users WHERE organization_id=? AND role IN ('owner','admin') AND status='active'").bind(oid).all();
+ const rows=users.results||[];if(!rows.length)return;
+ await env.DB.batch(rows.map(user=>env.DB.prepare("INSERT INTO notifications(id,organization_id,user_id,title,message,type,is_read,created_at) VALUES(?,?,?,?,?,?,0,datetime('now'))").bind(uuid(),oid,user.id,String(title).slice(0,160),String(message||'').slice(0,1000),type)));
+}
+async function listNotifications(env,url,oid,uid){
+ const {page,pp,off}=pg(url,20),unreadOnly=url.searchParams.get('unread_only')==='true';
+ const where="organization_id=? AND user_id=?"+(unreadOnly?" AND is_read=0":"");
+ const [count,unread,rows]=await Promise.all([
+  env.DB.prepare('SELECT COUNT(*) AS total FROM notifications WHERE '+where).bind(oid,uid).first(),
+  env.DB.prepare('SELECT COUNT(*) AS total FROM notifications WHERE organization_id=? AND user_id=? AND is_read=0').bind(oid,uid).first(),
+  env.DB.prepare('SELECT id,title,message,type,is_read,created_at FROM notifications WHERE '+where+' ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,uid,pp,off).all()
+ ]);
+ return json({data:rows.results||[],unreadCount:Number(unread?.total||0),pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+}
+async function markNotificationRead(env,path,oid,uid){
+ const id=path.split('/')[3];
+ const result=await env.DB.prepare('UPDATE notifications SET is_read=1 WHERE id=? AND organization_id=? AND user_id=?').bind(id,oid,uid).run();
+ if(!Number(result?.meta?.changes||0))return json({error:'Notification not found'},404);
+ return json({success:true});
+}
+async function markAllNotificationsRead(env,oid,uid){
+ await env.DB.prepare('UPDATE notifications SET is_read=1 WHERE organization_id=? AND user_id=? AND is_read=0').bind(oid,uid).run();
+ return json({success:true});
+}
 
 async function listStaff(env,oid){const rows=await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();return json({data:rows.results||[]})}
 async function createStaff(r,env,oid,uid,role,ip){
