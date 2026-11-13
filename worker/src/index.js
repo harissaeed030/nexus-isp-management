@@ -30,6 +30,86 @@ function corsHeaders(request,env){
  return h
 }
 function withCors(response,request,env){for(const [k,v] of corsHeaders(request,env))response.headers.set(k,v);return response}
+const PERMISSIONS=[
+ {key:'dashboard.read',group:'Dashboard',label:'View dashboard'},
+ {key:'customers.read',group:'Customers',label:'View customers'},
+ {key:'customers.create',group:'Customers',label:'Add customers'},
+ {key:'customers.update',group:'Customers',label:'Edit customers'},
+ {key:'customers.delete',group:'Customers',label:'Delete customers'},
+ {key:'packages.read',group:'Packages',label:'View packages'},
+ {key:'packages.manage',group:'Packages',label:'Create and edit packages'},
+ {key:'subscriptions.read',group:'Subscriptions',label:'View subscriptions'},
+ {key:'subscriptions.manage',group:'Subscriptions',label:'Create and change subscriptions'},
+ {key:'billing.read',group:'Billing',label:'View invoices and payments'},
+ {key:'invoices.create',group:'Billing',label:'Create invoices'},
+ {key:'payments.create',group:'Billing',label:'Record payments'},
+ {key:'billing.generate',group:'Billing',label:'Generate monthly invoices'},
+ {key:'reports.read',group:'Reports',label:'View financial reports'},
+ {key:'tickets.read',group:'Support',label:'View complaints'},
+ {key:'tickets.manage',group:'Support',label:'Create and update complaints'},
+ {key:'routers.read',group:'Network',label:'View router and OLT inventory'},
+ {key:'routers.manage',group:'Network',label:'Manage router and OLT inventory'},
+ {key:'pppoe.read',group:'Network',label:'View PPPoE accounts'},
+ {key:'pppoe.manage',group:'Network',label:'Manage PPPoE accounts'},
+ {key:'onus.read',group:'Network',label:'View ONU / ONT inventory'},
+ {key:'onus.manage',group:'Network',label:'Manage ONU / ONT inventory'},
+ {key:'connection.read',group:'Network',label:'View connection status'},
+ {key:'audit.read',group:'Administration',label:'View activity log'}
+];
+const ROLE_PERMISSIONS={
+ owner:['*'],admin:['*'],
+ billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read'],
+ support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read'],
+ technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read'],
+ staff:['dashboard.read']
+};
+function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
+function permissionForRoute(path,method){
+ const v=String(method||'GET').toUpperCase(),match=base=>path===base||path.startsWith(base+'/');
+ if(path==='/api/dashboard/stats')return v==='GET'?'dashboard.read':null;
+ if(match('/api/customers'))return ({GET:'customers.read',POST:'customers.create',PUT:'customers.update',DELETE:'customers.delete'})[v]||null;
+ if(match('/api/packages'))return v==='GET'?'packages.read':['POST','PUT','DELETE'].includes(v)?'packages.manage':null;
+ if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
+ if(path==='/api/billing/generate')return v==='POST'?'billing.generate':null;
+ if(path.match(/^\\/api\\/invoices\\/[^/]+\\/payments$/))return v==='POST'?'payments.create':null;
+ if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
+ if(path==='/api/payments')return v==='GET'?'billing.read':null;
+ if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
+ if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
+ if(path==='/api/network/status')return v==='GET'?'connection.read':null;
+ if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
+ if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
+ if(match('/api/reports'))return v==='GET'?'reports.read':null;
+ if(path==='/api/audit-logs')return v==='GET'?'audit.read':null;
+ return null;
+}
+async function roleAllowedWithOverrides(env,orgId,userId,role,path,method){
+ if(role==='owner'||role==='admin')return true;
+ const key=permissionForRoute(path,method);
+ if(!key)return roleAllowed(role,path,method);
+ const row=await env.DB.prepare('SELECT allowed FROM user_permissions WHERE organization_id=? AND user_id=? AND permission=?').bind(orgId,userId,key).first();
+ return row?Number(row.allowed)===1:roleHasPermission(role,key);
+}
+async function effectivePermissions(env,target){
+ const rows=await env.DB.prepare('SELECT permission,allowed FROM user_permissions WHERE organization_id=? AND user_id=?').bind(target.organization_id,target.id).all();
+ const overrides=new Map((rows.results||[]).map(x=>[x.permission,Number(x.allowed)===1]));
+ return PERMISSIONS.map(item=>{const defaultAllowed=roleHasPermission(target.role,item.key),overridden=overrides.has(item.key);return {...item,defaultAllowed,allowed:overridden?overrides.get(item.key):defaultAllowed,overridden}});
+}
+async function staffPermissions(env,path,oid,actorRole,actorId,request,ip){
+ const id=path.split('/')[3],target=await env.DB.prepare('SELECT id,organization_id,role,name,email FROM users WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!target)return json({error:'Staff account not found'},404);
+ if(target.role==='owner')return json({error:'Owner account permissions cannot be changed here'},403);
+ if(actorRole!=='owner'&&target.role==='admin')return json({error:'Only the owner can manage administrators'},403);
+ if(request.method==='GET')return json({success:true,data:{role:target.role,permissions:await effectivePermissions(env,target)}});
+ const b=await parseBody(request),allowed=b?.allowedPermissions;
+ const keys=new Set(PERMISSIONS.map(x=>x.key));
+ if(!Array.isArray(allowed)||allowed.some(x=>typeof x!=='string'||!keys.has(x)))return json({error:'A valid allowedPermissions list is required'},400);
+ const selected=new Set(allowed),statements=[env.DB.prepare('DELETE FROM user_permissions WHERE organization_id=? AND user_id=?').bind(oid,id)];
+ for(const item of PERMISSIONS){const value=selected.has(item.key)?1:0;if(Boolean(value)!==roleHasPermission(target.role,item.key))statements.push(env.DB.prepare('INSERT INTO user_permissions(id,organization_id,user_id,permission,allowed,updated_by) VALUES(?,?,?,?,?,?)').bind(uuid(),oid,id,item.key,value,actorId))}
+ await env.DB.batch(statements);
+ await audit(env,oid,actorId,'update_staff_permissions','Staff:'+id,ip);
+ return json({success:true,data:{role:target.role,permissions:await effectivePermissions(env,target)}});
+}
 function roleAllowed(role,path,method){
  if(role==='admin'||role==='owner')return true;
  if(path==='/api/auth/me'||path==='/api/auth/logout')return true;
@@ -78,6 +158,7 @@ t('settings','CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organizati
 t('pppoe','CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT \'active\',created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,username))');
 t('network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT');t('network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT');t('network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER');
 t('onu_devices','CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT \'unknown\',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,serial_number))');
+t('user_permissions','CREATE TABLE IF NOT EXISTS user_permissions(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,permission TEXT NOT NULL,allowed INTEGER NOT NULL CHECK(allowed IN(0,1)),updated_by TEXT,updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,user_id,permission))');
 await Promise.all(tasks);try{await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL').run();R.push('invoices.period_index:OK')}catch(e){R.push('invoices.period_index:'+e.message.slice(0,60))}try{await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id,status)').run();R.push('onu_devices.index:OK')}catch(e){R.push('onu_devices.index:'+e.message.slice(0,60))}return R}
 
 let _migrated=false;
@@ -85,7 +166,6 @@ export default{async fetch(request,env){const url=new URL(request.url);const pat
 if(!_migrated){try{await runMigrations(env)}catch(e){}_migrated=true}
 if(m==='OPTIONS')return new Response(null,{status:204,headers:corsHeaders(request,env)});
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
-if(path==='/api/migrate'&&m==='POST')return withCors(json({result:await runMigrations(env)}),request,env);
 if(path.startsWith('/api/'))return withCors(await handleApi(request,env,url,path,m),request,env);
 return new Response(FRONTEND_HTML,{headers:{'Content-Type':'text/html;charset=utf-8'}})}};
 
@@ -93,7 +173,8 @@ async function handleApi(request,env,url,path,m){const ip=request.headers.get('C
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
-const{orgId,userId,role}=auth;if(!roleAllowed(role,path,m))return json({error:'Forbidden',message:'Your role does not have permission for this action'},403);
+const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);const role=currentUser.role;
+if(!await roleAllowedWithOverrides(env,orgId,userId,role,path,m))return json({error:'Forbidden',message:'Your role does not have permission for this action'},403);
 if(path==='/api/auth/me'&&m==='GET')return await authMe(env,auth);
 if(path==='/api/auth/logout'&&m==='POST')return json({success:true});
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
@@ -123,6 +204,7 @@ if(path==='/api/complaints'&&m==='POST')return await createComp(request,env,orgI
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
+if(path.match(/^\/api\/staff\/[^/]+\/permissions$/)&&['GET','PUT'].includes(m))return await staffPermissions(env,path,orgId,role,userId,request,ip);
 if(path==='/api/pppoe'&&m==='GET')return await listPppoe(env,url,orgId);
 if(path==='/api/pppoe'&&m==='POST')return await createPppoe(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='GET')return await getPppoe(env,path,orgId);
