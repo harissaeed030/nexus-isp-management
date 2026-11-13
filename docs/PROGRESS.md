@@ -47,7 +47,7 @@ These are build checks only. Comprehensive acceptance, security, integration, co
 3. Authenticated GenieACS NBI / TR-069 operations.
 4. Customer self-service portal and online customer workflows.
 5. Scheduled recurring billing, PDF invoices and receipts.
-6. Notifications, WhatsApp/email/SMS and payment-gateway integrations.
+6. External WhatsApp/email/SMS and payment-gateway integrations.
 7. SaaS tenant administration, plans, usage limits and tenant billing.
 8. Backup/restore and operational monitoring.
 9. Finish all remaining frontend/API connections.
