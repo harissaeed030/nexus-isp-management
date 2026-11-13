@@ -119,3 +119,5 @@ CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_payments_tenant ON payments(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_tenant ON support_tickets(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_audit_tenant ON audit_logs(tenant_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL;
