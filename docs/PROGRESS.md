@@ -24,6 +24,7 @@ The selected hosted SaaS architecture is Cloudflare Workers + D1. The local Node
 - Company settings, currency and profile screens.
 - Tenant/user-scoped notification inbox, unread counts, read actions and automatic ticket/payment alerts.
 - Refund request and processing workflow with over-refund protection, unique references, idempotency keys and invoice-balance reconciliation.
+- Printable invoice view with browser print / Save as PDF workflow and payment history.
 - Owner-level staff administration fixes, including protection against editing/deleting the owner or non-owner changes to administrator accounts.
 - Basic JavaScript syntax checks and Pages preview deployment.
 
@@ -46,7 +47,7 @@ These are build checks only. Comprehensive acceptance, security, integration, co
 2. HSGQ OLT management and automatic ONU discovery/telemetry.
 3. Authenticated GenieACS NBI / TR-069 operations.
 4. Customer self-service portal and online customer workflows.
-5. Scheduled recurring billing, PDF invoices and receipts.
+5. Scheduled recurring billing, server-generated PDF invoices and printable payment receipts (browser invoice printing is available).
 6. External WhatsApp/email/SMS and payment-gateway integrations.
 7. SaaS tenant administration, plans, usage limits and tenant billing.
 8. Backup/restore and operational monitoring.
