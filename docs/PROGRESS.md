@@ -23,7 +23,8 @@ The selected hosted SaaS architecture is Cloudflare Workers + D1. The local Node
 - Connection status overview with no fabricated live state.
 - Company settings, currency and profile screens.
 - Tenant/user-scoped notification inbox, unread counts, read actions and automatic ticket/payment alerts.
-- Refund request and processing workflow with over-refund protection, unique references and invoice-balance reconciliation.
+- Refund request and processing workflow with over-refund protection, unique references, idempotency keys and invoice-balance reconciliation.
+- Owner-level staff administration fixes, including protection against editing/deleting the owner or non-owner changes to administrator accounts.
 - Basic JavaScript syntax checks and Pages preview deployment.
 
 ## Basic verification
@@ -31,7 +32,7 @@ The selected hosted SaaS architecture is Cloudflare Workers + D1. The local Node
 - Worker JavaScript syntax: passed.
 - Frontend JavaScript syntax: passed.
 - Latest Worker and frontend source syntax checked after notification/refund changes.
-- Refund schema and indexes applied to staging D1 only; net-payment SQL query accepted by D1.
+- Refund schema, indexes and idempotency column applied to staging D1 only; refund insert/reconciliation SQL plans and net-payment query accepted by D1.
 - Latest code changes are saved on the development branch and have not been deployed.
 - Cloudflare Pages feature-branch preview: successful.
 - Production Worker deployment: unchanged.
