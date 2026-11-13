@@ -37,8 +37,8 @@ function roleAllowed(role,path,method){
  if(path==='/api/profile/password'&&method==='PUT')return true;
  const grants={
   billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions'],POST:['/api/invoices','/api/billing/generate'],PUT:['/api/invoices']},
-  support:{GET:['/api/dashboard/stats','/api/customers','/api/complaints'],POST:['/api/complaints'],PUT:['/api/complaints']},
-  technician:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/complaints','/api/pppoe','/api/network/devices','/api/network/status'],POST:['/api/complaints','/api/pppoe','/api/network/devices'],PUT:['/api/complaints','/api/pppoe','/api/network/devices'],DELETE:['/api/pppoe','/api/network/devices']},
+  support:{GET:['/api/dashboard/stats','/api/customers','/api/complaints','/api/onus'],POST:['/api/complaints'],PUT:['/api/complaints']},
+  technician:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/complaints','/api/pppoe','/api/network/devices','/api/network/status','/api/onus'],POST:['/api/complaints','/api/pppoe','/api/network/devices','/api/onus'],PUT:['/api/complaints','/api/pppoe','/api/network/devices','/api/onus'],DELETE:['/api/pppoe','/api/network/devices','/api/onus']},
   staff:{GET:['/api/dashboard/stats','/api/customers','/api/complaints'],POST:['/api/complaints']}
  };
  return (grants[role]?.[method]||[]).some(p=>path===p||path.startsWith(p+'/'))
@@ -76,7 +76,9 @@ t('sub.renew','ALTER TABLE subscriptions ADD COLUMN auto_renew INTEGER DEFAULT 0
 t('notif','CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,title TEXT NOT NULL,message TEXT,type TEXT DEFAULT \'info\',is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT(datetime(\'now\')))');
 t('settings','CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,key))');
 t('pppoe','CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT \'active\',created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,username))');
-await Promise.all(tasks);try{await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL').run();R.push('invoices.period_index:OK')}catch(e){R.push('invoices.period_index:'+e.message.slice(0,60))}return R}
+t('network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT');t('network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT');t('network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER');
+t('onu_devices','CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT \'unknown\',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime(\'now\')),updated_at TEXT DEFAULT(datetime(\'now\')),UNIQUE(organization_id,serial_number))');
+await Promise.all(tasks);try{await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL').run();R.push('invoices.period_index:OK')}catch(e){R.push('invoices.period_index:'+e.message.slice(0,60))}try{await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id,status)').run();R.push('onu_devices.index:OK')}catch(e){R.push('onu_devices.index:'+e.message.slice(0,60))}return R}
 
 let _migrated=false;
 export default{async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
@@ -132,6 +134,11 @@ if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='GET')return await getNet
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='PUT')return await updateNetworkDevice(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='DELETE')return await delNetworkDevice(env,path,orgId,userId,ip);
 if(path==='/api/network/status'&&m==='GET')return await networkStatus(env,orgId);
+if(path==='/api/onus'&&m==='GET')return await listOnus(env,url,orgId);
+if(path==='/api/onus'&&m==='POST')return await createOnu(request,env,orgId,userId,ip);
+if(path.match(/^\\/api\\/onus\\/[^/]+$/)&&m==='GET')return await getOnu(env,path,orgId);
+if(path.match(/^\\/api\\/onus\\/[^/]+$/)&&m==='PUT')return await updateOnu(request,env,path,orgId,userId,ip);
+if(path.match(/^\\/api\\/onus\\/[^/]+$/)&&m==='DELETE')return await deleteOnu(env,path,orgId,userId,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
 if(path==='/api/reports/revenue'&&m==='GET')return await repRev(env,url,orgId);
@@ -317,8 +324,62 @@ async function delPppoe(env,path,oid,uid,ip){
 }
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
- const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
+ const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
  return json({data:rows.results||[],pagination:{page,per_page:pp,total:cnt.n,total_pages:Math.ceil(cnt.n/pp)}})
+}
+async function listOnus(env,url,oid){
+ const{page,pp,off}=pg(url,50),q=url.searchParams.get('search')||'',status=url.searchParams.get('status')||'',olt=url.searchParams.get('olt_id')||'';
+ let where='WHERE o.organization_id=?',params=[oid];
+ if(q){where+=" AND (o.serial_number LIKE ? OR o.mac_address LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ?)";const v='%'+q+'%';params.push(v,v,v,v)}
+ if(status){where+=' AND o.status=?';params.push(status)}
+ if(olt){where+=' AND o.olt_device_id=?';params.push(olt)}
+ const cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM onu_devices o LEFT JOIN customers c ON c.id=o.customer_id AND c.organization_id=o.organization_id '+where).bind(...params).first();
+ const rows=await env.DB.prepare('SELECT o.*,c.first_name,c.last_name,n.name AS olt_name FROM onu_devices o LEFT JOIN customers c ON c.id=o.customer_id AND c.organization_id=o.organization_id LEFT JOIN network_devices n ON n.id=o.olt_device_id AND n.organization_id=o.organization_id '+where+' ORDER BY o.created_at DESC LIMIT ? OFFSET ?').bind(...params,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:cnt.n,total_pages:Math.ceil(cnt.n/pp)}})
+}
+async function getOnu(env,path,oid){
+ const id=path.split('/')[3],row=await env.DB.prepare('SELECT o.*,c.first_name,c.last_name,n.name AS olt_name FROM onu_devices o LEFT JOIN customers c ON c.id=o.customer_id AND c.organization_id=o.organization_id LEFT JOIN network_devices n ON n.id=o.olt_device_id AND n.organization_id=o.organization_id WHERE o.id=? AND o.organization_id=?').bind(id,oid).first();
+ return row?json(row):json({error:'Not found'},404)
+}
+async function createOnu(r,env,oid,uid,ip){
+ const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
+ if(!s(b.serial_number))return json({error:'Serial number is required'},400);
+ const allowed=['active','inactive','offline','faulty','unknown'],status=b.status||'unknown';
+ if(!allowed.includes(status))return json({error:'Invalid ONU status'},400);
+ if(b.olt_device_id&&!await env.DB.prepare("SELECT id FROM network_devices WHERE id=? AND organization_id=? AND device_type='olt'").bind(b.olt_device_id,oid).first())return json({error:'OLT device not found'},404);
+ if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);
+ const onuNumber=b.onu_number===undefined||b.onu_number===''?null:parseInt(b.onu_number,10);
+ if(onuNumber!==null&&(!Number.isInteger(onuNumber)||onuNumber<1||onuNumber>256))return json({error:'ONU number must be between 1 and 256'},400);
+ const rx=b.rx_power_dbm===undefined||b.rx_power_dbm===''?null:Number(b.rx_power_dbm);
+ if(rx!==null&&(!Number.isFinite(rx)||rx< -60||rx>10))return json({error:'Optical RX power must be between -60 and 10 dBm'},400);
+ const id=uuid();
+ try{
+  await env.DB.prepare('INSERT INTO onu_devices(id,organization_id,olt_device_id,customer_id,serial_number,mac_address,pon_port,onu_number,model,status,rx_power_dbm,last_seen_at,notes)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,b.olt_device_id||null,b.customer_id||null,s(b.serial_number),s(b.mac_address||'')||null,s(b.pon_port||'')||null,onuNumber,s(b.model||'')||null,status,rx,b.last_seen_at||null,s(b.notes||'')||null).run();
+ }catch(e){if(String(e.message).toLowerCase().includes('unique'))return json({error:'ONU serial number already exists in this workspace'},409);throw e}
+ await audit(env,oid,uid,'create_onu','ONU:'+s(b.serial_number),ip);
+ return await getOnu(env,'/api/onus/'+id,oid)
+}
+async function updateOnu(r,env,path,oid,uid,ip){
+ const id=path.split('/')[3],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
+ const ex=await env.DB.prepare('SELECT * FROM onu_devices WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
+ if(b.olt_device_id!==undefined&&b.olt_device_id&&!await env.DB.prepare("SELECT id FROM network_devices WHERE id=? AND organization_id=? AND device_type='olt'").bind(b.olt_device_id,oid).first())return json({error:'OLT device not found'},404);
+ if(b.customer_id!==undefined&&b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);
+ const allowed=['active','inactive','offline','faulty','unknown'];
+ if(b.status!==undefined&&!allowed.includes(b.status))return json({error:'Invalid ONU status'},400);
+ if(b.onu_number!==undefined&&b.onu_number!==null&&b.onu_number!==''&&(!Number.isInteger(Number(b.onu_number))||Number(b.onu_number)<1||Number(b.onu_number)>256))return json({error:'ONU number must be between 1 and 256'},400);
+ if(b.rx_power_dbm!==undefined&&b.rx_power_dbm!==null&&b.rx_power_dbm!==''&&(!Number.isFinite(Number(b.rx_power_dbm))||Number(b.rx_power_dbm)< -60||Number(b.rx_power_dbm)>10))return json({error:'Optical RX power must be between -60 and 10 dBm'},400);
+ const fields=['olt_device_id','customer_id','serial_number','mac_address','pon_port','onu_number','model','status','rx_power_dbm','last_seen_at','notes'],sets=[],params=[];
+ for(const key of fields)if(b[key]!==undefined){sets.push(key+'=?');params.push(b[key]===''?null:b[key])}
+ if(!sets.length)return json({error:'No fields'},400);
+ sets.push("updated_at=datetime('now')");params.push(id,oid);
+ try{await env.DB.prepare('UPDATE onu_devices SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...params).run()}catch(e){if(String(e.message).toLowerCase().includes('unique'))return json({error:'ONU serial number already exists in this workspace'},409);throw e}
+ await audit(env,oid,uid,'update_onu','ONU:'+id,ip);
+ return await getOnu(env,'/api/onus/'+id,oid)
+}
+async function deleteOnu(env,path,oid,uid,ip){
+ const id=path.split('/')[3],r=await env.DB.prepare('DELETE FROM onu_devices WHERE id=? AND organization_id=?').bind(id,oid).run();
+ if(!r.meta?.changes)return json({error:'Not found'},404);
+ await audit(env,oid,uid,'delete_onu','ONU:'+id,ip);return json({success:true})
 }
 async function createNetworkDevice(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
@@ -327,7 +388,9 @@ async function createNetworkDevice(r,env,oid,uid,ip){
  if(port!==null&&(!Number.isInteger(port)||port<1||port>65535))return json({error:'port must be between 1 and 65535'},400);
  if(b.status!==undefined&&!['active','inactive','maintenance'].includes(b.status))return json({error:'Invalid status'},400);
  const id=uuid();
- await env.DB.prepare('INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes)VALUES(?,?,?,?,?,?,?,?,?)').bind(id,oid,name,type,b.host||null,port,b.username||null,b.status||'inactive',b.notes||null).run();
+ const model=s(b.model||'')||null,protocol=s(b.management_protocol||'')||null,ponPorts=b.pon_ports===undefined||b.pon_ports===''?null:parseInt(b.pon_ports,10);
+ if(ponPorts!==null&&(!Number.isInteger(ponPorts)||ponPorts<1||ponPorts>256))return json({error:'pon_ports must be between 1 and 256'},400);
+ await env.DB.prepare('INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports)VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,name,type,b.host||null,port,b.username||null,b.status||'inactive',b.notes||null,model,protocol,ponPorts).run();
  await audit(env,oid,uid,'create_network_device',type+':'+name,ip);
  return json(await env.DB.prepare('SELECT * FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first(),201)
 }
@@ -338,7 +401,7 @@ async function getNetworkDevice(env,path,oid){
 async function updateNetworkDevice(r,env,path,oid,uid,ip){
  const id=path.split('/')[4],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ex=await env.DB.prepare('SELECT id FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
- const sets=[],params=[];for(const f of ['name','host','port','username','status','notes'])if(b[f]!==undefined){sets.push(f+'=?');params.push(f==='port'&&b[f]!==null&&b[f]!==''?parseInt(b[f],10):b[f])}
+ const sets=[],params=[];for(const f of ['name','host','port','username','status','notes','model','management_protocol','pon_ports'])if(b[f]!==undefined){sets.push(f+'=?');params.push(f==='port'&&b[f]!==null&&b[f]!==''?parseInt(b[f],10):b[f])}
  if(b.device_type!==undefined){if(!['mikrotik','olt','acs','other'].includes(b.device_type))return json({error:'Invalid device_type'},400);sets.push('device_type=?');params.push(b.device_type)}
  if(b.status!==undefined&&!['active','inactive','maintenance'].includes(b.status))return json({error:'Invalid status'},400);
  if(!sets.length)return json({error:'No fields'},400);
