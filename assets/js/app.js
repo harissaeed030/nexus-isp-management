@@ -198,6 +198,16 @@ $("#nxAdd")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object
 $("#nxGenerate")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{let d=await call("/api/v1/billing/generate",{method:"POST",body:JSON.stringify(b)});msg(d.invoicesCreated+" invoices generated");load("billing")}catch(x){msg(x.message)}});
 $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{await call("/api/v1/payments",{method:"POST",body:JSON.stringify(b)});msg("Payment recorded");load("billing")}catch(x){msg(x.message)}});
 }catch(e){page("Could not load",e.message,'<div class="nx-panel" style="color:#b64e3b">'+esc(e.message)+'</div>')}}
+const globalSearch=$("#nxGlobalSearch");
+globalSearch?.addEventListener("input",()=>{
+ const query=globalSearch.value.trim().toLowerCase();
+ content.querySelectorAll(".nx-table tbody tr").forEach(row=>{
+  row.hidden=!!query&&!row.textContent.toLowerCase().includes(query);
+ });
+ content.querySelectorAll(".nx-activity-item").forEach(row=>{
+  row.hidden=!!query&&!row.textContent.toLowerCase().includes(query);
+ });
+});
 document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit","settings"].includes(v)){e.preventDefault();load(v);$("#sidebar")?.classList.remove("open")}}));
 document.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
  e.preventDefault();
