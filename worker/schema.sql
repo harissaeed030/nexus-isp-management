@@ -56,6 +56,9 @@ CREATE TABLE network_devices (
         username TEXT,
         status TEXT NOT NULL DEFAULT 'inactive' CHECK(status IN ('active','inactive','maintenance')),
         notes TEXT,
+        model TEXT,
+        management_protocol TEXT,
+        pon_ports INTEGER,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
@@ -312,3 +315,24 @@ CREATE INDEX idx_tickets_status      ON support_tickets(status);
 CREATE INDEX idx_users_organization ON users(organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL;
+
+
+CREATE TABLE onu_devices (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  olt_device_id TEXT,
+  customer_id TEXT,
+  serial_number TEXT NOT NULL,
+  mac_address TEXT,
+  pon_port TEXT,
+  onu_number INTEGER,
+  model TEXT,
+  status TEXT NOT NULL DEFAULT 'unknown',
+  rx_power_dbm REAL,
+  last_seen_at TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (organization_id, serial_number)
+);
+CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id, status);
