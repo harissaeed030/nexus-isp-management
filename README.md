@@ -9,7 +9,10 @@ Nexus is being built as a multi-tenant platform for subscriber records, internet
 The `build/nexus-isp-core` branch contains the first local API foundation:
 - Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
 - Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
-- Customer CRUD, package management, subscription assignment/status, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
+- Customer registration and CRUD with tenant-scoped account-number sequencing, service address, coverage area, installation date, account/connection status, searchable filters and pagination.
+- Customer profile views with subscription, invoice, payment, complaint, connection and subscription history.
+- Subscription assignment, package changes, start/expiry dates, renewal, suspension/resume/cancellation history and automatic expiry transition when subscription lists or customer profiles are read.
+- Package management, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
 - Staff account management with role defaults and per-user module permission overrides, router inventory, idempotent monthly invoice generation and financial summary reports.
 - Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
 - SQLite database is created automatically under `backend/data/`.
@@ -36,7 +39,7 @@ The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep th
 
 ### Database migrations, backup and restore
 
-The database initializer maintains a `schema_migrations` ledger. Existing 0.2.0 databases are upgraded automatically on next startup by the additive migration in `backend/migrations/001_database_hardening.sql`; it preserves existing rows and adds tenant-consistency triggers and query indexes. Do not manually delete the SQLite file to apply a migration.
+The database initializer maintains a `schema_migrations` ledger. Existing 0.2.0 databases are upgraded automatically on next startup by additive migrations in `backend/migrations/001_database_hardening.sql` and `backend/migrations/002_customer_subscription_management.sql`; they preserve existing rows and add tenant-consistency triggers, customer account sequencing, connection/subscription history and query indexes. Do not manually delete the SQLite file to apply a migration.
 
 Run commands from the `backend/` directory:
 
@@ -78,9 +81,10 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 
 - `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`
 - `GET /api/v1/dashboard`
-- `GET|POST /api/v1/customers`, `GET|PATCH|DELETE /api/v1/customers/:id`
+- `GET|POST /api/v1/customers` (search/filter: `q`, `status`, `connectionStatus`, `coverageArea`; pagination: `page`, `pageSize`), `GET|PATCH|DELETE /api/v1/customers/:id`
+- `GET /api/v1/customers/:id/profile`, `GET /api/v1/customers/:id/history`
 - `GET|POST /api/v1/packages`, `PATCH /api/v1/packages/:id`
-- `GET|POST /api/v1/subscriptions`, `PATCH /api/v1/subscriptions/:id`
+- `GET|POST /api/v1/subscriptions`, `PATCH /api/v1/subscriptions/:id`, `POST /api/v1/subscriptions/:id/renew`
 - `GET|POST /api/v1/invoices`
 - `GET|POST /api/v1/payments`
 - `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
