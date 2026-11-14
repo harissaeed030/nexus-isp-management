@@ -102,4 +102,12 @@ if(!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(oltM
  try{db.exec(migrationSql);db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(oltMigrationVersion);db.exec("COMMIT");}
  catch(error){try{db.exec("ROLLBACK");}catch{}throw error;}
 }
+
+const businessModulesVersion="005_isp_business_modules";
+if(!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(businessModulesVersion)){
+ const migrationSql=readFileSync(new URL("../../migrations/005_isp_business_modules.sql",import.meta.url),"utf8");
+ db.exec("BEGIN IMMEDIATE");
+ try{db.exec(migrationSql);db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(businessModulesVersion);db.exec("COMMIT");}
+ catch(error){try{db.exec("ROLLBACK");}catch{}throw error;}
+}
 export function getDatabaseStatus(){return "connected";}
