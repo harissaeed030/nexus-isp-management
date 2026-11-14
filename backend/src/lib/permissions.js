@@ -66,11 +66,6 @@ export function permissionFor(path,method) {
   if(matches("/api/v1/invoices"))return verb==="GET"?"billing.read":verb==="POST"?"invoices.create":null;
   if(matches("/api/v1/payments"))return verb==="GET"?"billing.read":verb==="POST"?"payments.create":null;
   if(path==="/api/v1/billing/generate")return verb==="POST"?"billing.generate":null;
-  if(matches("/api/v1/customers")&&path.includes("/ledger"))return verb==="GET"?"ledger.read":null;
-  if(matches("/api/v1/payments")&&path.includes("/reversals"))return verb==="POST"?"refunds.manage":null;
-  if(matches("/api/v1/invoices")&&path.includes("/credit-notes"))return verb==="POST"?"credit_notes.manage":null;
-  if(matches("/api/v1/reconciliation"))return verb==="GET"?"billing.read":verb==="POST"?"reconciliation.manage":null;
-  if(path==="/api/v1/reports/aging"||path==="/api/v1/reports/financial")return verb==="GET"?"reports.read":null;
   if(path==="/api/v1/billing/runs")return verb==="GET"?"billing.read":null;
   if(matches("/api/v1/tickets"))return verb==="GET"?"tickets.read":["POST","PATCH"].includes(verb)?"tickets.manage":null;
   if(matches("/api/v1/routers"))return verb==="GET"?"routers.read":["POST","PATCH","DELETE"].includes(verb)?"routers.manage":null;
