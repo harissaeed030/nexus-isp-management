@@ -19,7 +19,7 @@ const app=express();app.disable("x-powered-by");app.use(helmet());
 const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
 app.use("/assets",express.static(resolve(projectRoot,"assets"),{fallthrough:false,maxAge:"1h"}));
 app.use(cors({origin(origin,cb){if(!origin||env.corsOrigins.includes(origin))return cb(null,true);cb(new Error("Origin is not allowed by CORS."));}}));
-app.use(express.json({limit:"100kb"}));app.use(rateLimit({windowMs:15*60*1000,limit:300,standardHeaders:"draft-7",legacyHeaders:false}));
+app.use(express.json({limit:"100kb",verify:(req,_res,buffer)=>{req.rawBody=Buffer.from(buffer);}}));app.use(rateLimit({windowMs:15*60*1000,limit:300,standardHeaders:"draft-7",legacyHeaders:false}));
 const id=()=>randomUUID(),hashToken=v=>createHash("sha256").update(v).digest("hex"),required=v=>typeof v==="string"&&v.trim().length>0;
 const passwordHash=p=>{const salt=randomBytes(16).toString("hex");return salt+":"+scryptSync(p,salt,64).toString("hex");};
 const verifyPassword=(p,s)=>{try{const [salt,key]=s.split(":");const a=scryptSync(p,salt,64),b=Buffer.from(key,"hex");return a.length===b.length&&timingSafeEqual(a,b);}catch{return false;}};
