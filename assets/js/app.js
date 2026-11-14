@@ -185,8 +185,8 @@ $("#nxGenerate")?.addEventListener("submit",async e=>{e.preventDefault();let b=O
 $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{await call("/api/v1/payments",{method:"POST",body:JSON.stringify(b)});msg("Payment recorded");load("billing")}catch(x){msg(x.message)}});
 }catch(e){page("Could not load",e.message,'<div class="nx-panel" style="color:#b64e3b">'+esc(e.message)+'</div>')}}
 document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit"].includes(v)){e.preventDefault();load(v);$("#sidebar")?.classList.remove("open")}}));
-const nav=$(".nav");if(nav)nav.insertAdjacentHTML("beforeend",'<a class="nav-item" href="#packages"><span>◈</span> Packages</a><a class="nav-item" href="#routers"><span>⌘</span> Routers</a><a class="nav-item" href="#staff"><span>♙</span> Staff</a><a class="nav-item" href="#reports"><span>▤</span> Reports</a><a class="nav-item" href="#audit"><span>≡</span> Activity log</a>');
-nav?.querySelectorAll('a[href="#packages"],a[href="#routers"],a[href="#staff"],a[href="#reports"],a[href="#audit"]').forEach(a=>a.addEventListener("click",e=>{e.preventDefault();load(a.getAttribute("href").slice(1))}));
+const navs=document.querySelectorAll(".nav");const nav=navs[1]||navs[0];
+
 $("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());$("#menuBtn")?.addEventListener("click",()=>$("#sidebar")?.classList.toggle("open"));
 const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
 
@@ -200,7 +200,7 @@ const moduleGroups=[
 ["FIBER NETWORK",["OLT Devices","ONU / ONT Inventory","TR-069 / ACS","Connection Status"]]
 ];
 const moduleSlug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
-const moduleNav=moduleGroups.map(([group,items])=>'<div class="nav-label" style="margin-top:10px">'+group+'</div>'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span>•</span>'+esc(item)+'</a>').join("")).join("");
+const moduleNav=moduleGroups.map(([group,items])=>'<section class="nav-section"><div class="nav-section-heading"><span>'+group+'</span><i>'+items.length+'</i></div><div class="nav-sub">'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span class="nav-icon">•</span><span class="nav-text">'+esc(item)+'</span></a>').join("")+'</div></section>').join("");
 nav?.insertAdjacentHTML("beforeend",moduleNav);
 nav?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
  e.preventDefault();const name=a.dataset.module;if(["New Messages","Expiry Messages","WhatsApp Draft Messages","Sent Messages"].includes(name)){window.location.href="/notifications";return;}if(name==="TR-069 / ACS"||name==="Connection Status"){load("tr069");$("#sidebar")?.classList.remove("open");return;}
