@@ -17,12 +17,12 @@ function customerAuth(db,fail){
   req.portal={accountId:account.account_id,tenantId:account.account_tenant_id,customer:account};next();
  };
 }
-async function sendWhatsApp(env,to,body){
+async function sendWhatsApp(env,to,body,providerTemplateName=null,languageCode="en_US",templateParameters=[]){
  if(!env.whatsappAccessToken||!env.whatsappPhoneNumberId)return {configured:false};
  const version=env.whatsappApiVersion||"v23.0";
  const response=await fetch("https://graph.facebook.com/"+version+"/"+encodeURIComponent(env.whatsappPhoneNumberId)+"/messages",{
   method:"POST",headers:{"Authorization":"Bearer "+env.whatsappAccessToken,"Content-Type":"application/json"},
-  body:JSON.stringify({messaging_product:"whatsapp",recipient_type:"individual",to:String(to).replace(/[^0-9]/g,""),type:"text",text:{preview_url:false,body}})
+  body:JSON.stringify({messaging_product:"whatsapp",recipient_type:"individual",to:String(to).replace(/[^0-9]/g,""),...(providerTemplateName?{type:"template",template:{name:providerTemplateName,language:{code:languageCode},...(templateParameters.length?{components:[{type:"body",parameters:templateParameters.map(text=>({type:"text",text}))}]}:{})}}:{type:"text",text:{preview_url:false,body}})})
  });
  const payload=await response.json().catch(()=>({}));
  if(!response.ok)throw new Error(payload.error?.message||"WhatsApp provider rejected the message (HTTP "+response.status+").");
@@ -98,16 +98,16 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   const b=req.body||{},name=String(b.name||"").trim(),eventKey=String(b.eventKey||"").trim(),body=String(b.body||"").trim(),channel=b.channel||"whatsapp";
   if(!name||name.length>100||!/^[a-z][a-z0-9_.-]{1,79}$/.test(eventKey)||!body||body.length>4096||channel!=="whatsapp")return fail(res,400,"Provide a template name, valid event key and WhatsApp message body (max 4096 characters).");
   const tid=id();
-  try{db.prepare("INSERT INTO notification_templates(id,tenant_id,name,event_key,channel,body,enabled) VALUES(?,?,?,?,?,?,?)").run(tid,req.user.tenant_id,name,eventKey,channel,body,b.enabled===false?0:1);}
+  try{db.prepare("INSERT INTO notification_templates(id,tenant_id,name,event_key,channel,body,provider_template_name,language_code,enabled) VALUES(?,?,?,?,?,?,?,?,?)").run(tid,req.user.tenant_id,name,eventKey,channel,body,providerName||null,language,b.enabled===false?0:1);}
   catch(e){if(String(e.message).includes("UNIQUE"))return fail(res,409,"A template already exists for this event and channel.");throw e;}
   res.status(201).json({success:true,data:db.prepare("SELECT * FROM notification_templates WHERE id=?").get(tid)});
  });
  app.patch("/api/v1/notifications/templates/:id",auth,(req,res)=>{
   const row=db.prepare("SELECT * FROM notification_templates WHERE id=? AND tenant_id=?").get(req.params.id,req.user.tenant_id);
   if(!row)return fail(res,404,"Template not found.");
-  const name=String(req.body?.name??row.name).trim(),body=String(req.body?.body??row.body).trim(),enabled=req.body?.enabled===undefined?row.enabled:(req.body.enabled?1:0);
+  const name=String(req.body?.name??row.name).trim(),body=String(req.body?.body??row.body).trim(),providerName=String(req.body?.providerTemplateName??row.provider_template_name??"").trim(),language=String(req.body?.languageCode??row.language_code??"en_US").trim(),enabled=req.body?.enabled===undefined?row.enabled:(req.body.enabled?1:0);
   if(!name||name.length>100||!body||body.length>4096)return fail(res,400,"Invalid template name or body.");
-  db.prepare("UPDATE notification_templates SET name=?,body=?,enabled=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?").run(name,body,enabled,row.id,req.user.tenant_id);
+  db.prepare("UPDATE notification_templates SET name=?,body=?,provider_template_name=?,language_code=?,enabled=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?").run(name,body,providerName||null,language,enabled,row.id,req.user.tenant_id);
   res.json({success:true,data:db.prepare("SELECT * FROM notification_templates WHERE id=?").get(row.id)});
  });
  app.get("/api/v1/notifications/outbox",auth,(req,res)=>{
@@ -125,7 +125,7 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   res.status(202).json({success:true,data:{id:nid,status:"queued"}});
  });
  const deliver=async(notification,tenantId)=>{
-  const result=await sendWhatsApp(env,notification.destination,notification.body);
+  const result=await sendWhatsApp(env,notification.destination,notification.body,notification.provider_template_name,notification.language_code||"en_US",JSON.parse(notification.template_parameters||"[]"));
   if(!result.configured)throw new Error("WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID on the server.");
   db.prepare("UPDATE notification_outbox SET status='sent',provider_message_id=?,provider_status=?,attempts=attempts+1,sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?").run(result.messageId,result.providerStatus,notification.id,tenantId);
   return result;
