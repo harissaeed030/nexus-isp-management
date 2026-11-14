@@ -1,10 +1,10 @@
 import { chmodSync, mkdirSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { env } from "../src/config/env.js";
 import { db } from "../src/config/database.js";
 
-const backupDir = resolve(process.env.SQLITE_BACKUP_DIR || "./backups");
+const backupDir = resolve(env.backupPath);
 mkdirSync(backupDir, { recursive: true, mode: 0o700 });
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const target = join(backupDir, `nexus-${stamp}.sqlite`);
