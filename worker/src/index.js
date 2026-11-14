@@ -474,7 +474,9 @@ async function authReg(r,env,ip){
  if(!b.slug)return json({error:'A valid organization slug could not be generated'},400);
  const slug=b.slug.toLowerCase().replace(/[^a-z0-9-]/g,'').replace(/-+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);if(!slug)return json({error:'Invalid organization slug'},400);
  if(await env.DB.prepare('SELECT id FROM organizations WHERE slug=?').bind(slug).first())return json({error:'Slug taken'},409);
- const email=b.email.toLowerCase();if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first())return json({error:'Email registered'},409);
+ const email=b.email.toLowerCase();
+ // Email addresses are unique within an ISP workspace, not globally across the SaaS.
+ // The database's organization-scoped unique constraint remains the source of truth.
  const oid=uuid(),uid=uuid(),{hash,salt}=await hashPw(b.password);
  try{await env.DB.batch([env.DB.prepare('INSERT INTO organizations(id,name,slug,plan,email,phone)VALUES(?,?,?,?,?,?)').bind(oid,b.companyName,slug,'free',email,b.phone||null),env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(uid,oid,email,hash,salt,b.name,'owner',b.phone||null)]);}catch(e){const message=String(e?.message||'');if(/unique|constraint/i.test(message))return json({error:'Email or organization slug is already registered'},409);throw e;}
  await audit(env,oid,uid,'register','Company:'+b.companyName,ip);
@@ -484,9 +486,19 @@ async function authReg(r,env,ip){
 
 async function authLogin(r,env,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.email||!b.password)return json({error:'Email and password required'},400);
 const email=String(b.email).trim().toLowerCase();if(await loginRateLimited(env,ip,email))return json({error:'Too many login attempts. Try again in 15 minutes.'},429);
-const u=await env.DB.prepare("SELECT * FROM users WHERE email=? AND status='active'").bind(email).first();if(!u||!await verifyPw(b.password,u.password_hash,u.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid credentials'},401);}
+let u=null;
+if(b.workspace!==undefined&&b.workspace!==null&&String(b.workspace).trim()!==''){
+ const workspace=String(b.workspace).trim().toLowerCase();
+ u=await env.DB.prepare("SELECT users.* FROM users JOIN organizations ON organizations.id=users.organization_id WHERE users.email=? AND lower(organizations.slug)=? AND users.status='active'").bind(email,workspace).first();
+}else{
+ const matches=await env.DB.prepare("SELECT users.* FROM users JOIN organizations ON organizations.id=users.organization_id WHERE users.email=? AND users.status='active' ORDER BY users.id LIMIT 2").bind(email).all();
+ const rows=matches.results||[];
+ if(rows.length>1)return json({error:'Workspace slug required for this email address'},400);
+ u=rows[0]||null;
+}
+if(!u||!await verifyPw(b.password,u.password_hash,u.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid credentials'},401);}
 await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,email).run();
-await env.DB.prepare("UPDATE users SET last_login=datetime('now'),updated_at=datetime('now')WHERE id=?").bind(u.id).run();
+await env.DB.prepare("UPDATE users SET last_login=datetime('now'),updated_at=datetime('now')WHERE id=? AND organization_id=?").bind(u.id,u.organization_id).run();
 const tk=await signJWT({userId:u.id,orgId:u.organization_id,role:u.role,email:u.email,name:u.name||u.email,tokenVersion:Number(u.token_version||0),exp:Date.now()+604800000},getSec(env));
 await audit(env,u.organization_id,u.id,'login','User logged in',ip);
 return json({success:true,token:tk,user:{id:u.id,email:u.email,name:u.name||u.email,role:u.role,orgId:u.organization_id}})}
