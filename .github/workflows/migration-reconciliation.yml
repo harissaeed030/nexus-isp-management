@@ -1,0 +1,32 @@
+name: NEXUS SQLite migration reconciliation
+
+on:
+  pull_request:
+    branches: [build/nexus-isp-core]
+    paths:
+      - "backend/migrations/**"
+      - "backend/src/config/database.js"
+      - "backend/scripts/migration-reconciliation.test.js"
+      - ".github/workflows/migration-reconciliation.yml"
+  push:
+    branches: [fix/migration-version-conflicts]
+    paths:
+      - "backend/migrations/**"
+      - "backend/src/config/database.js"
+      - "backend/scripts/migration-reconciliation.test.js"
+      - ".github/workflows/migration-reconciliation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  migration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Test SQLite migration reconciliation
+        working-directory: backend
+        run: node --test scripts/migration-reconciliation.test.js
