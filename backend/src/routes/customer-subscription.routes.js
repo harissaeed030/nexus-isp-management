@@ -6,7 +6,6 @@ const customerStatuses = new Set(["active","inactive","blocked"]);
 const connectionStatuses = new Set(["pending","active","suspended","disconnected"]);
 const subscriptionStatuses = new Set(["pending","active","suspended","cancelled","expired"]);
 const like = value => "%" + String(value) + "%";
-const like = value => "%" + String(value).replace(/[\\\\%_]/g, c => "\\" + c) + "%";
 
 export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
   const getCustomer = (customerId,tenantId) => db.prepare("SELECT * FROM customers WHERE id=? AND tenant_id=?").get(customerId,tenantId);
