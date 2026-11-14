@@ -11,10 +11,17 @@ import { registerOperationsRoutes } from "./routes/operations.routes.js";
 import { registerExportRoutes } from "./routes/exports.routes.js";
 import { hasPermission, permissionFor } from "./lib/permissions.js";
 const app=express();app.disable("x-powered-by");app.use(helmet());
+app.use((req,res,next)=>{
+ const requestId=randomUUID();const started=Date.now();res.setHeader("X-Request-ID",requestId);
+ res.on("finish",()=>console.log(JSON.stringify({level:"info",event:"http_request",requestId,method:req.method,status:res.statusCode,durationMs:Date.now()-started})));
+ next();
+});
 const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
 app.use("/assets",express.static(resolve(projectRoot,"assets"),{fallthrough:false,maxAge:"1h"}));
 app.use(cors({origin(origin,cb){if(!origin||env.corsOrigins.includes(origin))return cb(null,true);cb(new Error("Origin is not allowed by CORS."));}}));
 app.use(express.json({limit:"100kb"}));app.use(rateLimit({windowMs:15*60*1000,limit:300,standardHeaders:"draft-7",legacyHeaders:false}));
+const authLimiter=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:"draft-7",legacyHeaders:false,message:{success:false,error:"Too many authentication attempts. Try again later."}});
+app.use("/api/v1/auth/login",authLimiter);app.use("/api/v1/setup",authLimiter);
 const id=()=>randomUUID(),hashToken=v=>createHash("sha256").update(v).digest("hex"),required=v=>typeof v==="string"&&v.trim().length>0;
 const passwordHash=p=>{const salt=randomBytes(16).toString("hex");return salt+":"+scryptSync(p,salt,64).toString("hex");};
 const verifyPassword=(p,s)=>{try{const [salt,key]=s.split(":");const a=scryptSync(p,salt,64),b=Buffer.from(key,"hex");return a.length===b.length&&timingSafeEqual(a,b);}catch{return false;}};
@@ -35,7 +42,7 @@ function auth(req,res,next){
 }
 function audit(u,action,type,rid){db.prepare("INSERT INTO audit_logs(id,tenant_id,actor_user_id,action,resource_type,resource_id) VALUES(?,?,?,?,?,?)").run(id(),u.tenant_id,u.id,action,type,rid||null);}
 app.get("/",(_q,r)=>r.sendFile(resolve(projectRoot,"index.html")));
-app.get("/api/v1/health",(_q,r)=>r.json({success:true,status:"running",database:"connected",timestamp:new Date().toISOString()}));
+app.get("/api/v1/health",(_q,r)=>{try{const result=db.prepare("PRAGMA quick_check").get();const healthy=!!result&&Object.values(result)[0]==="ok";r.status(healthy?200:503).json({success:healthy,status:healthy?"ok":"degraded",database:healthy?"ok":"error",timestamp:new Date().toISOString()});}catch{r.status(503).json({success:false,status:"degraded",database:"error",timestamp:new Date().toISOString()});}});
 app.post("/api/v1/setup",(req,res)=>{const b=req.body||{};if(!required(b.companyName)||!required(b.fullName)||!required(b.email)||!required(b.password)||b.password.length<10)return fail(res,400,"Company, name, email and password (minimum 10 characters) are required.");if(db.prepare("SELECT COUNT(*) n FROM users").get().n>0)return fail(res,409,"Initial setup is already complete. Sign in instead.");const tid=id(),uid=id(),slug=b.companyName.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-")+"-"+tid.slice(0,6);db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run(tid,b.companyName.trim(),slug);db.prepare("INSERT INTO users(id,tenant_id,email,password_hash,full_name,role) VALUES(?,?,?,?,?,'owner')").run(uid,tid,b.email.trim().toLowerCase(),passwordHash(b.password),b.fullName.trim());const token=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hashToken(token),uid,new Date(Date.now()+604800000).toISOString());audit({id:uid,tenant_id:tid},"initial_setup","tenant",tid);res.status(201).json({success:true,token,user:cleanUser(db.prepare("SELECT * FROM users WHERE id=?").get(uid)),tenant:{id:tid,name:b.companyName.trim()}});});
 app.post("/api/v1/auth/login",(req,res)=>{const b=req.body||{};if(!required(b.email)||!required(b.password))return fail(res,400,"Email and password are required.");const u=db.prepare("SELECT * FROM users WHERE email=? COLLATE NOCASE AND status='active' ORDER BY created_at LIMIT 1").get(b.email.trim());if(!u||!verifyPassword(b.password,u.password_hash))return fail(res,401,"Invalid email or password.");const token=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hashToken(token),u.id,new Date(Date.now()+604800000).toISOString());res.json({success:true,token,user:cleanUser(u)});});
 app.get("/api/v1/auth/me",auth,(req,res)=>res.json({success:true,user:cleanUser(req.user),tenant:{id:req.user.tenant_id,name:db.prepare("SELECT name FROM tenants WHERE id=?").get(req.user.tenant_id).name}}));
