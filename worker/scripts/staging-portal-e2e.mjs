@@ -10,6 +10,8 @@ const password = 'Nexus-Staging-Only-2026!';
 const checks = [];
 
 let ownerToken = null;
+let secondOwnerToken = null;
+let secondTenantSlug = null;
 let failure = null;
 let cleanup = { attempted: false, success: false, reason: 'Tenant was not registered or owner token was not returned' };
 
