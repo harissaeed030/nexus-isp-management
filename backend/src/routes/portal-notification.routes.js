@@ -57,7 +57,7 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   res.json({success:true,data:db.prepare("SELECT p.id,p.amount_pkr,p.method,p.reference,p.received_at,i.invoice_number FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE p.tenant_id=? AND i.customer_id=? ORDER BY p.received_at DESC").all(req.portal.tenantId,req.portal.customer.id)});
  });
  app.get("/api/v1/customer-portal/complaints",portalAuth,(req,res)=>{
-  res.json({success:true,data:db.prepare("SELECT id,subject,description,priority,status,created_at,updated_at FROM support_tickets WHERE tenant_id=? AND customer_id=? ORDER BY created_at DESC").all(req.portal.tenantId,req.portal.customer.id)});
+  res.json({success:true,data:db.prepare("SELECT id,subject,description,priority,status,created_at FROM support_tickets WHERE tenant_id=? AND customer_id=? ORDER BY created_at DESC").all(req.portal.tenantId,req.portal.customer.id)});
  });
  app.post("/api/v1/customer-portal/complaints",portalAuth,(req,res)=>{
   const b=req.body||{},subject=String(b.subject||"").trim(),description=String(b.description||"").trim(),priority=["low","normal","high","urgent"].includes(b.priority)?b.priority:"normal";
