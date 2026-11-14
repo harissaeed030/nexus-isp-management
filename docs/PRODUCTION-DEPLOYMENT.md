@@ -31,7 +31,7 @@ The production configuration rejects missing origins, non-HTTPS origins and rela
 
 ```sh
 cd backend
-npm ci
+npm install
 npm run verify
 npm run migrate
 npm run backup
