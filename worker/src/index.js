@@ -443,10 +443,10 @@ async function authReg(r,env,ip){
  if(await env.DB.prepare('SELECT id FROM organizations WHERE slug=?').bind(slug).first())return json({error:'Slug taken'},409);
  const email=b.email.toLowerCase();if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first())return json({error:'Email registered'},409);
  const oid=uuid(),uid=uuid(),{hash,salt}=await hashPw(b.password);
- try{await env.DB.batch([env.DB.prepare('INSERT INTO organizations(id,name,slug,plan,email,phone)VALUES(?,?,?,?,?,?)').bind(oid,b.companyName,slug,'free',email,b.phone||null),env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(uid,oid,email,hash,salt,b.name,'admin',b.phone||null)]);}catch(e){const message=String(e?.message||'');if(/unique|constraint/i.test(message))return json({error:'Email or organization slug is already registered'},409);throw e;}
+ try{await env.DB.batch([env.DB.prepare('INSERT INTO organizations(id,name,slug,plan,email,phone)VALUES(?,?,?,?,?,?)').bind(oid,b.companyName,slug,'free',email,b.phone||null),env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(uid,oid,email,hash,salt,b.name,'owner',b.phone||null)]);}catch(e){const message=String(e?.message||'');if(/unique|constraint/i.test(message))return json({error:'Email or organization slug is already registered'},409);throw e;}
  await audit(env,oid,uid,'register','Company:'+b.companyName,ip);
- const tk=await signJWT({userId:uid,orgId:oid,role:'admin',email,name:b.name,tokenVersion:0,exp:Date.now()+604800000},getSec(env));
- return json({success:true,token:tk,user:{id:uid,email,name:b.name,role:'admin',orgId:oid}},201)
+ const tk=await signJWT({userId:uid,orgId:oid,role:'owner',email,name:b.name,tokenVersion:0,exp:Date.now()+604800000},getSec(env));
+ return json({success:true,token:tk,user:{id:uid,email,name:b.name,role:'owner',orgId:oid}},201)
 }
 
 async function authLogin(r,env,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.email||!b.password)return json({error:'Email and password required'},400);
