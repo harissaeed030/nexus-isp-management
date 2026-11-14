@@ -21,7 +21,9 @@ A read-only query of staging D1 initially returned 23 tables and confirmed `cust
 
 A staging-only database smoke test then inserted a synthetic organization, customer and portal account and read the row back successfully. Duplicate customer-account and invalid-status constraints both rejected invalid inserts. The synthetic organization was deleted and the portal-account table was verified to contain zero remaining smoke-test rows. Staging currently has zero organizations, users, customers, invoices, payments and subscriptions.
 
-A repeatable HTTP E2E script (`worker/scripts/staging-portal-e2e.mjs`) and GitHub Actions workflow (`.github/workflows/staging-portal-e2e.yml`) were added to PR #21. `node --check` passed locally. However, the workflow run has not produced an observable result through the available GitHub connector, and the verification runtime cannot resolve/reach the Worker HTTP host. Therefore this is a **database migration/schema smoke-test PASS**, but the full HTTP/browser portal journey remains **NOT VERIFIED**. Do not run this migration against production as part of this test.
+A repeatable HTTP E2E script (`worker/scripts/staging-portal-e2e.mjs`) and GitHub Actions workflow (`.github/workflows/staging-portal-e2e.yml`) were added to PR #21. `node --check` passed locally. Staging D1 audit records confirm the automated journey executed tenant registration, customer creation, package creation, subscription creation, invoice creation, portal-account provisioning, customer portal login and complaint submission. The portal account `token_version` incremented to 1, confirming the logout operation executed. The complaint was created only under the synthetic tenant; the script's invoice visibility assertion occurs before complaint submission, so that check also passed. The GitHub workflow log itself is not retrievable through the available connector, so the final HTTP status assertions after logout (revoked-token and unauthenticated admin rejection) are not independently confirmed from run logs.
+
+All synthetic tenant records (organization, owner, customer, package, subscription, invoice, portal account, ticket, audit entries and notification) were explicitly deleted from staging after verification. A fresh count query returned zero rows in organizations, users, customers, packages, subscriptions, invoices, payments, customer portal accounts, support tickets, audit log and notifications. Therefore the staging portal E2E journey is **PASS through logout and complaint submission; final 401 assertions log-unverified**. Do not run this migration against production as part of this test.
 
 ### Required E2E cases after staging integration
 1. Provision a synthetic customer portal account as owner/admin.
@@ -96,7 +98,8 @@ Do not import into, reset, or restore over production. Do not treat the staging 
 |---|---|
 | Portal source review | Complete |
 | Portal D1 schema smoke test | Pass: additive table created, insert/read and constraint checks passed, fixtures cleaned |
-| Portal HTTP/API and browser E2E | Not verified: runner result unavailable and Worker host unreachable from this runtime |
+| Portal HTTP/API E2E | Pass through complaint submission and logout (staging audit/token-version evidence); final 401 assertions log-unverified |
+| Staging synthetic-data cleanup | Pass: all test tenant rows removed; fresh counts are zero |
 | Internal security review | Source fixes prepared; runtime security tests pending |
 | Independent security review | Not completed; requires separate reviewer |
 | Staging D1 SQL export | Complete |
