@@ -56,6 +56,16 @@ try {
   ownerToken = owner.token;
   assert.ok(ownerToken, 'tenant registration must return an owner token');
 
+  const tenantLogin = await request('POST', '/api/auth/login', {
+    email: ownerEmail, password, workspace: tenantSlug
+  });
+  const tenantLoginData = ok('staff login scoped to the selected workspace', tenantLogin, 200);
+  assert.equal(tenantLoginData.user.orgId, owner.user.orgId);
+  const wrongWorkspaceLogin = await request('POST', '/api/auth/login', {
+    email: ownerEmail, password, workspace: 'not-this-tenant'
+  });
+  ok('staff login rejects a mismatched workspace', wrongWorkspaceLogin, 401);
+
   const me = await request('GET', '/api/auth/me', undefined, ownerToken);
   ok('owner authentication and tenant identity', me, 200);
   assert.equal(me.data.tenant.slug, tenantSlug);
