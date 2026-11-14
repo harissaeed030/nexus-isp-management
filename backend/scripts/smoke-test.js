@@ -83,7 +83,7 @@ try{
  const payment=await request("/api/v1/payments","POST",{invoiceId:invoice.id,amountPkr:100,method:"cash"},token);
  assert.equal(payment.status,201);
  assert.equal(db.prepare("SELECT status FROM invoices WHERE id=?").get(invoice.id).status,"partial");
- assert.throws(() => db.prepare("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method) VALUES(?,?,?,?,?)").run("overpay-test",setup.data.user.tenantId,invoice.id,2000,"cash"), /payment exceeds invoice total/);
+ assert.throws(() => db.prepare("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method) VALUES(?,?,?,?,?)").run("overpay-test",setup.data.user.tenantId,invoice.id,2000,"cash"), /payment exceeds adjusted invoice balance/);
  const staff=await request("/api/v1/staff","POST",{fullName:"Billing Staff",email:"billing@nexus.test",password:"Billing-Password-123",role:"billing"},token);
  assert.equal(staff.status,201);
  const staffLogin=await request("/api/v1/auth/login","POST",{email:"billing@nexus.test",password:"Billing-Password-123"});
