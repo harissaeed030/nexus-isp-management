@@ -25,7 +25,7 @@ export const ROLE_PERMISSIONS = {
   owner: ["*"],
   admin: ["*"],
   billing: ["dashboard.read","customers.read","packages.read","subscriptions.read","billing.read","invoices.create","payments.create","billing.generate","reports.read"],
-  noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage"],
+  noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage","routers.provision"],
   support: ["dashboard.read","customers.read","packages.read","subscriptions.read","tickets.read","tickets.manage"],
   technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read"],
   staff: ["dashboard.read"]
