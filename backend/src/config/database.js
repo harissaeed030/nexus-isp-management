@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { env } from "./env.js";
 const file=resolve(env.databasePath);mkdirSync(dirname(file),{recursive:true});
