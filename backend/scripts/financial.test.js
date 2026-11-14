@@ -6,7 +6,7 @@ import { nextInvoiceNumber, invoiceBalance, syncInvoiceStatus } from "../src/lib
 test("financial migration and ledger balance preserve append-only reversals and credits",()=>{
  const db=new DatabaseSync(":memory:");
  try{
-  db.exec(readFileSync(new URL("../migrations/001_database_hardening.sql",import.meta.url),"utf8"));
+  db.exec("CREATE TABLE tenants(id TEXT PRIMARY KEY,name TEXT,slug TEXT UNIQUE); CREATE TABLE users(id TEXT PRIMARY KEY,tenant_id TEXT,email TEXT,password_hash TEXT,full_name TEXT); CREATE TABLE customers(id TEXT PRIMARY KEY,tenant_id TEXT,customer_code TEXT,full_name TEXT); CREATE TABLE packages(id TEXT PRIMARY KEY,tenant_id TEXT,name TEXT,speed_down_mbps INTEGER,speed_up_mbps INTEGER,monthly_price_pkr INTEGER); CREATE TABLE subscriptions(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT,package_id TEXT,status TEXT,started_at TEXT); CREATE TABLE invoices(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT,invoice_number TEXT,amount_pkr INTEGER,due_date TEXT,status TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP); CREATE TABLE payments(id TEXT PRIMARY KEY,tenant_id TEXT,invoice_id TEXT,amount_pkr INTEGER,method TEXT,reference TEXT,received_at TEXT DEFAULT CURRENT_TIMESTAMP); CREATE TABLE sessions(id TEXT); CREATE TABLE support_tickets(id TEXT); CREATE TABLE audit_logs(id TEXT); CREATE TABLE billing_runs(id TEXT); CREATE TABLE user_permissions(id TEXT);");
   db.exec(readFileSync(new URL("../migrations/002_financial_management.sql",import.meta.url),"utf8"));
   db.exec("CREATE TABLE schema_migrations(version TEXT PRIMARY KEY)");
   db.exec("INSERT INTO tenants(id,name,slug) VALUES('t','Test','test')");
