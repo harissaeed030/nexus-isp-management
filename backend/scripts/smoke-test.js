@@ -7,6 +7,7 @@ import { once } from "node:events";
 const dir=mkdtempSync(join(tmpdir(),"nexus-smoke-"));
 process.env.SQLITE_PATH=join(dir,"test.sqlite");
 process.env.CORS_ORIGINS="http://localhost";
+process.env.ROUTER_CREDENTIAL_KEY="33".repeat(32);
 const {default:app}=await import("../src/app.js");
 const {db}=await import("../src/config/database.js");
 const server=app.listen(0);
@@ -64,7 +65,7 @@ try{
  assert.equal(profile.data.data.subscriptions.length,1);
  assert.ok(profile.data.data.connectionHistory.length>=2);
  assert.ok(profile.data.data.subscriptionHistory.some(x=>x.event_type==="renewed"));
- const router=await request("/api/v1/routers","POST",{name:"Core Router",host:"192.0.2.1",apiPort:8728},token);
+ const router=await request("/api/v1/routers","POST",{name:"Core Router",host:"192.0.2.1",apiPort:8729,username:"router-test",password:"Router-Test-Secret-123"},token);
  assert.equal(router.status,201);
  const billingAttempts=await Promise.all([request("/api/v1/billing/generate","POST",{period:"2026-11"},token),request("/api/v1/billing/generate","POST",{period:"2026-11"},token)]);
  assert.equal(billingAttempts.filter(x=>x.status===201).length,1);
