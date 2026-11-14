@@ -27,7 +27,8 @@ The authenticated manual endpoint `POST /api/billing/generate` remains available
 
 - The Worker migration runner creates the customer portal account table on the first API request after deployment (or during the scheduled run).
 - Do not execute `worker/schema.sql` as an initialization script; it is a source-only schema snapshot.
-- This branch has not been deployed. Review the additive migration and Cron Trigger before any production deployment.
+- The candidate is deployed only to Cloudflare staging Worker `nexus-saas-api-staging`, bound to `nexus-saas-staging-db`; production Worker and D1 were not changed.
+- The staging migration runner executes on the first API request. That request and portal end-to-end flow remain pending; do not treat the staging candidate as production-ready.
 - No production D1 query, migration or data write was run as part of this change.
 - Configure `JWT_SECRET`, `PPPOE_ENCRYPTION_KEY` and the exact `ALLOWED_ORIGINS` in Worker secrets/variables; never put secrets in Pages JavaScript.
 - Customer online payment processing is not implemented until a verified payment gateway is selected and configured.
