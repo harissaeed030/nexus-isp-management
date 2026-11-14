@@ -58,11 +58,31 @@ try {
   ownerToken = owner.token;
   assert.ok(ownerToken, 'tenant registration must return an owner token');
 
+  secondTenantSlug = `nexus-stage-second-${suffix}`;
+  const secondTenantRegistration = await request('POST', '/api/auth/register', {
+    companyName: `NEXUS staging second tenant ${suffix}`,
+    slug: secondTenantSlug,
+    email: ownerEmail,
+    password,
+    name: 'Second Staging Owner'
+  });
+  const secondOwner = ok('same owner email may register a separate ISP tenant', secondTenantRegistration, 201);
+  secondOwnerToken = secondOwner.token;
+  assert.ok(secondOwnerToken, 'second tenant registration must return an owner token');
+  assert.notEqual(secondOwner.user.orgId, owner.user.orgId);
+
+  const ambiguousLogin = await request('POST', '/api/auth/login', { email: ownerEmail, password });
+  ok('ambiguous staff email login requires workspace slug', ambiguousLogin, 400);
   const tenantLogin = await request('POST', '/api/auth/login', {
     email: ownerEmail, password, workspace: tenantSlug
   });
-  const tenantLoginData = ok('staff login scoped to the selected workspace', tenantLogin, 200);
+  const tenantLoginData = ok('staff login scoped to the first workspace', tenantLogin, 200);
   assert.equal(tenantLoginData.user.orgId, owner.user.orgId);
+  const secondTenantLogin = await request('POST', '/api/auth/login', {
+    email: ownerEmail, password, workspace: secondTenantSlug
+  });
+  const secondTenantLoginData = ok('same staff email authenticates only in the second workspace', secondTenantLogin, 200);
+  assert.equal(secondTenantLoginData.user.orgId, secondOwner.user.orgId);
   const wrongWorkspaceLogin = await request('POST', '/api/auth/login', {
     email: ownerEmail, password, workspace: 'not-this-tenant'
   });
