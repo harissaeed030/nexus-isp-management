@@ -74,3 +74,13 @@ CREATE TRIGGER trg_payments_balance_update BEFORE UPDATE OF tenant_id,invoice_id
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_unallocated_immutable_delete BEFORE DELETE ON unallocated_payments BEGIN SELECT RAISE(ABORT,'unallocated payment records are retained for audit'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_unallocated_invoice_tenant_update
+BEFORE UPDATE OF status,allocated_invoice_id ON unallocated_payments
+WHEN NEW.status='allocated'
+BEGIN
+ SELECT CASE WHEN NOT EXISTS(
+   SELECT 1 FROM invoices WHERE id=NEW.allocated_invoice_id
+   AND tenant_id=NEW.tenant_id AND customer_id=NEW.customer_id
+ ) THEN RAISE(ABORT,'allocated invoice tenant or customer mismatch') END;
+END;
