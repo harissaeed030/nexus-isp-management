@@ -474,7 +474,9 @@ async function authReg(r,env,ip){
  if(!b.slug)return json({error:'A valid organization slug could not be generated'},400);
  const slug=b.slug.toLowerCase().replace(/[^a-z0-9-]/g,'').replace(/-+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);if(!slug)return json({error:'Invalid organization slug'},400);
  if(await env.DB.prepare('SELECT id FROM organizations WHERE slug=?').bind(slug).first())return json({error:'Slug taken'},409);
- const email=b.email.toLowerCase();if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first())return json({error:'Email registered'},409);
+ const email=b.email.toLowerCase();
+ // Email addresses are unique within an ISP workspace, not globally across the SaaS.
+ // The database's organization-scoped unique constraint remains the source of truth.
  const oid=uuid(),uid=uuid(),{hash,salt}=await hashPw(b.password);
  try{await env.DB.batch([env.DB.prepare('INSERT INTO organizations(id,name,slug,plan,email,phone)VALUES(?,?,?,?,?,?)').bind(oid,b.companyName,slug,'free',email,b.phone||null),env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(uid,oid,email,hash,salt,b.name,'owner',b.phone||null)]);}catch(e){const message=String(e?.message||'');if(/unique|constraint/i.test(message))return json({error:'Email or organization slug is already registered'},409);throw e;}
  await audit(env,oid,uid,'register','Company:'+b.companyName,ip);
