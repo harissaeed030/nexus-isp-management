@@ -118,7 +118,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
       status:b.status??customer.status,connection:b.connectionStatus??customer.connection_status,
       installationDate:b.installationDate??customer.installation_date
     };
-    if(!v.name||v.name.length>160||v.phone.length>40||!validEmail(v.email)||v.email.length>254)return fail(res,400,"Invalid customer name, phone or email.");
+    if(typeof v.name!=="string"||!v.name||v.name.length>160||typeof v.phone!=="string"||v.phone.length>40||typeof v.email!=="string"||!validEmail(v.email)||v.email.length>254||typeof v.address!=="string"||v.address.length>500||typeof v.serviceAddress!=="string"||v.serviceAddress.length>500||typeof v.area!=="string"||v.area.length>120)return fail(res,400,"Invalid customer name, contact details, service address or coverage area.");
     if(!customerStatuses.has(v.status)||!connectionStatuses.has(v.connection))return fail(res,400,"Invalid customer or connection status.");
     if(v.installationDate&&!validDate(v.installationDate))return fail(res,400,"Installation date must use YYYY-MM-DD.");
     withTransaction(db,()=>{
