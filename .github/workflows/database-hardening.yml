@@ -1,0 +1,24 @@
+name: Database hardening tests
+
+on:
+  push:
+    branches:
+      - task/01-database-hardening
+  pull_request:
+    branches:
+      - build/nexus-isp-core
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13"
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install
+      - name: Run syntax checks and automated tests
+        working-directory: backend
+        run: npm run verify

@@ -34,6 +34,21 @@ API health check: `http://127.0.0.1:4000/api/v1/health`.
 
 The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep this file private and backed up. Do not commit it.
 
+### Database migrations, backup and restore
+
+The database initializer maintains a `schema_migrations` ledger. Existing 0.2.0 databases are upgraded automatically on next startup by the additive migration in `backend/migrations/001_database_hardening.sql`; it preserves existing rows and adds tenant-consistency triggers and query indexes. Do not manually delete the SQLite file to apply a migration.
+
+Run commands from the `backend/` directory:
+
+```sh
+npm run db:backup
+npm run db:backup -- ./backups/before-upgrade.sqlite
+npm run db:restore -- ./backups/before-upgrade.sqlite
+npm run verify
+```
+
+Backups use SQLite's online-consistent `VACUUM INTO` operation, are written with owner-only file permissions where supported, and are checked with `PRAGMA integrity_check` and `PRAGMA foreign_key_check`. Restore refuses invalid backups, retains a validated pre-restore safety backup, and validates the restored file before replacing the live database. **Stop the Nexus server before restore**; restart it afterward so pending migrations can run. Keep backup files private and outside Git.
+
 ## First owner setup
 
 Send a POST request to `/api/v1/setup` with JSON:

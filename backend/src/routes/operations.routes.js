@@ -133,8 +133,8 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
         insert.run(id(),tenant,s.customer_id,invoiceNo,s.monthly_price_pkr,dueDate);created++;
       }
       db.prepare("INSERT INTO billing_runs(id,tenant_id,billing_period,invoices_created,created_by) VALUES(?,?,?,?,?)").run(id(),tenant,period,created,req.user.id);
-      db.exec("COMMIT");
       audit(req.user,"generate","billing_run",period);
+      db.exec("COMMIT");
       res.status(201).json({success:true,period,invoicesCreated:created,dueDate});
     }catch(e){
       try{db.exec("ROLLBACK")}catch{}
