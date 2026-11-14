@@ -35,10 +35,12 @@ export function createDatabaseBackup(sourcePath, destinationPath) {
   if (existsSync(destination)) throw new Error("Backup destination already exists; refusing to overwrite it.");
   mkdirSync(dirname(destination), { recursive: true });
   const db = new DatabaseSync(source);
+  const previousUmask = process.umask(0o077);
   try {
     db.exec("PRAGMA busy_timeout=10000");
     db.exec("VACUUM INTO " + quoteSql(destination));
   } finally {
+    process.umask(previousUmask);
     db.close();
   }
   try {
