@@ -10,7 +10,7 @@ const safeCustomer=c=>({id:c.id,accountNumber:c.account_number||c.customer_code,
 const templateVars=(body,customer)=>body.replace(/\{\{(name|accountNumber|phone|email)\}\}/g,(_,key)=>({name:customer.full_name,accountNumber:customer.account_number||customer.customer_code,phone:customer.phone||"",email:customer.email||""})[key]||"");
 function customerAuth(db,fail){
  return (req,res,next)=>{
-  const raw=(req.headers.authorization||"").replace(/^Bearer\\s+/i,"");
+  const raw=(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
   if(!raw)return fail(res,401,"Customer sign-in required.");
   const account=db.prepare("SELECT a.id account_id,a.tenant_id account_tenant_id,a.customer_id,a.password_hash,a.status account_status,c.* FROM customer_portal_sessions s JOIN customer_portal_accounts a ON a.id=s.account_id JOIN customers c ON c.id=a.customer_id WHERE s.token_hash=? AND s.expires_at>? AND a.status='active' AND c.status='active'").get(hashToken(raw),new Date().toISOString());
   if(!account)return fail(res,401,"Customer session expired or invalid.");
@@ -33,7 +33,9 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
  app.post("/api/v1/customer-portal/login",(req,res)=>{
   const b=req.body||{},identity=String(b.identity||"").trim(),password=b.password;
   if(!identity||typeof password!=="string")return fail(res,400,"Account number or email and password are required.");
-  const account=db.prepare("SELECT a.*,c.tenant_id customer_tenant,c.email,c.account_number,c.customer_code FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id WHERE (c.account_number=? OR c.customer_code=? OR c.email=? COLLATE NOCASE) AND a.status='active' AND c.status='active' ORDER BY a.created_at LIMIT 1").get(identity,identity,identity);
+  const matches=db.prepare("SELECT a.*,c.tenant_id customer_tenant,c.email,c.account_number,c.customer_code FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id WHERE (c.account_number=? OR c.customer_code=? OR c.email=? COLLATE NOCASE) AND a.status='active' AND c.status='active' ORDER BY a.created_at LIMIT 2").all(identity,identity,identity);
+  if(matches.length>1)return fail(res,409,"This account identifier exists in more than one ISP. Use a unique customer email or contact your ISP for the tenant-specific login ID.");
+  const account=matches[0];
   if(!account||!verifyPassword(password,account.password_hash))return fail(res,401,"Invalid customer login details.");
   const token=randomBytes(32).toString("base64url");
   db.prepare("INSERT INTO customer_portal_sessions(token_hash,account_id,expires_at) VALUES(?,?,?)").run(hashToken(token),account.id,new Date(Date.now()+7*86400000).toISOString());
@@ -41,7 +43,7 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   res.json({success:true,token,customer:{id:account.customer_id,accountNumber:account.account_number||account.customer_code}});
  });
  app.post("/api/v1/customer-portal/logout",portalAuth,(req,res)=>{
-  const raw=(req.headers.authorization||"").replace(/^Bearer\\s+/i,"");
+  const raw=(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
   db.prepare("DELETE FROM customer_portal_sessions WHERE token_hash=?").run(hashToken(raw));res.json({success:true});
  });
  app.get("/api/v1/customer-portal/me",portalAuth,(req,res)=>{
