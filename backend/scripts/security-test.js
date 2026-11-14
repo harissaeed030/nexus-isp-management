@@ -97,12 +97,6 @@ try {
   assert.equal((await req("/api/v1/auth/me")).status, 401);
   assert.equal((await req("/api/v1/customers")).headers.get("x-content-type-options"), "nosniff");
   assert.equal((await req("/api/v1/customers")).headers.get("x-frame-options"), "SAMEORIGIN");
-  for (let i = 0; i < 9; i++) {
-    const attempt = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
-    assert.equal(attempt.status, 401);
-  }
-  const throttled = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
-  assert.equal(throttled.status, 429, "Authentication limiter must block the 11th login attempt.");
   const passwordChange = await req("/api/v1/auth/password", "PUT", { currentPassword: "Strong-Test-Password-123", newPassword: "New-Strong-Test-Password-789" }, tokenOne);
   assert.equal(passwordChange.status, 200, "Password changes must succeed with the current password.");
   assert.equal((await req("/api/v1/auth/me", "GET", undefined, tokenOne)).status, 401, "Password changes must revoke all existing sessions.");
@@ -111,6 +105,13 @@ try {
   assert.equal(newLogin.status, 200, "The new password must authenticate.");
   assert.equal((await req("/api/v1/auth/logout", "POST", {}, newLogin.data.token)).status, 200);
   assert.equal((await req("/api/v1/auth/me", "GET", undefined, newLogin.data.token)).status, 401, "Logout must revoke the issued token.");
+
+  for (let i = 0; i < 9; i++) {
+    const attempt = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
+    assert.equal(attempt.status, 401);
+  }
+  const throttled = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
+  assert.equal(throttled.status, 429, "Authentication limiter must block the 11th login attempt.");
 
   const invalidProduction = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
     cwd: process.cwd(),
