@@ -1,0 +1,26 @@
+name: NEXUS staging portal E2E
+
+on:
+  # Manual-only: each run creates an isolated synthetic tenant in staging.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-staging-portal-e2e
+  cancel-in-progress: false
+
+jobs:
+  staging-portal-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run isolated staging customer portal journey
+        env:
+          NEXUS_STAGING_URL: https://nexus-saas-api-staging.harissaeed030.workers.dev
+        run: node worker/scripts/staging-portal-e2e.mjs

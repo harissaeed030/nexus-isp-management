@@ -17,3 +17,4 @@ jobs:
         run: |
           node --check worker/src/index.js
           node --check assets/js/app.js
+          node --check assets/js/customer-portal.js
