@@ -18,7 +18,7 @@ export class MikroTikApi {
  constructor({host,port=8729,username,password,timeout=8000,tlsOptions={}}){this.config={host,port,username,password,timeout,tlsOptions};}
  async connect(){const c=this.config,socket=c.port===8728?net.connect({host:c.host,port:c.port}):tls.connect({host:c.host,port:c.port,servername:c.host,...c.tlsOptions});await Promise.race([once(socket,"connect"),once(socket,"secureConnect"),new Promise((_,r)=>setTimeout(()=>r(new Error("Router connection timed out")),c.timeout))]);this.client=new RouterSocket(socket,c.timeout);try{await this.client.command(["/login", "="+ "name="+c.username, "="+ "password="+c.password]);return this;}catch(e){this.client.close();throw e;}}
  async command(path,params={}){if(!this.client)throw new Error("Router is not connected");const words=[path,...Object.entries(params).map(([k,v])=>"="+k+"="+String(v))];return this.client.command(words);}
- async test(){await this.connect();try{const rows=await this.command("/system/resource/print");return {identity:(await this.command("/system/identity/print"))[0]?.name||"MikroTik",version:rows[0]?.version||"unknown",board:rows[0]?.board_name||"unknown"};}finally{this.close();}}
+ async test(){if(!this.client)await this.connect();const rows=await this.command("/system/resource/print");return {identity:(await this.command("/system/identity/print"))[0]?.name||"MikroTik",version:rows[0]?.version||"unknown",board:rows[0]?.board_name||"unknown"};}
  close(){this.client?.close();this.client=null;}
 }
 export function createMikroTikAdapter(config){return new MikroTikApi(config);}
