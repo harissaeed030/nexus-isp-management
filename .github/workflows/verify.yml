@@ -1,0 +1,24 @@
+name: Nexus backend verification
+
+on:
+  push:
+    branches: [build/nexus-isp-core]
+  pull_request:
+    branches: [build/nexus-isp-core]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Verify backend and dashboard
+        working-directory: backend
+        run: npm run verify
