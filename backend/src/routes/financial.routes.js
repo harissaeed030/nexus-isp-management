@@ -49,8 +49,7 @@ export function registerFinancialRoutes(app,{db,auth,id,audit,fail}) {
     const b=req.body||{},amount=Number(b.amountPkr),methods=["cash","bank","jazzcash","easypaisa","other"],t=req.user.tenant_id;
     if(!b.customerId||!validAmount(amount)||!methods.includes(b.method))return fail(res,400,"Customer, positive amount and valid payment method are required.");
     if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,t))return fail(res,404,"Customer not found.");
-    const uid=id();db.prepare("INSERT INTO unallocated_payments(id,tenant_id,customer_id,amount_pkr,method,reference,created_by) VALUES(?,?,?,?,?,?,?)").run(uid,t,b.customerId,amount,b.method,b.reference||null,req.user.id);
-    audit(req.user,"create","unallocated_payment",uid);res.status(201).json({success:true,data:db.prepare("SELECT * FROM unallocated_payments WHERE id=?").get(uid)});
+    const uid=id();const row=withTransaction(db,()=>{db.prepare("INSERT INTO unallocated_payments(id,tenant_id,customer_id,amount_pkr,method,reference,created_by) VALUES(?,?,?,?,?,?,?)").run(uid,t,b.customerId,amount,b.method,b.reference||null,req.user.id);audit(req.user,"create","unallocated_payment",uid);return db.prepare("SELECT * FROM unallocated_payments WHERE id=?").get(uid);});res.status(201).json({success:true,data:row});
   });
   app.post("/api/v1/reconciliation/unallocated/:id/allocate",auth,(req,res)=>{
     const t=req.user.tenant_id;
@@ -85,8 +84,9 @@ export function registerFinancialRoutes(app,{db,auth,id,audit,fail}) {
     const collected=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) n FROM payments WHERE tenant_id=?"+dateFilter("received_at")).get(t,from||null,to||null).n;
     const refunded=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) n FROM payment_reversals WHERE tenant_id=?"+dateFilter("created_at")).get(t,from||null,to||null).n;
     const credits=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) n FROM credit_notes WHERE tenant_id=?"+dateFilter("created_at")).get(t,from||null,to||null).n;
-    const outstanding=db.prepare(`SELECT COALESCE(SUM(i.amount_pkr-COALESCE((SELECT SUM(p.amount_pkr) FROM payments p WHERE p.invoice_id=i.id),0)+COALESCE((SELECT SUM(r.amount_pkr) FROM payment_reversals r JOIN payments p ON p.id=r.payment_id WHERE p.invoice_id=i.id),0)-COALESCE((SELECT SUM(n.amount_pkr) FROM credit_notes n WHERE n.invoice_id=i.id),0)),0) n FROM invoices i WHERE i.tenant_id=? AND i.status<>'credited'`).get(t).n;
-    res.json({success:true,data:{from:from||null,to:to||null,billedPkr:billed,collectedPkr:collected,refundedPkr:refunded,creditNotesPkr:credits,outstandingPkr:outstanding,netCollectedPkr:collected-refunded}});
+    const outstanding=db.prepare(`SELECT COALESCE(SUM(MAX(0,i.amount_pkr-COALESCE((SELECT SUM(p.amount_pkr) FROM payments p WHERE p.invoice_id=i.id),0)+COALESCE((SELECT SUM(r.amount_pkr) FROM payment_reversals r JOIN payments p ON p.id=r.payment_id WHERE p.invoice_id=i.id),0)-COALESCE((SELECT SUM(n.amount_pkr) FROM credit_notes n WHERE n.invoice_id=i.id),0))),0) n FROM invoices i WHERE i.tenant_id=?`).get(t).n;
+    const unallocated=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) n FROM unallocated_payments WHERE tenant_id=? AND status='unallocated'").get(t).n;
+    res.json({success:true,data:{from:from||null,to:to||null,billedPkr:billed,collectedPkr:collected,refundedPkr:refunded,creditNotesPkr:credits,outstandingPkr:outstanding,unallocatedPkr:unallocated,netCollectedPkr:collected-refunded}});
   });
   app.get("/api/v1/invoices/:id/print",auth,(req,res)=>{
     const i=db.prepare("SELECT i.*,c.full_name,c.customer_code,c.phone,c.address FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=? AND i.tenant_id=?").get(req.params.id,req.user.tenant_id);
