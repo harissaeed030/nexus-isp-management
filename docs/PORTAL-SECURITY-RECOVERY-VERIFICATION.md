@@ -17,9 +17,9 @@ PR #21 contains:
 The PR's own verification records syntax checks and local in-memory SQLite checks, not a complete browser-to-Worker-to-D1 end-to-end test.
 
 ### Staging verification
-A read-only query of staging D1 `sqlite_master` returned 23 tables. It did **not** contain `customer_portal_accounts`. The staging Worker was not deployed with PR #21's portal routes, and the staging D1 has no tenant/user seed records. Therefore a real portal sign-in and customer journey cannot currently run against staging.
+A read-only query of staging D1 `sqlite_master` returned 23 tables. It did **not** contain `customer_portal_accounts`. The portal candidate Worker is now deployed to the isolated `nexus-saas-api-staging` Worker (version `606fc507-5d62-4cff-bef6-9ebe19714271`, 100% traffic) and is bound to `nexus-saas-staging-db`. The `JWT_SECRET` secret binding was retained. Staging D1 has no organization, user or customer records, and `customer_portal_accounts` has not yet been created because the Worker migration runner executes on the first API request. The verification environment could not reach the Worker HTTP endpoint, so that request and the portal journey were not executed.
 
-**Result: NOT RUN / BLOCKED**, not passed. Deploying the PR to staging and applying its additive migration is a prerequisite. Do not run that migration against production as part of this test.
+**Result: NOT RUN / BLOCKED**, not passed. A successful staging health request, migration check and synthetic-customer browser/API journey are still required. Do not run this migration against production as part of this test.
 
 ### Required E2E cases after staging integration
 1. Provision a synthetic customer portal account as owner/admin.
@@ -39,9 +39,10 @@ Use only synthetic data and a disposable staging tenant.
 This is an **internal source/configuration review**, not an independent third-party penetration test or certification.
 
 ### Confirmed source observations
-- Worker `audit()` catches and suppresses every D1 audit insert error. For security-sensitive and financial actions, this can leave the operation successful without a durable audit record. Define fail-closed behavior or alerting for critical events.
-- JWT verification accepts a correctly signed token when the `exp` claim is absent. Ensure every issuer always sets a bounded expiry and consider rejecting tokens without `exp`.
-- CORS currently treats every HTTPS hostname ending in `.nexus-isp-management.pages.dev` as trusted in addition to configured origins. Restrict this to exact approved origins unless preview subdomains are intentionally trusted and controlled.
+- The portal candidate now logs D1 audit-write failures server-side; it does not yet fail closed. Critical financial audit atomicity and alerting still require review.
+- JWT verification now rejects tokens without a numeric, future `exp` claim.
+- CORS now requires an exact configured origin (plus the exact canonical Pages origin); arbitrary Pages preview subdomains are not implicitly trusted.
+- The production `dev` Worker has a separate security patch in PR #25; it is not deployed. Production Worker/D1 remain unchanged.
 - The source has IP/email login-attempt tracking for staff authentication. Verify that the customer portal login path is also throttled and covered by automated tests.
 - Verify customer JWTs always include a principal type, organization ID, customer ID, token version and expiry; every portal query must constrain both organization and customer.
 - Verify password change, reset, disable and logout all increment token version and that old tokens fail immediately.
@@ -85,8 +86,8 @@ Do not import into, reset, or restore over production. Do not treat the staging 
 | Workstream | Status |
 |---|---|
 | Portal source review | Complete |
-| Portal E2E against staging | Blocked: portal routes/migration not deployed to staging |
-| Internal security review | Findings recorded; remediation and tests pending |
+| Portal E2E against staging | Blocked: staging Worker deployed; HTTP request/migration and synthetic customer journey not executed |
+| Internal security review | Source fixes prepared; runtime security tests pending |
 | Independent security review | Not completed; requires separate reviewer |
 | Staging D1 SQL export | Complete |
 | Restore into disposable D1 | Not completed |
