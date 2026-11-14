@@ -21,7 +21,7 @@ async function request(method, path, body, token) {
   const text = await response.text();
   let data;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text.slice(0, 300) }; }
-  return { response, data };
+  return { status: response.status, data, headers: response.headers };
 }
 function ok(label, response, expected) {
   assert.equal(response.status, expected, `${label}: expected HTTP ${expected}, got ${response.status}: ${JSON.stringify(response.data)}`);
