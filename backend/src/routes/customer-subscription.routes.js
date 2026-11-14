@@ -5,6 +5,7 @@ const validEmail = value => value == null || value === "" || /^[^\s@]+@[^\s@]+\.
 const customerStatuses = new Set(["active","inactive","blocked"]);
 const connectionStatuses = new Set(["pending","active","suspended","disconnected"]);
 const subscriptionStatuses = new Set(["pending","active","suspended","cancelled","expired"]);
+const clean = value => typeof value === "string" ? value.trim() : "";
 const like = value => "%" + String(value) + "%";
 
 export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
