@@ -20,7 +20,17 @@ export const PERMISSIONS = [
   { key: "routers.provision", group: "Network", label: "Manage PPPoE users and connections" },
   { key: "olts.read", group: "Network", label: "View OLT and ONU inventory" },
   { key: "olts.manage", group: "Network", label: "Manage OLT and ONU records" },
-  { key: "audit.read", group: "Administration", label: "View activity log" }
+  { key: "audit.read", group: "Administration", label: "View activity log" },
+  { key: "areas.read", group: "Coverage", label: "View coverage areas" },{ key: "areas.manage", group: "Coverage", label: "Manage coverage areas" },
+  { key: "locations.read", group: "Coverage", label: "View geographic locations" },{ key: "locations.manage", group: "Coverage", label: "Manage geographic locations" },
+  { key: "applications.read", group: "Applications", label: "View connection applications" },{ key: "applications.manage", group: "Applications", label: "Manage connection applications" },
+  { key: "field.read", group: "Field operations", label: "View technician assignments" },{ key: "field.manage", group: "Field operations", label: "Assign field technicians" },
+  { key: "partners.read", group: "Partners", label: "View dealers and sub-dealers" },{ key: "partners.manage", group: "Partners", label: "Manage dealers and sub-dealers" },
+  { key: "recovery.read", group: "Collections", label: "View recovery officers" },{ key: "recovery.manage", group: "Collections", label: "Manage recovery officers" },
+  { key: "collections.read", group: "Collections", label: "View and reconcile collections" },{ key: "collections.manage", group: "Collections", label: "Record cash collections" },
+  { key: "inventory.read", group: "Inventory", label: "View stock" },{ key: "inventory.manage", group: "Inventory", label: "Manage stock movements" },
+  { key: "notifications.read", group: "Communication", label: "View customer notifications" },{ key: "notifications.manage", group: "Communication", label: "Queue customer notifications" },
+  { key: "ledger.read", group: "Finance", label: "View customer ledgers" }
 ];
 export const permissionKeys = new Set(PERMISSIONS.map(item => item.key));
 export const ROLE_PERMISSIONS = {
@@ -53,6 +63,10 @@ export function permissionFor(path,method) {
   const verb=String(method||"GET").toUpperCase();
   const matches=base=>path===base||path.startsWith(base+"/");
   if(path==="/api/v1/dashboard")return verb==="GET"?"dashboard.read":null;
+  const business=[["/api/v1/coverage-areas","areas"],["/api/v1/locations","locations"],["/api/v1/applications","applications"],["/api/v1/field-assignments","field"],["/api/v1/partners","partners"],["/api/v1/recovery-officers","recovery"],["/api/v1/cash-collections","collections"],["/api/v1/operator-collections","collections"],["/api/v1/inventory","inventory"],["/api/v1/notifications","notifications"],["/api/v1/customers/","ledger"]];
+  for(const [base,key] of business){if(path===base||path.startsWith(base+"/")){if(key==="ledger")return verb==="GET"?"ledger.read":null;return verb==="GET"?key+".read":["POST","PATCH","DELETE"].includes(verb)?key+".manage":null;}}
+  if(path==="/api/v1/recharges")return verb==="POST"?"subscriptions.manage":null;
+  if(path==="/api/v1/business-modules/summary")return verb==="GET"?"areas.read":null;
   if(matches("/api/v1/customers"))return ({GET:"customers.read",POST:"customers.create",PATCH:"customers.update",DELETE:"customers.delete"})[verb]||null;
   if(matches("/api/v1/packages"))return verb==="GET"?"packages.read":["POST","PATCH"].includes(verb)?"packages.manage":null;
   if(matches("/api/v1/subscriptions"))return verb==="GET"?"subscriptions.read":["POST","PATCH"].includes(verb)?"subscriptions.manage":null;
