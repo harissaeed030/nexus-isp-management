@@ -1,0 +1,28 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { readFileSync } from "node:fs";
+import { nextInvoiceNumber, invoiceBalance, syncInvoiceStatus } from "../src/lib/financial.js";
+test("financial migration and ledger balance preserve append-only reversals and credits",()=>{
+ const db=new DatabaseSync(":memory:");
+ try{
+  db.exec(readFileSync(new URL("../migrations/001_database_hardening.sql",import.meta.url),"utf8"));
+  db.exec(readFileSync(new URL("../migrations/002_financial_management.sql",import.meta.url),"utf8"));
+  db.exec("CREATE TABLE schema_migrations(version TEXT PRIMARY KEY)");
+  db.exec("INSERT INTO tenants(id,name,slug) VALUES('t','Test','test')");
+  db.exec("INSERT INTO users(id,tenant_id,email,password_hash,full_name) VALUES('u','t','a@b.c','x','Owner')");
+  db.exec("INSERT INTO customers(id,tenant_id,customer_code,full_name) VALUES('c','t','C1','Customer')");
+  db.exec("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr) VALUES('i','t','c','OLD-1',1000)");
+  db.exec("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method) VALUES('p','t','i',400,'cash')");
+  assert.equal(nextInvoiceNumber(db,"t","2026-11"),"INV-202611-000001");
+  assert.equal(nextInvoiceNumber(db,"t","2026-11"),"INV-202611-000002");
+  db.exec("INSERT INTO payment_reversals(id,tenant_id,payment_id,amount_pkr,reason,created_by) VALUES('r','t','p',100,'bank refund','u')");
+  db.exec("INSERT INTO credit_notes(id,tenant_id,invoice_id,amount_pkr,reason,created_by) VALUES('n','t','i',200,'service adjustment','u')");
+  const balance=invoiceBalance(db,"t","i");
+  assert.equal(balance.balance,500);
+  syncInvoiceStatus(db,"t","i");
+  assert.equal(db.prepare("SELECT status FROM invoices WHERE id='i'").get().status,"partial");
+  assert.throws(()=>db.exec("DELETE FROM payment_reversals WHERE id='r'"),/append-only/);
+  assert.throws(()=>db.exec("UPDATE credit_notes SET amount_pkr=1 WHERE id='n'"),/append-only/);
+ }finally{db.close();}
+});
