@@ -39,7 +39,7 @@ The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep th
 
 ### Database migrations, backup and restore
 
-The database initializer maintains a `schema_migrations` ledger. Existing 0.2.0 databases are upgraded automatically on next startup by additive migrations in `backend/migrations/001_database_hardening.sql` and `backend/migrations/002_customer_subscription_management.sql`; they preserve existing rows and add tenant-consistency triggers, customer account sequencing, connection/subscription history and query indexes. Do not manually delete the SQLite file to apply a migration.
+The database initializer maintains a `schema_migrations` ledger. Existing 0.2.0 databases are upgraded automatically on next startup by additive migrations in `backend/migrations/001_database_hardening.sql` through `backend/migrations/005_isp_business_modules.sql`; they preserve existing rows and add tenant-consistency triggers, customer account sequencing, connection/subscription history and query indexes. Do not manually delete the SQLite file to apply a migration.
 
 Run commands from the `backend/` directory:
 
@@ -89,6 +89,7 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - `GET|POST /api/v1/payments`
 - `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
 - `GET /api/v1/audit-logs`
+- Task 10: `GET|POST /api/v1/coverage-areas`, `GET|POST /api/v1/locations`, `GET|POST /api/v1/applications`, `GET|POST /api/v1/field-assignments`, `GET|POST /api/v1/partners`, `GET|POST /api/v1/recovery-officers`, `GET|POST /api/v1/cash-collections`, `GET /api/v1/operator-collections`, `GET|POST /api/v1/inventory`, `POST /api/v1/inventory/:id/movements`, `POST /api/v1/recharges`, `GET|POST /api/v1/notifications`, `GET /api/v1/customers/:id/ledger`. See endpoint reference for PATCH/DELETE and detailed request bodies.
 - `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
 - `GET|POST /api/v1/olts`, `PATCH|DELETE /api/v1/olts/:id`, `GET /api/v1/olts/:id/capabilities`
 - `GET /api/v1/olts/:id/pons`, `PATCH /api/v1/pons/:id`
