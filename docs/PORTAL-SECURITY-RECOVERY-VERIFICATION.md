@@ -17,9 +17,11 @@ PR #21 contains:
 The PR's own verification records syntax checks and local in-memory SQLite checks, not a complete browser-to-Worker-to-D1 end-to-end test.
 
 ### Staging verification
-A read-only query of staging D1 `sqlite_master` returned 23 tables. It did **not** contain `customer_portal_accounts`. The portal candidate Worker is now deployed to the isolated `nexus-saas-api-staging` Worker (version `606fc507-5d62-4cff-bef6-9ebe19714271`, 100% traffic) and is bound to `nexus-saas-staging-db`. The `JWT_SECRET` secret binding was retained. Staging D1 has no organization, user or customer records, and `customer_portal_accounts` has not yet been created because the Worker migration runner executes on the first API request. The verification environment could not reach the Worker HTTP endpoint, so that request and the portal journey were not executed.
+A read-only query of staging D1 initially returned 23 tables and confirmed `customer_portal_accounts` was missing. The isolated candidate Worker is deployed to `nexus-saas-api-staging` (version `606fc507-5d62-4cff-bef6-9ebe19714271`, 100% traffic), bound to `nexus-saas-staging-db`, with the existing `JWT_SECRET` binding retained. Because the Worker HTTP endpoint could not be reached from this verification runtime, the exact additive `CREATE TABLE IF NOT EXISTS customer_portal_accounts` migration was applied directly to the empty staging D1.
 
-**Result: NOT RUN / BLOCKED**, not passed. A successful staging health request, migration check and synthetic-customer browser/API journey are still required. Do not run this migration against production as part of this test.
+A staging-only database smoke test then inserted a synthetic organization, customer and portal account and read the row back successfully. Duplicate customer-account and invalid-status constraints both rejected invalid inserts. The synthetic organization was deleted and the portal-account table was verified to contain zero remaining smoke-test rows. Staging currently has zero organizations, users, customers, invoices, payments and subscriptions.
+
+A repeatable HTTP E2E script (`worker/scripts/staging-portal-e2e.mjs`) and GitHub Actions workflow (`.github/workflows/staging-portal-e2e.yml`) were added to PR #21. `node --check` passed locally. However, the workflow run has not produced an observable result through the available GitHub connector, and the verification runtime cannot resolve/reach the Worker HTTP host. Therefore this is a **database migration/schema smoke-test PASS**, but the full HTTP/browser portal journey remains **NOT VERIFIED**. Do not run this migration against production as part of this test.
 
 ### Required E2E cases after staging integration
 1. Provision a synthetic customer portal account as owner/admin.
@@ -86,14 +88,15 @@ Do not import into, reset, or restore over production. Do not treat the staging 
 - No production D1 export/import, migration, query write or restore was performed.
 - No production Worker or Pages deployment was performed.
 - No production secrets were read or changed.
-- The work above is limited to read-only staging inspection and a staging D1 export.
+- The work above includes read-only production checks, an additive migration and temporary synthetic-fixture writes in staging only; all synthetic fixtures were deleted.
 
 ## Final gate status
 
 | Workstream | Status |
 |---|---|
 | Portal source review | Complete |
-| Portal E2E against staging | Blocked: staging Worker deployed; HTTP request/migration and synthetic customer journey not executed |
+| Portal D1 schema smoke test | Pass: additive table created, insert/read and constraint checks passed, fixtures cleaned |
+| Portal HTTP/API and browser E2E | Not verified: runner result unavailable and Worker host unreachable from this runtime |
 | Internal security review | Source fixes prepared; runtime security tests pending |
 | Independent security review | Not completed; requires separate reviewer |
 | Staging D1 SQL export | Complete |
