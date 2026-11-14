@@ -1,0 +1,27 @@
+name: NEXUS release-gate CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install --no-audit --no-fund
+      - name: Run backend syntax, smoke and security tests
+        working-directory: backend
+        run: npm run verify
+      - name: Check Worker syntax
+        run: node --check worker/src/index.js
