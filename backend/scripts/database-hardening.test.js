@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withTransaction } from "../src/lib/transactions.js";
@@ -38,6 +38,12 @@ test("backup is integrity-checked and restore preserves the pre-restore safety c
     createFixture(source, "backup-value");
     createDatabaseBackup(source, backup);
     assert.deepEqual(validateDatabaseFile(backup), { valid: true, integrity: "ok", foreignKeyViolations: 0 });
+    const invalid = join(dir, "invalid.sqlite");
+    writeFileSync(invalid, "not a sqlite database");
+    assert.throws(() => restoreDatabaseBackup({ databasePath: live, backupPath: invalid }));
+    const beforeRestore = new DatabaseSync(live);
+    try { assert.equal(beforeRestore.prepare("SELECT marker FROM tenants WHERE id='tenant'").get().marker, "live-before-restore"); }
+    finally { beforeRestore.close(); }
     const restored = restoreDatabaseBackup({ databasePath: live, backupPath: backup });
     assert.equal(existsSync(restored.safetyCopy), true);
     const db = new DatabaseSync(live);
