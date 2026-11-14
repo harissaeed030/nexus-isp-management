@@ -40,7 +40,7 @@ try{
  assert.equal(pack.status,201);
  const sub=await request("/api/v1/subscriptions","POST",{customerId:customer.data.data.id,packageId:pack.data.data.id,status:"active"},token);
  assert.equal(sub.status,201);
- assert.match(customer.data.data.account_number,/^NXS-\\d{7}$/);
+ assert.match(customer.data.data.account_number,/^NXS-[0-9]{7}$/);
  assert.equal(customer.data.data.connection_status,"pending");
  assert.equal(db.prepare("SELECT COUNT(*) n FROM schema_migrations WHERE version='002_customer_subscription_management'").get().n,1);
  const installDate=new Date().toISOString().slice(0,10);
