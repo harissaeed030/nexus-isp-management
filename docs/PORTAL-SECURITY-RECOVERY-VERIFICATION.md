@@ -62,6 +62,13 @@ A D1 SQL export was successfully completed for the **staging database only** usi
 
 The signed export URL is temporary and is intentionally not committed to GitHub.
 
+A fresh staging export was also completed on 2026-11-14 after the staging Worker candidate was deployed:
+- Export bookmark: `00000016-00000000-00005123-bf2291ec0cc44577ea35ecc31763f492`
+- Export file: `194f62e2-2766-48ab-be17-81248610c0cd-00000016-00000000-00005123-bf2291ec0cc44577ea35ecc31763f492.sql`
+- Export status: `complete`
+
+The verification environment could not retrieve the temporary R2 download URL or upload the SQL to a disposable D1 database. Therefore the restore drill remains **NOT COMPLETED**; do not treat either export as a proven recoverable backup until a separate restore succeeds.
+
 ### Restore status
 **NOT COMPLETED.** No import into a separate disposable D1 database was performed, so this export is not yet a proven recoverable backup. A successful restore drill must:
 1. Create a separate disposable D1 database.
