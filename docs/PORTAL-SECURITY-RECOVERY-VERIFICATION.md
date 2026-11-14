@@ -120,7 +120,7 @@ This deployment inventory is important because earlier notes described version 1
 - PR #23 (this verification document) remains open.
 - PR #25 (production Worker security hardening) remains open on `dev`; it is not the deployed production Worker.
 - Staging portal HTTP E2E run #43563303463 completed successfully.
-- Worker syntax checks run #75 completed successfully. The latest documentation commit's syntax workflow is still running at the time of this update.
+- Worker syntax checks run #75 completed successfully. The latest documentation commit `52c41131213bcffdcdc54918fb488e4cbd99ab08` also passed Worker checks in run [#43564043780](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43564043780).
 
 | Workstream | Status |
 |---|---|
