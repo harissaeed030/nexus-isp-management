@@ -55,7 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_tenant_received ON payments(tenant_id,re
 const migrationDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");
 db.exec("CREATE TABLE IF NOT EXISTS schema_migrations(version TEXT PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
 const applied = new Set(db.prepare("SELECT version FROM schema_migrations").all().map(row => row.version));
-for (const name of readdirSync(migrationDirectory).filter(name => /^\\d+_.+\\.sql$/.test(name)).sort()) {
+for (const name of readdirSync(migrationDirectory).filter(name => /^\d+_.+\.sql$/.test(name)).sort()) {
   const version = name.split("_", 1)[0];
   if (applied.has(version)) continue;
   const sql = readFileSync(resolve(migrationDirectory, name), "utf8");
