@@ -95,7 +95,7 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   res.json({success:true,data:db.prepare("SELECT * FROM notification_templates WHERE tenant_id=? ORDER BY event_key").all(req.user.tenant_id)});
  });
  app.post("/api/v1/notifications/templates",auth,(req,res)=>{
-  const b=req.body||{},name=String(b.name||"").trim(),eventKey=String(b.eventKey||"").trim(),body=String(b.body||"").trim(),channel=b.channel||"whatsapp";
+  const b=req.body||{},name=String(b.name||"").trim(),eventKey=String(b.eventKey||"").trim(),body=String(b.body||"").trim(),channel=b.channel||"whatsapp",providerName=String(b.providerTemplateName||"").trim(),language=String(b.languageCode||"en_US").trim();
   if(!name||name.length>100||!/^[a-z][a-z0-9_.-]{1,79}$/.test(eventKey)||!body||body.length>4096||channel!=="whatsapp")return fail(res,400,"Provide a template name, valid event key and WhatsApp message body (max 4096 characters).");
   const tid=id();
   try{db.prepare("INSERT INTO notification_templates(id,tenant_id,name,event_key,channel,body,provider_template_name,language_code,enabled) VALUES(?,?,?,?,?,?,?,?,?)").run(tid,req.user.tenant_id,name,eventKey,channel,body,providerName||null,language,b.enabled===false?0:1);}
@@ -120,8 +120,8 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   const template=db.prepare("SELECT * FROM notification_templates WHERE id=? AND tenant_id=? AND enabled=1").get(b.templateId,req.user.tenant_id);
   if(!template)return fail(res,404,"Enabled notification template not found.");
   if(!customer.phone)return fail(res,400,"Customer phone number is missing.");
-  const nid=id(),body=templateVars(template.body,customer);
-  db.prepare("INSERT INTO notification_outbox(id,tenant_id,customer_id,template_id,channel,destination,body,status,next_attempt_at) VALUES(?,?,?,?,?,?,?,?,?)").run(nid,req.user.tenant_id,customer.id,template.id,"whatsapp",customer.phone,body,"queued",new Date().toISOString());
+  const nid=id(),body=templateVars(template.body,customer),keys=[...template.body.matchAll(/\{\{(name|accountNumber|phone|email)\}\}/g)].map(x=>x[1]),values={name:customer.full_name,accountNumber:customer.account_number||customer.customer_code,phone:customer.phone||"",email:customer.email||""},parameters=keys.map(k=>String(values[k]??""));
+  db.prepare("INSERT INTO notification_outbox(id,tenant_id,customer_id,template_id,channel,destination,body,provider_template_name,language_code,template_parameters,status,next_attempt_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)").run(nid,req.user.tenant_id,customer.id,template.id,"whatsapp",customer.phone,body,template.provider_template_name,template.language_code,JSON.stringify(parameters),"queued",new Date().toISOString());
   res.status(202).json({success:true,data:{id:nid,status:"queued"}});
  });
  const deliver=async(notification,tenantId)=>{
@@ -151,6 +151,11 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   return fail(res,400,"Invalid webhook verification request.");
  });
  app.post("/api/v1/notifications/whatsapp/webhook",(req,res)=>{
+  if(!env.whatsappAppSecret)return fail(res,503,"WhatsApp webhook signature secret is not configured.");
+  const signature=String(req.headers["x-hub-signature-256"]||"");
+  const expected="sha256="+createHmac("sha256",env.whatsappAppSecret).update(req.rawBody||Buffer.from(JSON.stringify(req.body||{}))).digest("hex");
+  const left=Buffer.from(signature),right=Buffer.from(expected);
+  if(left.length!==right.length||!timingSafeEqual(left,right))return fail(res,401,"Invalid WhatsApp webhook signature.");
   const entries=req.body?.entry||[];
   for(const entry of entries)for(const change of entry.changes||[])for(const status of change.value?.statuses||[]){
    const messageId=status.id,state=status.status;
