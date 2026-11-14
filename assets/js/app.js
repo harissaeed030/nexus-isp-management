@@ -203,7 +203,7 @@ const moduleSlug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,
 const moduleNav=moduleGroups.map(([group,items])=>'<div class="nav-label" style="margin-top:10px">'+group+'</div>'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span>•</span>'+esc(item)+'</a>').join("")).join("");
 nav?.insertAdjacentHTML("beforeend",moduleNav);
 nav?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
- e.preventDefault();const name=a.dataset.module;if(name==="TR-069 / ACS"||name==="Connection Status"){load("tr069");$("#sidebar")?.classList.remove("open");return;}
+ e.preventDefault();const name=a.dataset.module;if(["New Messages","Expiry Messages","WhatsApp Draft Messages","Sent Messages"].includes(name)){window.location.href="/notifications";return;}if(name==="TR-069 / ACS"||name==="Connection Status"){load("tr069");$("#sidebar")?.classList.remove("open");return;}
  const descriptions={
  "Area / Coverage":"Define service zones, neighborhoods and coverage boundaries.",
  "Country, City & Locality":"Organize customer locations and service areas.",
