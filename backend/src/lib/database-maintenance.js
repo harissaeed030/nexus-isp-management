@@ -31,6 +31,7 @@ export function createDatabaseBackup(sourcePath, destinationPath) {
   const source = resolve(sourcePath);
   const destination = resolve(destinationPath);
   if (source === destination) throw new Error("Backup destination must differ from the live database.");
+  if (!existsSync(source)) throw new Error("Live database file does not exist.");
   if (existsSync(destination)) throw new Error("Backup destination already exists; refusing to overwrite it.");
   mkdirSync(dirname(destination), { recursive: true });
   const db = new DatabaseSync(source);
@@ -66,6 +67,8 @@ export function restoreDatabaseBackup({ databasePath, backupPath }) {
     } finally {
       active.close();
     }
+    rmSync(database + "-wal", { force: true });
+    rmSync(database + "-shm", { force: true });
   }
 
   const safetyCopy = existsSync(database)
