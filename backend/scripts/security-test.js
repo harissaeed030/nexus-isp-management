@@ -33,6 +33,12 @@ try {
   assert.equal(first.status, 201);
   const tokenOne = first.data.token;
   assert.equal((await req("/api/v1/auth/login", "POST", { email: "owner-one@example.test", password: "wrong-password" })).status, 401, "Invalid credentials must be rejected.");
+  for (let i = 0; i < 9; i++) {
+    const attempt = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
+    assert.equal(attempt.status, 401);
+  }
+  const throttled = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
+  assert.equal(throttled.status, 429, "Authentication limiter must block the 11th login attempt.");
   const customerOne = await req("/api/v1/customers", "POST", { fullName: "Synthetic Subscriber One" }, tokenOne);
   assert.equal(customerOne.status, 201);
   const packageOne = await req("/api/v1/packages", "POST", {
@@ -106,12 +112,6 @@ try {
   assert.equal((await req("/api/v1/auth/logout", "POST", {}, newLogin.data.token)).status, 200);
   assert.equal((await req("/api/v1/auth/me", "GET", undefined, newLogin.data.token)).status, 401, "Logout must revoke the issued token.");
 
-  for (let i = 0; i < 9; i++) {
-    const attempt = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
-    assert.equal(attempt.status, 401);
-  }
-  const throttled = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
-  assert.equal(throttled.status, 429, "Authentication limiter must block the 11th login attempt.");
 
   const invalidProduction = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
     cwd: process.cwd(),
