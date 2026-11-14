@@ -157,9 +157,9 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
     if(!customerId||!packageId)return fail(res,400,"Customer and package are required.");
     if(!subscriptionStatuses.has(status)||status==="expired")return fail(res,400,"Invalid initial subscription status.");
     const startedAt=b.startedAt||new Date().toISOString().slice(0,10),expiresAt=b.expiresAt||null;
-    if(typeof startedAt!=="string"||!validDate(startedAt.slice(0,10))||(expiresAt&&!validDate(expiresAt)))return fail(res,400,"Subscription dates must use YYYY-MM-DD.");
+    if(typeof startedAt!=="string"||!validDate(startedAt.slice(0,10))||(expiresAt&&!validDate(expiresAt))||(expiresAt&&expiresAt<startedAt.slice(0,10)))return fail(res,400,"Subscription dates must be valid YYYY-MM-DD values and expiry cannot precede the start date.");
     const customer=getCustomer(customerId,req.user.tenant_id),pack=db.prepare("SELECT * FROM packages WHERE id=? AND tenant_id=? AND status='active'").get(packageId,req.user.tenant_id);
-    if(!customer||!pack)return fail(res,404,"Active customer and package in this workspace are required.");
+    if(!customer||customer.status!=="active"||!pack)return fail(res,404,"Active customer and package in this workspace are required.");
     const subscriptionId=id();
     withTransaction(db,()=>{
       db.prepare("INSERT INTO subscriptions(id,tenant_id,customer_id,package_id,status,started_at,expires_at) VALUES(?,?,?,?,?,?,?)")
@@ -180,7 +180,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
     if(!sub)return fail(res,404,"Subscription not found.");
     const b=req.body||{},status=b.status??sub.status,packageId=b.packageId??sub.package_id;
     const startedAt=(b.startedAt??(sub.started_at?String(sub.started_at).slice(0,10):null))||null,expiresAt=(b.expiresAt??sub.expires_at)||null;
-    if(!subscriptionStatuses.has(status)|| (startedAt&&!validDate(String(startedAt).slice(0,10))) || (expiresAt&&!validDate(expiresAt)))return fail(res,400,"Invalid subscription status or dates.");
+    if(!subscriptionStatuses.has(status)|| (startedAt&&!validDate(String(startedAt).slice(0,10))) || (expiresAt&&!validDate(expiresAt)) || (startedAt&&expiresAt&&expiresAt<String(startedAt).slice(0,10)))return fail(res,400,"Invalid subscription status or dates; expiry cannot precede start date.");
     const pack=db.prepare("SELECT * FROM packages WHERE id=? AND tenant_id=?").get(packageId,req.user.tenant_id);
     if(!pack)return fail(res,404,"Package not found in this workspace.");
     withTransaction(db,()=>{
