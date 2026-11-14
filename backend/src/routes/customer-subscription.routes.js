@@ -63,9 +63,11 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
     try {
       const created=withTransaction(db,()=>{
         db.prepare("INSERT OR IGNORE INTO tenant_customer_sequences(tenant_id,next_value) VALUES(?,1)").run(req.user.tenant_id);
-        const sequence=db.prepare("SELECT next_value FROM tenant_customer_sequences WHERE tenant_id=?").get(req.user.tenant_id).next_value;
+        const storedNext=db.prepare("SELECT next_value FROM tenant_customer_sequences WHERE tenant_id=?").get(req.user.tenant_id).next_value;
+        const existingMax=db.prepare("SELECT COALESCE(MAX(CAST(SUBSTR(account_number,5) AS INTEGER)),0) value FROM customers WHERE tenant_id=? AND account_number GLOB 'NXS-[0-9]*'").get(req.user.tenant_id).value;
+        const sequence=Math.max(storedNext,existingMax+1);
         const accountNumber="NXS-"+String(sequence).padStart(7,"0");
-        db.prepare("UPDATE tenant_customer_sequences SET next_value=next_value+1 WHERE tenant_id=?").run(req.user.tenant_id);
+        db.prepare("UPDATE tenant_customer_sequences SET next_value=? WHERE tenant_id=?").run(sequence+1,req.user.tenant_id);
         db.prepare("INSERT INTO customers(id,tenant_id,customer_code,account_number,full_name,phone,email,address,service_address,coverage_area,installation_date,status,connection_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
           .run(customerId,req.user.tenant_id,accountNumber,accountNumber,name,phone||null,email||null,address||null,serviceAddress||null,area||null,b.installationDate||null,status,connection);
         const customer=getCustomer(customerId,req.user.tenant_id);
