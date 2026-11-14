@@ -14,25 +14,31 @@ PR #21 contains:
 - Owner/admin customer portal account provisioning and disable/reset routes.
 - A Worker-side migration that creates `customer_portal_accounts`.
 
-The PR's verification records syntax checks and staging HTTP journey evidence, but not a complete browser-driven Android Chrome test. The recorded journey reaches customer login, reads, invoice visibility, complaint submission and logout. The final HTTP 401 assertions after logout are not independently confirmed from retrievable workflow logs.
+### Staging HTTP E2E
+The staging HTTP E2E workflow completed successfully:
+- Workflow run: [#43563303463](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43563303463)
+- Commit tested: `3c8787ded3356f9e44e9d8bf466ee6f0d6c6f935`
+- Job: `staging-portal-e2e` — **success**
+- The script's assertions cover health/D1 connectivity, tenant registration, owner authentication, customer/package/subscription/invoice creation, portal account provisioning, customer login, portal profile/dashboard/subscription/invoice/payment/ticket reads, own-invoice visibility, complaint submission, logout, revoked-token HTTP 401 and unauthenticated admin API HTTP 401.
 
-### Staging verification
+This is a successful API-level staging E2E run. It is not a browser-driven Android Chrome test and does not cover every negative/IDOR/password-change scenario listed below.
+
+### Staging state and test cleanup
 The staging Worker candidate `nexus-saas-api-staging` is deployed at 100% on version `606fc507-5d62-4cff-bef6-9ebe19714271`, bound to `nexus-saas-staging-db`. The additive `customer_portal_accounts` table exists in staging.
 
-Staging D1 read-only inventory currently shows 24 application tables, including `customer_portal_accounts`. Counts are zero for organizations, users, customers, packages, subscriptions, invoices, payments, portal accounts, support tickets, audit log and notifications. This confirms the database is clean now; it does not by itself prove a full browser E2E pass.
+Staging D1 read-only inventory currently shows 24 application tables, including `customer_portal_accounts`. Counts are zero for organizations, users, customers, packages, subscriptions, invoices, payments, portal accounts, support tickets, audit log and notifications.
 
 The repeatable HTTP E2E script is `worker/scripts/staging-portal-e2e.mjs`, with a manual-only workflow at `.github/workflows/staging-portal-e2e.yml`. The script creates a synthetic tenant and associated records but does not implement a cleanup/finally phase. The previously recorded synthetic data cleanup was performed separately. **Do not rerun the workflow until automatic cleanup is implemented or a documented cleanup procedure is guaranteed**, otherwise test records may accumulate.
 
 ### Remaining portal tests
-1. Run the full HTTP E2E assertions and retain workflow logs, including revoked-token and unauthenticated admin 401 results.
-2. Verify incorrect credentials, disabled portal account and wrong workspace.
-3. Verify cross-customer invoice and ticket IDs return no data.
-4. Change password; verify old password and old token are rejected.
-5. Verify disable/reset revokes existing tokens.
-6. Run Android Chrome viewport, keyboard, form and invoice-print checks.
-7. Add safe synthetic-tenant cleanup to the automated test lifecycle.
+1. Verify incorrect credentials, disabled portal account and wrong workspace.
+2. Verify cross-customer invoice and ticket IDs return no data.
+3. Change password; verify old password and old token are rejected.
+4. Verify disable/reset revokes existing tokens.
+5. Run Android Chrome viewport, keyboard, form and invoice-print checks.
+6. Add safe synthetic-tenant cleanup to the automated test lifecycle.
 
-**Portal status:** staging flow evidenced through logout and complaint submission; final 401 assertions and browser/mobile checks remain unverified.
+**Portal status:** staging API E2E PASS for the exact journey and assertions listed above; browser/mobile and additional negative/IDOR/password-change tests remain unverified.
 
 ## 2. Security review
 
@@ -113,12 +119,14 @@ This deployment inventory is important because earlier notes described version 1
 - PR #21 (customer portal) remains open/draft.
 - PR #23 (this verification document) remains open.
 - PR #25 (production Worker security hardening) remains open on `dev`; it is not the deployed production Worker.
-- GitHub Actions Worker checks run #75 completed successfully. This is a syntax check, not a runtime security review or production acceptance test.
+- Staging portal HTTP E2E run #43563303463 completed successfully.
+- Worker syntax checks run #75 completed successfully. The latest documentation commit's syntax workflow is still running at the time of this update.
 
 | Workstream | Status |
 |---|---|
 | Portal source review | Complete |
-| Staging portal journey | Partial pass: journey evidence through logout/complaint; final 401 assertions and Android browser checks unverified |
+| Staging portal HTTP E2E | Pass: run #43563303463, including logout revocation and unauthenticated 401 assertions |
+| Android browser/mobile checks | Not run |
 | Staging synthetic-data cleanup | Current D1 counts zero; E2E script still needs automatic cleanup |
 | Internal security review | Partial; findings recorded |
 | Independent security review | Not completed |
@@ -127,4 +135,4 @@ This deployment inventory is important because earlier notes described version 1
 | Production Worker portal/security release | Not deployed; current production script lacks portal and hardening |
 | Production D1 changes | None |
 
-**Release decision: NO-GO.** Do not merge/deploy the portal or security candidate to production until the independent review, final HTTP/browser assertions, automated test cleanup, disposable restore drill and production deployment-history reconciliation are complete.
+**Release decision: NO-GO.** Do not merge/deploy the portal or security candidate to production until the independent review, remaining negative/browser assertions, automated test cleanup, disposable restore drill and production deployment-history reconciliation are complete.
