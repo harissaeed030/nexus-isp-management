@@ -72,3 +72,5 @@ CREATE TRIGGER trg_payments_balance_update BEFORE UPDATE OF tenant_id,invoice_id
  THEN RAISE(ABORT,'payment exceeds adjusted invoice balance') END;
  SELECT CASE WHEN NEW.method NOT IN ('cash','bank','jazzcash','easypaisa','other') THEN RAISE(ABORT,'unsupported payment method') END;
 END;
+
+CREATE TRIGGER IF NOT EXISTS trg_unallocated_immutable_delete BEFORE DELETE ON unallocated_payments BEGIN SELECT RAISE(ABORT,'unallocated payment records are retained for audit'); END;
