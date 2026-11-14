@@ -86,3 +86,35 @@ BEFORE INSERT ON audit_logs WHEN NEW.actor_user_id IS NOT NULL BEGIN
   SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.actor_user_id AND tenant_id=NEW.tenant_id)
     THEN RAISE(ABORT,'audit actor tenant mismatch') END;
 END;
+
+CREATE TRIGGER IF NOT EXISTS trg_packages_constraints_insert
+BEFORE INSERT ON packages BEGIN
+  SELECT CASE WHEN NEW.speed_down_mbps < 1 OR NEW.speed_up_mbps < 1
+    THEN RAISE(ABORT,'package speeds must be positive') END;
+  SELECT CASE WHEN NEW.monthly_price_pkr < 0
+    THEN RAISE(ABORT,'package price must be non-negative') END;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_packages_constraints_update
+BEFORE UPDATE OF speed_down_mbps,speed_up_mbps,monthly_price_pkr ON packages BEGIN
+  SELECT CASE WHEN NEW.speed_down_mbps < 1 OR NEW.speed_up_mbps < 1
+    THEN RAISE(ABORT,'package speeds must be positive') END;
+  SELECT CASE WHEN NEW.monthly_price_pkr < 0
+    THEN RAISE(ABORT,'package price must be non-negative') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_payments_balance_insert
+BEFORE INSERT ON payments BEGIN
+  SELECT CASE WHEN NEW.amount_pkr + COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE invoice_id=NEW.invoice_id),0) >
+    COALESCE((SELECT amount_pkr FROM invoices WHERE id=NEW.invoice_id AND tenant_id=NEW.tenant_id),-1)
+    THEN RAISE(ABORT,'payment exceeds invoice total') END;
+  SELECT CASE WHEN NEW.method NOT IN ('cash','bank','jazzcash','easypaisa','other')
+    THEN RAISE(ABORT,'unsupported payment method') END;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_payments_balance_update
+BEFORE UPDATE OF tenant_id,invoice_id,amount_pkr,method ON payments BEGIN
+  SELECT CASE WHEN NEW.amount_pkr + COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE invoice_id=NEW.invoice_id AND id<>OLD.id),0) >
+    COALESCE((SELECT amount_pkr FROM invoices WHERE id=NEW.invoice_id AND tenant_id=NEW.tenant_id),-1)
+    THEN RAISE(ABORT,'payment exceeds invoice total') END;
+  SELECT CASE WHEN NEW.method NOT IN ('cash','bank','jazzcash','easypaisa','other')
+    THEN RAISE(ABORT,'unsupported payment method') END;
+END;
