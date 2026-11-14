@@ -26,7 +26,8 @@ async function sendWhatsApp(env,to,body,providerTemplateName=null,languageCode="
  });
  const payload=await response.json().catch(()=>({}));
  if(!response.ok)throw new Error(payload.error?.message||"WhatsApp provider rejected the message (HTTP "+response.status+").");
- const messageId=payload.messages?.[0]?.id;if(!messageId)throw new Error("WhatsApp provider returned no message ID; delivery cannot be confirmed.");\n return {configured:true,messageId,providerStatus:payload.messages?.[0]?.message_status||"accepted"};
+ const messageId=payload.messages?.[0]?.id;if(!messageId)throw new Error("WhatsApp provider returned no message ID; delivery cannot be confirmed.");
+ return {configured:true,messageId,providerStatus:payload.messages?.[0]?.message_status||"accepted"};
 }
 export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
  const portalAuth=customerAuth(db,fail);
