@@ -65,7 +65,8 @@ export function permissionFor(path,method) {
   if(path==="/api/v1/dashboard")return verb==="GET"?"dashboard.read":null;
   const business=[["/api/v1/coverage-areas","areas"],["/api/v1/locations","locations"],["/api/v1/applications","applications"],["/api/v1/field-assignments","field"],["/api/v1/partners","partners"],["/api/v1/recovery-officers","recovery"],["/api/v1/cash-collections","collections"],["/api/v1/operator-collections","collections"],["/api/v1/inventory","inventory"],["/api/v1/notifications","notifications"]];
   for(const [base,key] of business){if(path===base||path.startsWith(base+"/")){if(key==="ledger")return verb==="GET"?"ledger.read":null;return verb==="GET"?key+".read":["POST","PATCH","DELETE"].includes(verb)?key+".manage":null;}}
-  if(/^\\/api\\/v1\\/customers\\/[^/]+\\/ledger$/.test(path))return verb==="GET"?"ledger.read":null;\n  if(path==="/api/v1/recharges")return verb==="POST"?"subscriptions.manage":null;
+  if(/^\\/api\\/v1\\/customers\\/[^/]+\\/ledger$/.test(path))return verb==="GET"?"ledger.read":null;
+  if(path==="/api/v1/recharges")return verb==="POST"?"subscriptions.manage":null;
   if(path==="/api/v1/business-modules/summary")return verb==="GET"?"areas.read":null;
   if(matches("/api/v1/customers"))return ({GET:"customers.read",POST:"customers.create",PATCH:"customers.update",DELETE:"customers.delete"})[verb]||null;
   if(matches("/api/v1/packages"))return verb==="GET"?"packages.read":["POST","PATCH"].includes(verb)?"packages.manage":null;
