@@ -48,3 +48,9 @@ The migration was committed as source only. It was **not** executed against stag
 - External WhatsApp, email and SMS notifications remain unimplemented.
 - SaaS platform administration still needs a platform operator identity, tenant lifecycle controls, plan catalog, usage limits and tenant billing.
 - Hardware inventory remains inventory only; no live MikroTik, HSGQ OLT, ONU or GenieACS connection is asserted by this work.
+
+## Verification performed
+
+- GitHub Actions Worker checks run #63 passed on 2026-11-14. It ran `node --check` for the Worker, admin frontend and customer portal frontend.
+- A local in-memory SQLite check passed for the new portal-account table DDL, tenant/customer-scoped invoice reads, net payment after completed refunds and duplicate monthly invoice prevention.
+- Full end-to-end Worker/D1 integration, concurrency and security testing remain pending.

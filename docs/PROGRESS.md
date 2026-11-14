@@ -34,6 +34,9 @@ The selected hosted SaaS architecture is Cloudflare Workers + D1. The local Node
 ## Basic verification
 
 - Worker JavaScript syntax: passed.
+- Feature-branch GitHub Actions run #63 passed on 2026-11-14; Node syntax checks covered the Worker, admin frontend and customer portal frontend.
+- In-memory SQLite checks passed for the portal-account migration DDL, tenant/customer-scoped invoice reads, net payment after completed refunds and duplicate monthly invoice prevention.
+- No staging or production D1 migration/data write, Worker deployment or Pages deployment was performed for this milestone.
 - Frontend JavaScript syntax: passed.
 - Latest Worker and frontend source syntax checked after notification/refund changes.
 - Refund schema, indexes and idempotency column applied to staging D1 only; refund insert/reconciliation SQL plans and net-payment query accepted by D1.
