@@ -2,7 +2,7 @@
 
 **Branch:** `feat/customer-portal-automated-billing`  
 **Base:** `cloudflare/complete-saas`  
-**Status:** source implementation only; not deployed.
+**Status:** deployed to the isolated Cloudflare staging Worker `nexus-saas-api-staging` on 2026-11-14; production Worker and production D1 were not changed.
 
 ## Customer portal
 
@@ -38,7 +38,7 @@ The scheduler records audit entries and in-app notifications when it creates inv
 
 The Worker migration runner adds `customer_portal_accounts` with organization/email and organization/customer uniqueness constraints and foreign keys to the owning tenant and customer. The migration is additive and uses `CREATE TABLE IF NOT EXISTS`.
 
-The migration was committed as source only. It was **not** executed against staging or production D1 in this task. The current Worker automatically runs migrations on its first API request after deployment, and the scheduled handler also runs the migration runner; review this behavior before deployment.
+The migration is included in the staging Worker candidate. It has **not yet been executed** against staging or production D1 because the Worker API endpoint could not be reached from the verification environment. The current Worker automatically runs migrations on its first API request after deployment, and the scheduled handler also runs the migration runner.
 
 ## Important limitations
 
@@ -51,6 +51,8 @@ The migration was committed as source only. It was **not** executed against stag
 
 ## Verification performed
 
-- GitHub Actions Worker checks run #63 passed on 2026-11-14. It ran `node --check` for the Worker, admin frontend and customer portal frontend.
+- GitHub Actions Worker checks run #68 passed on 2026-11-14 after the security and owner-role fixes. It ran `node --check` for the Worker, admin frontend and customer portal frontend.
+- JWT verification now requires a numeric, unexpired `exp` claim; CORS trusts only exact configured origins; audit-write failures are logged without exposing audit details to clients; initial tenant registration creates an `owner` account.
+- Cloudflare staging Worker deployment `606fc507-5d62-4cff-bef6-9ebe19714271` is active at 100%. Its D1 binding points to the staging database, the `JWT_SECRET` secret binding was retained, and production deployment was not changed.
 - A local in-memory SQLite check passed for the new portal-account table DDL, tenant/customer-scoped invoice reads, net payment after completed refunds and duplicate monthly invoice prevention.
 - Full end-to-end Worker/D1 integration, concurrency and security testing remain pending.
