@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { env } from "./env.js";
 const file=resolve(env.databasePath);mkdirSync(dirname(file),{recursive:true});
 export const db=new DatabaseSync(file);
@@ -50,4 +51,23 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant_status ON subscriptions(tena
 CREATE INDEX IF NOT EXISTS idx_payments_tenant_received ON payments(tenant_id,received_at);
 
 `);
+
+const migrationDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");
+db.exec("CREATE TABLE IF NOT EXISTS schema_migrations(version TEXT PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+const applied = new Set(db.prepare("SELECT version FROM schema_migrations").all().map(row => row.version));
+for (const name of readdirSync(migrationDirectory).filter(name => /^\d+_.+\.sql$/.test(name)).sort()) {
+  const version = name.split("_", 1)[0];
+  if (applied.has(version)) continue;
+  const sql = readFileSync(resolve(migrationDirectory, name), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(sql);
+    db.prepare("INSERT INTO schema_migrations(version,name) VALUES(?,?)").run(version, name);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw new Error(`Database migration ${name} failed: ${error.message}`);
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
