@@ -31,7 +31,7 @@ All endpoints below are under `/api/v1`. Except health, setup and login, request
 - Quantity cannot be edited directly; use stock_in, stock_out, assigned or adjustment movements. Negative stock is rejected.
 
 ## Recharge and notifications
-- `POST /recharges` — body: `{ "subscriptionId": "...", "days": 30, "amountPkr": 1500 }`. Amount is optional and defaults to the assigned package monthly price. Creates an invoice, posts a customer ledger debit and extends subscription expiry atomically. It does not claim payment has been received.
+- `POST /recharges` — body: `{ "subscriptionId": "...", "days": 30, "amountPkr": 1500, "paidAmountPkr": 1500, "method": "cash" }`. Amount defaults to the assigned package monthly price. Creates an invoice and ledger debit; a supplied payment is recorded against that invoice. Subscription expiry is extended only when the invoice is fully paid. Without full payment, the invoice remains unpaid/partial and the subscription is not renewed.
 - `GET|POST /notifications`; `PATCH /notifications/:id`
 - Notifications are persisted as queued. SMS, WhatsApp and email delivery are not activated without a configured external provider. Do not mark a notification sent until delivery is confirmed externally.
 - `GET /business-modules/summary` — real counts only.
