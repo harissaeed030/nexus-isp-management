@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { nextInvoiceNumber } from "../lib/financial.js";
 import { PERMISSIONS, getEffectivePermissions, hasPermission, permissionKeys, roleHasPermission } from "../lib/permissions.js";
 
 export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash,cleanUser}) {
@@ -129,7 +130,7 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
       const subs=db.prepare("SELECT s.id,s.customer_id,p.monthly_price_pkr,c.status customer_status FROM subscriptions s JOIN packages p ON p.id=s.package_id JOIN customers c ON c.id=s.customer_id WHERE s.tenant_id=? AND s.status='active' AND p.status='active' AND c.status='active'").all(tenant);
       const insert=db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES(?,?,?,?,?,?)");
       for(const s of subs){
-        const invoiceNo="NXS-"+period.replace("-","")+"-"+s.id.replace(/-/g,"").slice(0,10).toUpperCase();
+        const invoiceNo=nextInvoiceNumber(db,tenant,period);
         insert.run(id(),tenant,s.customer_id,invoiceNo,s.monthly_price_pkr,dueDate);created++;
       }
       db.prepare("INSERT INTO billing_runs(id,tenant_id,billing_period,invoices_created,created_by) VALUES(?,?,?,?,?)").run(id(),tenant,period,created,req.user.id);
