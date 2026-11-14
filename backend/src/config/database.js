@@ -66,4 +66,19 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(mig
   }
 }
 
+
+const migration002 = "002_financial_management";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(migration002)) {
+  const migrationSql = readFileSync(new URL("../../migrations/002_financial_management.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(migration002);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw error;
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
