@@ -4,6 +4,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomUUID, scryptSync } from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 const dir = mkdtempSync(join(tmpdir(), "nexus-security-"));
 process.env.SQLITE_PATH = join(dir, "security.sqlite");
@@ -84,6 +85,26 @@ try {
   assert.equal((await req("/api/v1/auth/me")).status, 401);
   assert.equal((await req("/api/v1/customers")).headers.get("x-content-type-options"), "nosniff");
   assert.equal((await req("/api/v1/customers")).headers.get("x-frame-options"), "SAMEORIGIN");
+  for (let i = 0; i < 9; i++) {
+    const attempt = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
+    assert.equal(attempt.status, 401);
+  }
+  const throttled = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
+  assert.equal(throttled.status, 429, "Authentication limiter must block the 11th login attempt.");
+  const invalidProduction = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
+    cwd: process.cwd(),
+    env: { ...process.env, NODE_ENV: "production", CORS_ORIGINS: "http://localhost", SQLITE_PATH: "./data/nexus.sqlite", SQLITE_BACKUP_DIR: "./backups" },
+    encoding: "utf8"
+  });
+  assert.notEqual(invalidProduction.status, 0, "Unsafe production defaults must be rejected.");
+  assert.match(invalidProduction.stderr, /HTTPS origins only/);
+  const validProduction = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
+    cwd: process.cwd(),
+    env: { ...process.env, NODE_ENV: "production", CORS_ORIGINS: "https://app.example.test", SQLITE_PATH: "/tmp/nexus.sqlite", SQLITE_BACKUP_DIR: "/tmp/nexus-backups" },
+    encoding: "utf8"
+  });
+  assert.equal(validProduction.status, 0, validProduction.stderr);
+
   console.log("NEXUS security tests passed: cross-tenant isolation, related-record boundaries, exports, authentication and baseline security headers.");
 } finally {
   await new Promise(resolve => server.close(resolve));
