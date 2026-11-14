@@ -1,0 +1,23 @@
+name: Worker checks
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  worker-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check production Worker and dashboard syntax
+        run: |
+          node --check worker/src/index.js
+          node --check assets/js/app.js
