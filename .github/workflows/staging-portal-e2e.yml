@@ -1,9 +1,7 @@
 name: NEXUS staging portal E2E
 
 on:
-  push:
-    branches:
-      - feat/customer-portal-automated-billing
+  # Manual-only: each run creates an isolated synthetic tenant in staging.
   workflow_dispatch:
 
 permissions:
