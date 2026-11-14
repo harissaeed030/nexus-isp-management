@@ -50,4 +50,21 @@ CREATE INDEX IF NOT EXISTS idx_routers_tenant ON routers(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant_status ON subscriptions(tenant_id,status);
 CREATE INDEX IF NOT EXISTS idx_payments_tenant_received ON payments(tenant_id,received_at);
 
-);\n\ndb.exec("CREATE TABLE IF NOT EXISTS schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");\nconst migrationVersion = "001_database_hardening";\nif (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(migrationVersion)) {\n  const migrationSql = readFileSync(new URL("../../migrations/001_database_hardening.sql", import.meta.url), "utf8");\n  db.exec("BEGIN IMMEDIATE");\n  try {\n    db.exec(migrationSql);\n    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(migrationVersion);\n    db.exec("COMMIT");\n  } catch (error) {\n    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }\n    throw error;\n  }\n}\n\nexport function getDatabaseStatus(){return "connected";}
+);
+
+db.exec("CREATE TABLE IF NOT EXISTS schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+const migrationVersion = "001_database_hardening";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(migrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/001_database_hardening.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(migrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw error;
+  }
+}
+
+export function getDatabaseStatus(){return "connected";}
