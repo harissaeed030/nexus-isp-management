@@ -178,7 +178,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
     const sub=getSubscription(req.params.id,req.user.tenant_id);
     if(!sub)return fail(res,404,"Subscription not found.");
     const b=req.body||{},status=b.status??sub.status,packageId=b.packageId??sub.package_id;
-    const startedAt=b.startedAt??(sub.started_at?String(sub.started_at).slice(0,10):null),expiresAt=b.expiresAt??sub.expires_at;
+    const startedAt=(b.startedAt??(sub.started_at?String(sub.started_at).slice(0,10):null))||null,expiresAt=(b.expiresAt??sub.expires_at)||null;
     if(!subscriptionStatuses.has(status)|| (startedAt&&!validDate(String(startedAt).slice(0,10))) || (expiresAt&&!validDate(expiresAt)))return fail(res,400,"Invalid subscription status or dates.");
     const pack=db.prepare("SELECT * FROM packages WHERE id=? AND tenant_id=?").get(packageId,req.user.tenant_id);
     if(!pack)return fail(res,404,"Package not found in this workspace.");
