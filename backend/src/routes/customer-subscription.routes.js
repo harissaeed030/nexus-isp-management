@@ -165,9 +165,9 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
         .run(subscriptionId,req.user.tenant_id,customer.id,pack.id,status,status==="pending"?null:startedAt,expiresAt);
       const sub=getSubscription(subscriptionId,req.user.tenant_id);
       addSubHistory(req.user,sub,"created",null,pack.id,"Package: "+pack.name);
-      if(status==="active"&&customer.connection_status!=="active"){
-        db.prepare("UPDATE customers SET connection_status='active' WHERE id=? AND tenant_id=?").run(customer.id,req.user.tenant_id);
-        addConnectionHistory(req.user,customer,"subscription_activated",customer.connection_status,"active");
+      if(["active","suspended"].includes(status)&&customer.connection_status!==status){
+        db.prepare("UPDATE customers SET connection_status=? WHERE id=? AND tenant_id=?").run(status,customer.id,req.user.tenant_id);
+        addConnectionHistory(req.user,customer,"subscription_"+status,customer.connection_status,status);
       }
       audit(req.user,"create","subscription",subscriptionId);
     });
@@ -189,15 +189,12 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
       if(status!==sub.status)addSubHistory(req.user,sub,status==="suspended"?"suspended":status==="active"?"resumed":"status_changed",sub.status,status);
       if(expiresAt!==sub.expires_at)addSubHistory(req.user,sub,"expiry_changed",sub.expires_at,expiresAt);
       const customer=getCustomer(sub.customer_id,req.user.tenant_id);
-      if(status==="suspended"&&customer.connection_status!=="suspended"){
-        db.prepare("UPDATE customers SET connection_status='suspended' WHERE id=? AND tenant_id=?").run(customer.id,req.user.tenant_id);
-        addConnectionHistory(req.user,customer,"subscription_suspended",customer.connection_status,"suspended");
-      } else if(status==="active"&&customer.connection_status!=="active"){
-        db.prepare("UPDATE customers SET connection_status='active' WHERE id=? AND tenant_id=?").run(customer.id,req.user.tenant_id);
-        addConnectionHistory(req.user,customer,"subscription_resumed",customer.connection_status,"active");
-      } else if(status==="cancelled"){
-        db.prepare("UPDATE customers SET connection_status='disconnected' WHERE id=? AND tenant_id=?").run(customer.id,req.user.tenant_id);
-        addConnectionHistory(req.user,customer,"subscription_cancelled",customer.connection_status,"disconnected");
+      const today=new Date().toISOString().slice(0,10);
+      const otherActive=db.prepare("SELECT COUNT(*) count FROM subscriptions WHERE tenant_id=? AND customer_id=? AND id<>? AND status='active' AND (expires_at IS NULL OR expires_at>=?)").get(req.user.tenant_id,customer.id,sub.id,today).count;
+      const nextConnection=status==="active"?"active":status==="suspended"&&!otherActive?"suspended":["cancelled","expired"].includes(status)&&!otherActive?"disconnected":null;
+      if(nextConnection&&nextConnection!==customer.connection_status){
+        db.prepare("UPDATE customers SET connection_status=? WHERE id=? AND tenant_id=?").run(nextConnection,customer.id,req.user.tenant_id);
+        addConnectionHistory(req.user,customer,"subscription_"+status,customer.connection_status,nextConnection);
       }
       audit(req.user,"update","subscription",sub.id);
     });
