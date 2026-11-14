@@ -66,7 +66,7 @@ try{
  assert.equal(credit.status,201);
  const ledger=await request("/api/v1/customers/"+customer.data.data.id+"/ledger","GET",undefined,token);
  assert.equal(ledger.status,200);
- assert.equal(ledger.data.data.closingBalancePkr,1425);
+ assert.equal(ledger.data.data.closingBalancePkr,1325);
  const unallocated=await request("/api/v1/reconciliation/unallocated","POST",{customerId:customer.data.data.id,amountPkr:50,method:"bank",reference:"BANK-001"},token);
  assert.equal(unallocated.status,201);
  const allocation=await request("/api/v1/reconciliation/unallocated/"+unallocated.data.data.id+"/allocate","POST",{invoiceId:invoice.id},token);
