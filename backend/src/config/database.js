@@ -102,4 +102,11 @@ if(!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(oltM
  try{db.exec(migrationSql);db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(oltMigrationVersion);db.exec("COMMIT");}
  catch(error){try{db.exec("ROLLBACK");}catch{}throw error;}
 }
+const tr069MigrationVersion="005_tr069_genieacs";
+if(!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(tr069MigrationVersion)){
+ const migrationSql=readFileSync(new URL("../../migrations/005_tr069_genieacs.sql",import.meta.url),"utf8");
+ db.exec("BEGIN IMMEDIATE");
+ try{db.exec(migrationSql);db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(tr069MigrationVersion);db.exec("COMMIT");}
+ catch(error){try{db.exec("ROLLBACK");}catch{}throw error;}
+}
 export function getDatabaseStatus(){return "connected";}
