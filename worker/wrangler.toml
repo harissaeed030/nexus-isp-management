@@ -10,3 +10,7 @@ ENVIRONMENT = "production"
 binding = "DB"
 database_name = "nexus-saas-db"
 database_id = "ce88098b-bff4-4d06-a0df-7bf29622a085"
+
+[triggers]
+# 00:15 UTC on day 1 = 05:15 Pakistan Standard Time.
+crons = ["15 0 1 * *"]
