@@ -7,11 +7,9 @@ import { once } from "node:events";
 const dir=mkdtempSync(join(tmpdir(),"nexus-smoke-"));
 process.env.SQLITE_PATH=join(dir,"test.sqlite");
 process.env.CORS_ORIGINS="http://localhost";
-const {default:app}=await import("../src/app.js");
-const server=app.listen(0);
-await once(server,"listening");
-const address=server.address();
-const base="http://127.0.0.1:"+address.port;
+let db;
+let server;
+let base;
 const request=async(path,method="GET",body,token)=>{
  const headers={"Content-Type":"application/json"};
  if(token)headers.Authorization="Bearer "+token;
@@ -20,6 +18,11 @@ const request=async(path,method="GET",body,token)=>{
  return {status:response.status,data};
 };
 try{
+ const {default:app}=await import("../src/app.js");
+ ({db}=await import("../src/config/database.js"));
+ server=app.listen(0);
+ await once(server,"listening");
+ base="http://127.0.0.1:"+server.address().port;
  const setup=await request("/api/v1/setup","POST",{companyName:"Nexus Test ISP",fullName:"Test Owner",email:"owner@nexus.test",password:"Strong-Test-Password-123"});
  assert.equal(setup.status,201);
  const token=setup.data.token;
@@ -73,6 +76,10 @@ try{
  assert.equal(reports.status,200);
  console.log("Nexus smoke tests passed: core CRUD, role defaults, permission grants/revokes, staff controls, router access and monthly billing.");
 }finally{
- await new Promise(resolve=>server.close(resolve));
+ if(server){
+  server.closeAllConnections?.();
+  await new Promise(resolve=>server.close(resolve));
+ }
+ db?.close();
  rmSync(dir,{recursive:true,force:true});
 }

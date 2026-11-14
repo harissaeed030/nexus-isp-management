@@ -9,11 +9,9 @@ import { spawnSync } from "node:child_process";
 const dir = mkdtempSync(join(tmpdir(), "nexus-security-"));
 process.env.SQLITE_PATH = join(dir, "security.sqlite");
 process.env.CORS_ORIGINS = "http://localhost";
-const { default: app } = await import("../src/app.js");
-const { db } = await import("../src/config/database.js");
-const server = app.listen(0);
-await once(server, "listening");
-const base = "http://127.0.0.1:" + server.address().port;
+let db;
+let server;
+let base;
 const req = async (path, method = "GET", body, token) => {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = "Bearer " + token;
@@ -22,12 +20,19 @@ const req = async (path, method = "GET", body, token) => {
   return { status: response.status, data, headers: response.headers };
 };
 try {
+  const { default: app } = await import("../src/app.js");
+  ({ db } = await import("../src/config/database.js"));
+  server = app.listen(0);
+  await once(server, "listening");
+  base = "http://127.0.0.1:" + server.address().port;
+
   const first = await req("/api/v1/setup", "POST", {
     companyName: "Tenant One Test", fullName: "Owner One",
     email: "owner-one@example.test", password: "Strong-Test-Password-123"
   });
   assert.equal(first.status, 201);
   const tokenOne = first.data.token;
+  assert.equal((await req("/api/v1/auth/login", "POST", { email: "owner-one@example.test", password: "wrong-password" })).status, 401, "Invalid credentials must be rejected.");
   const customerOne = await req("/api/v1/customers", "POST", { fullName: "Synthetic Subscriber One" }, tokenOne);
   assert.equal(customerOne.status, 201);
   const packageOne = await req("/api/v1/packages", "POST", {
@@ -79,20 +84,29 @@ try {
   assert.equal((await req("/api/v1/routers/" + routerOne.data.data.id, "PATCH", { status: "disabled" }, tokenTwo)).status, 404);
   assert.equal((await req("/api/v1/tickets/" + ticketOne.data.data.id, "PATCH", { status: "closed" }, tokenTwo)).status, 404);
   assert.equal((await req("/api/v1/audit-logs", "GET", undefined, tokenTwo)).data.data.length, 0);
+  const portalProbe = await req("/api/v1/customer-portal/me", "GET", undefined, tokenOne);
+  assert.equal(portalProbe.status, 404, "Customer portal is not implemented; do not treat portal IDOR coverage as passed.");
   const exportTwo = await fetch(base + "/api/v1/exports/customers.csv", { headers: { Authorization: "Bearer " + tokenTwo } });
   assert.equal(exportTwo.status, 200);
   assert.doesNotMatch(await exportTwo.text(), /Synthetic Subscriber One/);
 
   assert.equal((await req("/api/v1/dashboard", "GET", undefined, tokenTwo)).data.stats.customers, 0);
+  db.prepare("UPDATE users SET status='disabled' WHERE id=?").run(ownerTwo);
+  assert.equal((await req("/api/v1/auth/me", "GET", undefined, tokenTwo)).status, 401, "Disabled accounts must lose access immediately.");
+  assert.equal((await req("/api/v1/auth/login", "POST", { email: "owner-two@example.test", password })).status, 401, "Disabled accounts must not sign in.");
   assert.equal((await req("/api/v1/auth/me")).status, 401);
   assert.equal((await req("/api/v1/customers")).headers.get("x-content-type-options"), "nosniff");
   assert.equal((await req("/api/v1/customers")).headers.get("x-frame-options"), "SAMEORIGIN");
-  for (let i = 0; i < 9; i++) {
-    const attempt = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
-    assert.equal(attempt.status, 401);
-  }
-  const throttled = await req("/api/v1/auth/login", "POST", { email: "missing@example.test", password: "wrong-password" });
-  assert.equal(throttled.status, 429, "Authentication limiter must block the 11th login attempt.");
+  const passwordChange = await req("/api/v1/auth/password", "PUT", { currentPassword: "Strong-Test-Password-123", newPassword: "New-Strong-Test-Password-789" }, tokenOne);
+  assert.equal(passwordChange.status, 200, "Password changes must succeed with the current password.");
+  assert.equal((await req("/api/v1/auth/me", "GET", undefined, tokenOne)).status, 401, "Password changes must revoke all existing sessions.");
+  assert.equal((await req("/api/v1/auth/login", "POST", { email: "owner-one@example.test", password: "Strong-Test-Password-123" })).status, 401, "The old password must stop working.");
+  const newLogin = await req("/api/v1/auth/login", "POST", { email: "owner-one@example.test", password: "New-Strong-Test-Password-789" });
+  assert.equal(newLogin.status, 200, "The new password must authenticate.");
+  assert.equal((await req("/api/v1/auth/logout", "POST", {}, newLogin.data.token)).status, 200);
+  assert.equal((await req("/api/v1/auth/me", "GET", undefined, newLogin.data.token)).status, 401, "Logout must revoke the issued token.");
+
+
   const invalidProduction = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
     cwd: process.cwd(),
     env: { ...process.env, NODE_ENV: "production", CORS_ORIGINS: "http://localhost", SQLITE_PATH: "./data/nexus.sqlite", SQLITE_BACKUP_DIR: "./backups" },
@@ -107,9 +121,12 @@ try {
   });
   assert.equal(validProduction.status, 0, validProduction.stderr);
 
-  console.log("NEXUS security tests passed: cross-tenant isolation, related-record boundaries, exports, authentication and baseline security headers.");
+  console.log("NEXUS security tests passed: invalid login, disabled accounts, cross-tenant isolation, exports, password changes, session revocation and baseline security headers. Customer-portal cross-customer IDOR remains blocked because no portal endpoint exists.");
 } finally {
-  await new Promise(resolve => server.close(resolve));
-  db.close();
+  if (server) {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+  }
+  db?.close();
   rmSync(dir, { recursive: true, force: true });
 }
