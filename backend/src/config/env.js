@@ -23,6 +23,8 @@ if (nodeEnv === "production") {
   if (!process.env.CORS_ORIGINS?.trim()) throw new Error("CORS_ORIGINS must be explicitly configured in production.");
   if (corsOrigins.some(origin => !origin.startsWith("https://"))) throw new Error("Production CORS_ORIGINS must contain HTTPS origins only.");
   if (!isAbsolute(databasePath)) throw new Error("SQLITE_PATH must be an absolute persistent-volume path in production.");
+  const backupPath = process.env.SQLITE_BACKUP_DIR?.trim() || "";
+  if (!backupPath || !isAbsolute(backupPath)) throw new Error("SQLITE_BACKUP_DIR must be an absolute protected backup path in production.");
 }
 
 export const env = Object.freeze({
