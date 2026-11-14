@@ -109,4 +109,19 @@ if(!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(tr06
  try{db.exec(migrationSql);db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(tr069MigrationVersion);db.exec("COMMIT");}
  catch(error){try{db.exec("ROLLBACK");}catch{}throw error;}
 }
+
+const portalNotificationMigrationVersion = "006_customer_portal_notifications";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(portalNotificationMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/003_customer_portal_notifications.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(portalNotificationMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw error;
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
