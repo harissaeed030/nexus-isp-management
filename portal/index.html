@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#063b2d"><title>NEXUS Customer Portal</title><link rel="stylesheet" href="/portal.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#063b2d"><title>NEXUS Customer Portal</title><link rel="stylesheet" href="/assets/portal.css"></head>
 <body><main class="wrap"><header><div class="brand">NEXUS <small>CUSTOMER PORTAL</small></div><button id="logout" class="ghost hidden">Sign out</button></header>
 <section id="login" class="panel login"><h1>Welcome back</h1><p>Sign in to view your internet account.</p><form id="loginForm"><label>Account number or email<input name="identity" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button>Sign in securely</button><p id="loginError" class="error"></p></form></section>
 <section id="dashboard" class="hidden"><div class="welcome"><div><p class="eyebrow">CUSTOMER ACCOUNT</p><h1 id="customerName">Your account</h1><p id="accountNumber"></p></div><span id="connection" class="status">—</span></div>
@@ -8,4 +8,4 @@
 <section class="panel"><h2>Payment history</h2><div id="payments" class="table-wrap"></div></section>
 <section class="panel"><h2>Submit a complaint</h2><form id="complaintForm" class="form-grid"><label>Subject<input name="subject" maxlength="180" required></label><label>Priority<select name="priority"><option>normal</option><option>low</option><option>high</option><option>urgent</option></select></label><label class="wide">Details<textarea name="description" rows="3" maxlength="3000"></textarea></label><button>Submit complaint</button><p id="complaintMessage" class="muted"></p></form></section>
 <section class="panel"><h2>Complaint progress</h2><div id="complaints"></div></section></section>
-<footer>© NEXUS ISP Management · Secure customer access</footer></main><script src="/portal.js" defer></script></body></html>
+<footer>© NEXUS ISP Management · Secure customer access</footer></main><script src="/assets/portal.js" defer></script></body></html>
