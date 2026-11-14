@@ -90,6 +90,11 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
 - `GET /api/v1/audit-logs`
 - `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
+- `GET|POST /api/v1/olts`, `PATCH|DELETE /api/v1/olts/:id`, `GET /api/v1/olts/:id/capabilities`
+- `GET /api/v1/olts/:id/pons`, `PATCH /api/v1/pons/:id`
+- `GET|POST /api/v1/onus`, `PATCH|DELETE /api/v1/onus/:id`, `POST /api/v1/onus/:id/service-mapping`, `GET /api/v1/onus/:id/history`
+- `GET|POST /api/v1/olt-alarms`, `PATCH /api/v1/olt-alarms/:id/clear`
+- `GET /api/v1/olts/:id/monitoring` (inventory/capability response; live telemetry pending verified HSGQ interface documentation)
 - `GET|PUT /api/v1/staff/:id/permissions` (owner/admin only)
 
 Money values are integer Pakistani rupees (PKR). Payments cannot exceed the outstanding invoice balance.
@@ -112,6 +117,9 @@ Staff roles have safe defaults (owner, admin, billing, NOC, support, technician 
 5. Add MikroTik adapter and equipment inventory.
 6. Add vendor-specific OLT/ONU and GenieACS/TR-069 adapters.
 7. Review deployment architecture and production migration.
+
+## HSGQ-G04R hardware integration
+See [docs/HSGQ-G04R-INTEGRATION.md](docs/HSGQ-G04R-INTEGRATION.md) for verified management methods, adapter limitations, credential encryption and the vendor documentation required before enabling live telemetry.
 
 ## License
 
