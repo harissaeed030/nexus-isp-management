@@ -37,6 +37,8 @@ try {
     customerId: customerOne.data.data.id, amountPkr: 1000
   }, tokenOne);
   assert.equal(invoiceOne.status, 201);
+  const paymentOne = await req("/api/v1/payments", "POST", { invoiceId: invoiceOne.data.data.id, amountPkr: 100, method: "cash" }, tokenOne);
+  assert.equal(paymentOne.status, 201);
   const ticketOne = await req("/api/v1/tickets", "POST", {
     customerId: customerOne.data.data.id, subject: "Synthetic test complaint"
   }, tokenOne);
@@ -73,7 +75,7 @@ try {
     customerId: customerOne.data.data.id, subject: "Cross-tenant attempt"
   }, tokenTwo)).status, 404);
   assert.equal((await req("/api/v1/routers", "GET", undefined, tokenTwo)).data.data.length, 0);
-  assert.equal((await req("/api/v1/routers/" + routerOne.data.data.id, "PATCH", { status: "disabled" }, tokenTwo)).status, 404);
+  assert.equal((await req("/api/v1/routers/" + routerOne.data.data.id, "PATCH", { status: "disabled" }, tokenTwo)).status, 404);\n  assert.equal((await req("/api/v1/tickets/" + ticketOne.data.data.id, "PATCH", { status: "closed" }, tokenTwo)).status, 404);\n  assert.equal((await req("/api/v1/audit-logs", "GET", undefined, tokenTwo)).data.data.length, 0);
   const exportTwo = await fetch(base + "/api/v1/exports/customers.csv", { headers: { Authorization: "Bearer " + tokenTwo } });
   assert.equal(exportTwo.status, 200);
   assert.doesNotMatch(await exportTwo.text(), /Synthetic Subscriber One/);
