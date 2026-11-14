@@ -1,7 +1,9 @@
 export function nextInvoiceNumber(db,tenantId,period) {
   const row=db.prepare("SELECT last_number FROM invoice_sequences WHERE tenant_id=? AND billing_period=?").get(tenantId,period);
-  let next=(row?.last_number||0)+1,number;
-  do { number="INV-"+period.replace("-","")+"-"+String(next).padStart(6,"0"); if(db.prepare("SELECT 1 FROM invoices WHERE tenant_id=? AND invoice_number=?").get(tenantId,number))next++; else break; } while(next<1000000000);
+  const prefix="INV-"+period.replace("-","")+"-";
+  const existing=db.prepare("SELECT COALESCE(MAX(CAST(substr(invoice_number,?) AS INTEGER)),0) maximum FROM invoices WHERE tenant_id=? AND invoice_number LIKE ?").get(prefix.length+1,tenantId,prefix+"%");
+  let next=Math.max(row?.last_number||0,existing.maximum||0)+1,number;
+  do { number=prefix+String(next).padStart(6,"0"); if(db.prepare("SELECT 1 FROM invoices WHERE tenant_id=? AND invoice_number=?").get(tenantId,number))next++; else break; } while(next<1000000000);
   if(next>=1000000000)throw new Error("INVOICE_NUMBER_SPACE_EXHAUSTED");
   db.prepare("INSERT INTO invoice_sequences(tenant_id,billing_period,last_number) VALUES(?,?,?) ON CONFLICT(tenant_id,billing_period) DO UPDATE SET last_number=excluded.last_number").run(tenantId,period,next);
   return number;
