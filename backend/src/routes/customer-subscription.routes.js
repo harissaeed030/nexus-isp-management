@@ -57,6 +57,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
     const status=b.status||"active",connection=b.connectionStatus||"pending";
     if(typeof name!=="string"||!name||name.length>160)return fail(res,400,"Customer name is required (maximum 160 characters).");
     if(typeof phone!=="string"||phone.length>40||typeof email!=="string"||!validEmail(email)||email.length>254)return fail(res,400,"Enter a valid email and phone number.");
+    if(typeof address!=="string"||address.length>500||typeof serviceAddress!=="string"||serviceAddress.length>500||typeof area!=="string"||area.length>120)return fail(res,400,"Service address or coverage area is too long or invalid.");
     if(!customerStatuses.has(status)||!connectionStatuses.has(connection))return fail(res,400,"Invalid customer or connection status.");
     if(b.installationDate&&!validDate(b.installationDate))return fail(res,400,"Installation date must use YYYY-MM-DD.");
     const customerId=id();
