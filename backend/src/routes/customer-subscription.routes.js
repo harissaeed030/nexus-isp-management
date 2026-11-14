@@ -10,6 +10,24 @@ const like = value => "%" + String(value) + "%";
 export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
   const getCustomer = (customerId,tenantId) => db.prepare("SELECT * FROM customers WHERE id=? AND tenant_id=?").get(customerId,tenantId);
   const getSubscription = (subscriptionId,tenantId) => db.prepare("SELECT * FROM subscriptions WHERE id=? AND tenant_id=?").get(subscriptionId,tenantId);
+  const expireDueSubscriptions = user => {
+    const today=new Date().toISOString().slice(0,10);
+    const due=db.prepare("SELECT * FROM subscriptions WHERE tenant_id=? AND status='active' AND expires_at IS NOT NULL AND expires_at<?").all(user.tenant_id,today);
+    if(!due.length)return;
+    withTransaction(db,()=>{
+      for(const sub of due){
+        db.prepare("UPDATE subscriptions SET status='expired' WHERE id=? AND tenant_id=?").run(sub.id,user.tenant_id);
+        addSubHistory(user,sub,"expired",sub.status,"expired","Subscription expiry date passed");
+        const customer=getCustomer(sub.customer_id,user.tenant_id);
+        const other=db.prepare("SELECT COUNT(*) count FROM subscriptions WHERE tenant_id=? AND customer_id=? AND id<>? AND status='active' AND (expires_at IS NULL OR expires_at>=?)").get(user.tenant_id,customer.id,sub.id,today).count;
+        if(!other&&customer.connection_status==="active"){
+          db.prepare("UPDATE customers SET connection_status='disconnected' WHERE id=? AND tenant_id=?").run(customer.id,user.tenant_id);
+          addConnectionHistory(user,customer,"subscription_expired","active","disconnected");
+        }
+        audit(user,"expire","subscription",sub.id);
+      }
+    });
+  };
   const addSubHistory = (user,sub,event,oldValue,newValue,notes=null) => db.prepare(
     "INSERT INTO subscription_history(id,tenant_id,subscription_id,customer_id,event_type,old_value,new_value,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?,?)"
   ).run(id(),user.tenant_id,sub.id,sub.customer_id,event,oldValue==null?null:String(oldValue),newValue==null?null:String(newValue),notes,user.id);
@@ -68,6 +86,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
   });
 
   app.get("/api/v1/customers/:id/profile",auth,(req,res)=>{
+    expireDueSubscriptions(req.user);
     const tenant=req.user.tenant_id,customer=getCustomer(req.params.id,tenant);
     if(!customer)return fail(res,404,"Customer not found.");
     const subscriptions=db.prepare("SELECT s.*,p.name package_name,p.speed_down_mbps,p.speed_up_mbps,p.monthly_price_pkr FROM subscriptions s JOIN packages p ON p.id=s.package_id WHERE s.tenant_id=? AND s.customer_id=? ORDER BY s.created_at DESC").all(tenant,customer.id);
@@ -120,6 +139,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
   });
 
   app.get("/api/v1/subscriptions",auth,(req,res)=>{
+    expireDueSubscriptions(req.user);
     const tenant=req.user.tenant_id,status=req.query.status||"",customerId=req.query.customerId||"";
     if(status&&!subscriptionStatuses.has(status))return fail(res,400,"Invalid subscription status filter.");
     const where=["s.tenant_id=?"],params=[tenant];
