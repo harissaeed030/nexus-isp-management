@@ -8,6 +8,7 @@ const dir=mkdtempSync(join(tmpdir(),"nexus-smoke-"));
 process.env.SQLITE_PATH=join(dir,"test.sqlite");
 process.env.CORS_ORIGINS="http://localhost";
 const {default:app}=await import("../src/app.js");
+const {db}=await import("../src/config/database.js");
 const server=app.listen(0);
 await once(server,"listening");
 const address=server.address();
@@ -20,6 +21,12 @@ const request=async(path,method="GET",body,token)=>{
  return {status:response.status,data};
 };
 try{
+ db.exec("CREATE TRIGGER fail_setup_session BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT, 'injected setup failure'); END");
+ const failedSetup=await request("/api/v1/setup","POST",{companyName:"Rollback ISP",fullName:"Rollback Owner",email:"rollback@nexus.test",password:"Strong-Test-Password-123"});
+ assert.equal(failedSetup.status,500);
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM tenants").get().n,0);
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM users").get().n,0);
+ db.exec("DROP TRIGGER fail_setup_session");
  const setup=await request("/api/v1/setup","POST",{companyName:"Nexus Test ISP",fullName:"Test Owner",email:"owner@nexus.test",password:"Strong-Test-Password-123"});
  assert.equal(setup.status,201);
  const token=setup.data.token;
@@ -31,11 +38,22 @@ try{
  assert.equal(sub.status,201);
  const router=await request("/api/v1/routers","POST",{name:"Core Router",host:"192.0.2.1",apiPort:8728},token);
  assert.equal(router.status,201);
- const billing=await request("/api/v1/billing/generate","POST",{period:"2026-11"},token);
- assert.equal(billing.status,201);
+ const billingAttempts=await Promise.all([request("/api/v1/billing/generate","POST",{period:"2026-11"},token),request("/api/v1/billing/generate","POST",{period:"2026-11"},token)]);
+ assert.equal(billingAttempts.filter(x=>x.status===201).length,1);
+ assert.equal(billingAttempts.filter(x=>x.status===409).length,1);
+ const billing=billingAttempts.find(x=>x.status===201);
  assert.equal(billing.data.invoicesCreated,1);
- const duplicate=await request("/api/v1/billing/generate","POST",{period:"2026-11"},token);
- assert.equal(duplicate.status,409);
+ const invoice=(await request("/api/v1/invoices","GET",undefined,token)).data.data[0];
+ assert.ok(invoice);
+ db.exec("CREATE TRIGGER fail_invoice_status BEFORE UPDATE OF status ON invoices BEGIN SELECT RAISE(ABORT, 'injected invoice status failure'); END");
+ const failedPayment=await request("/api/v1/payments","POST",{invoiceId:invoice.id,amountPkr:100,method:"cash"},token);
+ assert.equal(failedPayment.status,500);
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM payments WHERE invoice_id=?").get(invoice.id).n,0);
+ assert.equal(db.prepare("SELECT status FROM invoices WHERE id=?").get(invoice.id).status,"unpaid");
+ db.exec("DROP TRIGGER fail_invoice_status");
+ const payment=await request("/api/v1/payments","POST",{invoiceId:invoice.id,amountPkr:100,method:"cash"},token);
+ assert.equal(payment.status,201);
+ assert.equal(db.prepare("SELECT status FROM invoices WHERE id=?").get(invoice.id).status,"partial");
  const staff=await request("/api/v1/staff","POST",{fullName:"Billing Staff",email:"billing@nexus.test",password:"Billing-Password-123",role:"billing"},token);
  assert.equal(staff.status,201);
  const staffLogin=await request("/api/v1/auth/login","POST",{email:"billing@nexus.test",password:"Billing-Password-123"});
@@ -62,7 +80,7 @@ try{
  assert.equal((await request("/api/v1/routers","POST",{name:"Blocked Router",host:"192.0.2.2"},techLogin.data.token)).status,403);
  const reports=await request("/api/v1/reports/summary","GET",undefined,token);
  assert.equal(reports.status,200);
- console.log("Nexus smoke tests passed: core CRUD, role defaults, permission grants/revokes, staff controls, router access and monthly billing.");
+ console.log("Nexus smoke tests passed: core CRUD, atomic setup/payment rollback, concurrent monthly billing, role permissions, staff controls and router access.");
 }finally{
  await new Promise(resolve=>server.close(resolve));
  rmSync(dir,{recursive:true,force:true});
