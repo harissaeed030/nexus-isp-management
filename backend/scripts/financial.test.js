@@ -12,7 +12,7 @@ test("financial migration and ledger balance preserve append-only reversals and 
   db.exec("INSERT INTO tenants(id,name,slug) VALUES('t','Test','test')");
   db.exec("INSERT INTO users(id,tenant_id,email,password_hash,full_name) VALUES('u','t','a@b.c','x','Owner')");
   db.exec("INSERT INTO customers(id,tenant_id,customer_code,full_name) VALUES('c','t','C1','Customer')");
-  db.exec("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr) VALUES('i','t','c','OLD-1',1000,'2000-01-01')");
+  db.exec("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES('i','t','c','OLD-1',1000,'2000-01-01')");
   db.exec("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method) VALUES('p','t','i',400,'cash')");
   assert.equal(nextInvoiceNumber(db,"t","2026-11"),"INV-202611-000001");
   assert.equal(nextInvoiceNumber(db,"t","2026-11"),"INV-202611-000002");
