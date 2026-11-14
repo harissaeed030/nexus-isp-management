@@ -66,4 +66,19 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(mig
   }
 }
 
+
+const customerMigrationVersion = "002_customer_subscription_management";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(customerMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/002_customer_subscription_management.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(customerMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw error;
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
