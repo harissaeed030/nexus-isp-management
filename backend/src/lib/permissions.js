@@ -54,6 +54,12 @@ export function permissionFor(path,method) {
   const verb=String(method||"GET").toUpperCase();
   const matches=base=>path===base||path.startsWith(base+"/");
   if(path==="/api/v1/dashboard")return verb==="GET"?"dashboard.read":null;
+  if(matches("/api/v1/customers")&&path.endsWith("/ledger"))return verb==="GET"?"ledger.read":null;
+  if(matches("/api/v1/payments")&&path.includes("/reversals"))return verb==="POST"?"refunds.manage":null;
+  if(matches("/api/v1/invoices")&&path.includes("/credit-notes"))return verb==="POST"?"credit_notes.manage":null;
+  if(matches("/api/v1/reconciliation"))return verb==="GET"?"billing.read":verb==="POST"?"reconciliation.manage":null;
+  if(path==="/api/v1/reports/aging"||path==="/api/v1/reports/financial")return verb==="GET"?"reports.read":null;
+
   if(matches("/api/v1/customers"))return ({GET:"customers.read",POST:"customers.create",PATCH:"customers.update",DELETE:"customers.delete"})[verb]||null;
   if(matches("/api/v1/packages"))return verb==="GET"?"packages.read":["POST","PATCH"].includes(verb)?"packages.manage":null;
   if(matches("/api/v1/subscriptions"))return verb==="GET"?"subscriptions.read":["POST","PATCH"].includes(verb)?"subscriptions.manage":null;
