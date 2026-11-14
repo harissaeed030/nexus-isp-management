@@ -1,11 +1,11 @@
 import { withTransaction } from "../lib/transactions.js";
 
-const validDate = value => typeof value === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z")) && new Date(value + "T00:00:00Z").toISOString().slice(0,10) === value;
-const validEmail = value => value == null || value === "" || /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value);
+const validDate = value => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z")) && new Date(value + "T00:00:00Z").toISOString().slice(0,10) === value;
+const validEmail = value => value == null || value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const customerStatuses = new Set(["active","inactive","blocked"]);
 const connectionStatuses = new Set(["pending","active","suspended","disconnected"]);
 const subscriptionStatuses = new Set(["pending","active","suspended","cancelled","expired"]);
-const clean = value => typeof value === "string" ? value.trim() : value;
+const like = value => "%" + String(value) + "%";
 const like = value => "%" + String(value).replace(/[\\\\%_]/g, c => "\\" + c) + "%";
 
 export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
@@ -25,7 +25,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
     if(status&&!customerStatuses.has(status))return fail(res,400,"Invalid customer status filter.");
     if(connection&&!connectionStatuses.has(connection))return fail(res,400,"Invalid connection status filter.");
     const where=["tenant_id=?"],params=[tenant];
-    if(q){where.push("(full_name LIKE ? ESCAPE '\\\\' OR customer_code LIKE ? ESCAPE '\\\\' OR account_number LIKE ? ESCAPE '\\\\' OR phone LIKE ? ESCAPE '\\\\' OR email LIKE ? ESCAPE '\\\\' OR address LIKE ? ESCAPE '\\\\' OR service_address LIKE ? ESCAPE '\\\\' OR coverage_area LIKE ? ESCAPE '\\\\')");params.push(...Array(8).fill(like(q)));}
+    if(q){where.push("(full_name LIKE ? OR customer_code LIKE ? OR account_number LIKE ? OR phone LIKE ? OR email LIKE ? OR address LIKE ? OR service_address LIKE ? OR coverage_area LIKE ?)");params.push(...Array(8).fill(like(q)));}
     if(status){where.push("status=?");params.push(status);}
     if(connection){where.push("connection_status=?");params.push(connection);}
     if(area){where.push("coverage_area=?");params.push(area);}
@@ -38,8 +38,8 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
     const b=req.body||{},name=clean(b.fullName),phone=clean(b.phone||""),email=clean(b.email||"");
     const address=clean(b.address||""),serviceAddress=clean(b.serviceAddress||b.address||""),area=clean(b.coverageArea||"");
     const status=b.status||"active",connection=b.connectionStatus||"pending";
-    if(!name||name.length>160)return fail(res,400,"Customer name is required (maximum 160 characters).");
-    if(phone.length>40||!validEmail(email)||email.length>254)return fail(res,400,"Enter a valid email and phone number.");
+    if(typeof name!=="string"||!name||name.length>160)return fail(res,400,"Customer name is required (maximum 160 characters).");
+    if(typeof phone!=="string"||phone.length>40||typeof email!=="string"||!validEmail(email)||email.length>254)return fail(res,400,"Enter a valid email and phone number.");
     if(!customerStatuses.has(status)||!connectionStatuses.has(connection))return fail(res,400,"Invalid customer or connection status.");
     if(b.installationDate&&!validDate(b.installationDate))return fail(res,400,"Installation date must use YYYY-MM-DD.");
     const customerId=id();
@@ -135,7 +135,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
     if(!customerId||!packageId)return fail(res,400,"Customer and package are required.");
     if(!subscriptionStatuses.has(status)||status==="expired")return fail(res,400,"Invalid initial subscription status.");
     const startedAt=b.startedAt||new Date().toISOString().slice(0,10),expiresAt=b.expiresAt||null;
-    if(!validDate(startedAt.slice(0,10))||(expiresAt&&!validDate(expiresAt)))return fail(res,400,"Subscription dates must use YYYY-MM-DD.");
+    if(typeof startedAt!=="string"||!validDate(startedAt.slice(0,10))||(expiresAt&&!validDate(expiresAt)))return fail(res,400,"Subscription dates must use YYYY-MM-DD.");
     const customer=getCustomer(customerId,req.user.tenant_id),pack=db.prepare("SELECT * FROM packages WHERE id=? AND tenant_id=? AND status='active'").get(packageId,req.user.tenant_id);
     if(!customer||!pack)return fail(res,404,"Active customer and package in this workspace are required.");
     const subscriptionId=id();
