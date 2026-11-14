@@ -13,9 +13,10 @@ test("financial migration and ledger balance preserve append-only reversals and 
   db.exec("INSERT INTO users(id,tenant_id,email,password_hash,full_name) VALUES('u','t','a@b.c','x','Owner')");
   db.exec("INSERT INTO customers(id,tenant_id,customer_code,full_name) VALUES('c','t','C1','Customer')");
   db.exec("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES('i','t','c','OLD-1',1000,'2000-01-01')");
+  db.exec("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES('i2','t','c','INV-202611-000007',100,'2000-01-01')");
   db.exec("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method) VALUES('p','t','i',400,'cash')");
-  assert.equal(nextInvoiceNumber(db,"t","2026-11"),"INV-202611-000001");
-  assert.equal(nextInvoiceNumber(db,"t","2026-11"),"INV-202611-000002");
+  assert.equal(nextInvoiceNumber(db,"t","2026-11"),"INV-202611-000008");
+  assert.equal(nextInvoiceNumber(db,"t","2026-11"),"INV-202611-000009");
   db.exec("INSERT INTO payment_reversals(id,tenant_id,payment_id,amount_pkr,reason,created_by) VALUES('r','t','p',100,'bank refund','u')");
   db.exec("INSERT INTO credit_notes(id,tenant_id,invoice_id,amount_pkr,reason,created_by) VALUES('n','t','i',200,'service adjustment','u')");
   const balance=invoiceBalance(db,"t","i");
