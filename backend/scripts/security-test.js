@@ -84,9 +84,6 @@ try {
   assert.equal((await req("/api/v1/routers/" + routerOne.data.data.id, "PATCH", { status: "disabled" }, tokenTwo)).status, 404);
   assert.equal((await req("/api/v1/tickets/" + ticketOne.data.data.id, "PATCH", { status: "closed" }, tokenTwo)).status, 404);
   assert.equal((await req("/api/v1/audit-logs", "GET", undefined, tokenTwo)).data.data.length, 0);
-  db.prepare("UPDATE users SET status='disabled' WHERE id=?").run(ownerTwo);
-  assert.equal((await req("/api/v1/auth/me", "GET", undefined, tokenTwo)).status, 401, "Disabled accounts must lose access immediately.");
-  assert.equal((await req("/api/v1/auth/login", "POST", { email: "owner-two@example.test", password })).status, 401, "Disabled accounts must not sign in.");
   const portalProbe = await req("/api/v1/customer-portal/me", "GET", undefined, tokenOne);
   assert.equal(portalProbe.status, 404, "Customer portal is not implemented; do not treat portal IDOR coverage as passed.");
   const exportTwo = await fetch(base + "/api/v1/exports/customers.csv", { headers: { Authorization: "Bearer " + tokenTwo } });
@@ -94,6 +91,11 @@ try {
   assert.doesNotMatch(await exportTwo.text(), /Synthetic Subscriber One/);
 
   assert.equal((await req("/api/v1/dashboard", "GET", undefined, tokenTwo)).data.stats.customers, 0);
+  db.prepare("UPDATE users SET status='disabled' WHERE id=?").run(ownerTwo);
+  assert.equal((await req("/api/v1/auth/me", "GET", undefined, tokenTwo)).status, 401, "Disabled accounts must lose access immediately.");
+  assert.equal((await req("/api/v1/auth/login", "POST", { email: "owner-two@example.test", password })).status, 401, "Disabled accounts must not sign in.");
+  const portalProbe = await req("/api/v1/customer-portal/me", "GET", undefined, tokenOne);
+  assert.equal(portalProbe.status, 404, "Customer portal is not implemented; do not treat portal IDOR coverage as passed.");
   assert.equal((await req("/api/v1/auth/me")).status, 401);
   assert.equal((await req("/api/v1/customers")).headers.get("x-content-type-options"), "nosniff");
   assert.equal((await req("/api/v1/customers")).headers.get("x-frame-options"), "SAMEORIGIN");
