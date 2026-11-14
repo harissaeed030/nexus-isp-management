@@ -18,6 +18,8 @@ export const PERMISSIONS = [
   { key: "routers.read", group: "Network", label: "View router inventory" },
   { key: "routers.manage", group: "Network", label: "Add, edit and delete router records" },
   { key: "routers.provision", group: "Network", label: "Manage PPPoE users and connections" },
+  { key: "olts.read", group: "Network", label: "View OLT and ONU inventory" },
+  { key: "olts.manage", group: "Network", label: "Manage OLT and ONU records" },
   { key: "audit.read", group: "Administration", label: "View activity log" }
 ];
 export const permissionKeys = new Set(PERMISSIONS.map(item => item.key));
@@ -25,9 +27,9 @@ export const ROLE_PERMISSIONS = {
   owner: ["*"],
   admin: ["*"],
   billing: ["dashboard.read","customers.read","packages.read","subscriptions.read","billing.read","invoices.create","payments.create","billing.generate","reports.read"],
-  noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage","routers.provision"],
+  noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage","routers.provision","olts.read","olts.manage"],
   support: ["dashboard.read","customers.read","packages.read","subscriptions.read","tickets.read","tickets.manage"],
-  technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read"],
+  technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read","olts.read"],
   staff: ["dashboard.read"]
 };
 export function roleHasPermission(role, permission) {
@@ -60,6 +62,7 @@ export function permissionFor(path,method) {
   if(path==="/api/v1/billing/runs")return verb==="GET"?"billing.read":null;
   if(matches("/api/v1/tickets"))return verb==="GET"?"tickets.read":["POST","PATCH"].includes(verb)?"tickets.manage":null;
   if(matches("/api/v1/routers"))return verb==="GET"?"routers.read":["POST","PATCH","DELETE"].includes(verb)?"routers.manage":verb==="POST"||verb==="PATCH"?"routers.provision":null;
+  if(matches("/api/v1/olts")||matches("/api/v1/onus")||matches("/api/v1/pons")||matches("/api/v1/olt-alarms"))return verb==="GET"?"olts.read":["POST","PATCH","DELETE"].includes(verb)?"olts.manage":null;
   if(path==="/api/v1/reports/summary")return verb==="GET"?"reports.read":null;
   if(path==="/api/v1/audit-logs")return verb==="GET"?"audit.read":null;
   return null;
