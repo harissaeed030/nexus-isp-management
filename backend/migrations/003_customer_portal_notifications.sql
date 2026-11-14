@@ -14,7 +14,7 @@ CREATE INDEX IF NOT EXISTS idx_portal_sessions_expiry ON customer_portal_session
 CREATE TABLE IF NOT EXISTS notification_templates(
  id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
  name TEXT NOT NULL, event_key TEXT NOT NULL, channel TEXT NOT NULL DEFAULT 'whatsapp',
- body TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+ body TEXT NOT NULL, provider_template_name TEXT, language_code TEXT NOT NULL DEFAULT 'en_US', enabled INTEGER NOT NULL DEFAULT 1,
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  UNIQUE(tenant_id,event_key,channel)
 );
@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS notification_outbox(
  customer_id TEXT REFERENCES customers(id) ON DELETE SET NULL,
  template_id TEXT REFERENCES notification_templates(id) ON DELETE SET NULL,
  channel TEXT NOT NULL, destination TEXT NOT NULL, body TEXT NOT NULL,
+ provider_template_name TEXT, language_code TEXT, template_parameters TEXT,
  status TEXT NOT NULL DEFAULT 'queued', provider_message_id TEXT,
  attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 5,
  next_attempt_at TEXT, last_error TEXT, provider_status TEXT,
