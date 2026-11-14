@@ -236,6 +236,18 @@ try {
       failure = [failure, `CLEANUP FAILED: ${cleanup.error}`].filter(Boolean).join('\n');
     }
   }
+  if (secondOwnerToken && secondTenantSlug) {
+    try {
+      const secondResponse = await request('DELETE', '/api/e2e/tenant', { slug: secondTenantSlug }, secondOwnerToken);
+      assert.equal(secondResponse.status, 200, 'second synthetic tenant cleanup must return HTTP 200');
+      assert.equal(secondResponse.data?.success, true, 'second synthetic tenant cleanup must confirm success');
+      assert.equal(secondResponse.data?.deletedTenant, secondTenantSlug, 'second cleanup must confirm its exact tenant');
+      checks.push('finally cleanup of second synthetic staging tenant');
+    } catch (error) {
+      cleanup = { attempted: true, success: false, error: error?.message || String(error) };
+      failure = [failure, `SECOND TENANT CLEANUP FAILED: ${cleanup.error}`].filter(Boolean).join('\\n');
+    }
+  }
 }
 
 const result = failure ? 'FAIL' : 'PASS';
