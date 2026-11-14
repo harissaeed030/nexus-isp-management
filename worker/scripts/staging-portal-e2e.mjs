@@ -3,10 +3,15 @@ import { randomUUID } from 'node:crypto';
 
 const base = (process.env.NEXUS_STAGING_URL || 'https://nexus-saas-api-staging.harissaeed030.workers.dev').replace(/\/$/, '');
 const suffix = randomUUID().replaceAll('-', '').slice(0, 18);
+const tenantSlug = `nexus-stage-${suffix}`;
 const ownerEmail = `owner-${suffix}@nexus.invalid`;
 const portalEmail = `portal-${suffix}@nexus.invalid`;
 const password = 'Nexus-Staging-Only-2026!';
 const checks = [];
+
+let ownerToken = null;
+let failure = null;
+let cleanup = { attempted: false, success: false, reason: 'Tenant was not registered or owner token was not returned' };
 
 async function request(method, path, body, token) {
   const headers = { accept: 'application/json' };
@@ -23,6 +28,7 @@ async function request(method, path, body, token) {
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text.slice(0, 300) }; }
   return { status: response.status, data, headers: response.headers };
 }
+
 function ok(label, response, expected) {
   assert.equal(response.status, expected, `${label}: expected HTTP ${expected}, got ${response.status}: ${JSON.stringify(response.data)}`);
   checks.push(label);
@@ -36,7 +42,7 @@ try {
 
   const registration = await request('POST', '/api/auth/register', {
     companyName: `NEXUS staging smoke ${suffix}`,
-    slug: `nexus-stage-${suffix}`,
+    slug: tenantSlug,
     email: ownerEmail,
     password,
     name: 'Staging Smoke Owner'
@@ -44,12 +50,12 @@ try {
   const owner = ok('tenant registration', registration, 201);
   assert.equal(owner.success, true);
   assert.equal(owner.user.role, 'owner');
-  const ownerToken = owner.token;
-  assert.ok(ownerToken);
+  ownerToken = owner.token;
+  assert.ok(ownerToken, 'tenant registration must return an owner token');
 
   const me = await request('GET', '/api/auth/me', undefined, ownerToken);
   ok('owner authentication and tenant identity', me, 200);
-  assert.equal(me.data.tenant.slug, `nexus-stage-${suffix}`);
+  assert.equal(me.data.tenant.slug, tenantSlug);
 
   const customerResult = await request('POST', '/api/customers', {
     first_name: 'Portal', last_name: 'Smoke Customer',
@@ -85,7 +91,7 @@ try {
   assert.equal(account.success, true);
 
   const portalLogin = await request('POST', '/api/portal/auth/login', {
-    workspace: `nexus-stage-${suffix}`, email: portalEmail, password
+    workspace: tenantSlug, email: portalEmail, password
   });
   const portal = ok('customer portal login', portalLogin, 200);
   assert.equal(portal.success, true);
@@ -122,9 +128,27 @@ try {
 
   const missingAuth = await request('GET', '/api/customers');
   ok('unauthenticated admin API rejection', missingAuth, 401);
-
-  console.log(JSON.stringify({ result: 'PASS', checks, tenantSlug: `nexus-stage-${suffix}` }, null, 2));
 } catch (error) {
-  console.error(JSON.stringify({ result: 'FAIL', checks, error: error?.stack || String(error) }, null, 2));
-  process.exitCode = 1;
+  failure = error?.stack || String(error);
+} finally {
+  // Always attempt tenant-scoped teardown, even when an assertion or request fails.
+  // The API permits this only on the exact staging hostname and for this run's tenant slug.
+  if (ownerToken) {
+    cleanup = { attempted: true, success: false };
+    try {
+      const response = await request('DELETE', '/api/e2e/tenant', { slug: tenantSlug }, ownerToken);
+      assert.equal(response.status, 200, `staging tenant cleanup expected HTTP 200, got ${response.status}: ${JSON.stringify(response.data)}`);
+      assert.equal(response.data?.success, true, 'staging tenant cleanup must confirm success');
+      assert.equal(response.data?.deletedTenant, tenantSlug, 'cleanup must confirm the exact synthetic tenant');
+      cleanup = { attempted: true, success: true, status: response.status, deletedTenant: response.data.deletedTenant };
+      checks.push('finally cleanup of synthetic staging tenant');
+    } catch (error) {
+      cleanup = { attempted: true, success: false, error: error?.message || String(error) };
+      failure = [failure, `CLEANUP FAILED: ${cleanup.error}`].filter(Boolean).join('\n');
+    }
+  }
 }
+
+const result = failure ? 'FAIL' : 'PASS';
+console.log(JSON.stringify({ result, checks, tenantSlug, cleanup, ...(failure ? { error: failure } : {}) }, null, 2));
+if (failure || !cleanup.success) process.exitCode = 1;
