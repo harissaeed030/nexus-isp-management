@@ -17,6 +17,7 @@ export const PERMISSIONS = [
   { key: "tickets.manage", group: "Support", label: "Create and update complaints" },
   { key: "routers.read", group: "Network", label: "View router inventory" },
   { key: "routers.manage", group: "Network", label: "Add, edit and delete router records" },
+  { key: "routers.provision", group: "Network", label: "Manage PPPoE users and connections" },
   { key: "audit.read", group: "Administration", label: "View activity log" }
 ];
 export const permissionKeys = new Set(PERMISSIONS.map(item => item.key));
@@ -58,7 +59,7 @@ export function permissionFor(path,method) {
   if(path==="/api/v1/billing/generate")return verb==="POST"?"billing.generate":null;
   if(path==="/api/v1/billing/runs")return verb==="GET"?"billing.read":null;
   if(matches("/api/v1/tickets"))return verb==="GET"?"tickets.read":["POST","PATCH"].includes(verb)?"tickets.manage":null;
-  if(matches("/api/v1/routers"))return verb==="GET"?"routers.read":["POST","PATCH","DELETE"].includes(verb)?"routers.manage":null;
+  if(matches("/api/v1/routers"))return verb==="GET"?"routers.read":["POST","PATCH","DELETE"].includes(verb)?"routers.manage":verb==="POST"||verb==="PATCH"?"routers.provision":null;
   if(path==="/api/v1/reports/summary")return verb==="GET"?"reports.read":null;
   if(path==="/api/v1/audit-logs")return verb==="GET"?"audit.read":null;
   return null;
