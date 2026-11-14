@@ -1,4 +1,4 @@
-import { randomUUID, randomBytes, createHash, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomUUID, randomBytes, createHash, createHmac, scryptSync, timingSafeEqual } from "node:crypto";
 import { withTransaction } from "../lib/transactions.js";
 
 const id=()=>randomUUID();
@@ -12,9 +12,9 @@ function customerAuth(db,fail){
  return (req,res,next)=>{
   const raw=(req.headers.authorization||"").replace(/^Bearer\\s+/i,"");
   if(!raw)return fail(res,401,"Customer sign-in required.");
-  const account=db.prepare("SELECT a.*,c.* FROM customer_portal_sessions s JOIN customer_portal_accounts a ON a.id=s.account_id JOIN customers c ON c.id=a.customer_id WHERE s.token_hash=? AND s.expires_at>? AND a.status='active' AND c.status='active'").get(hashToken(raw),new Date().toISOString());
+  const account=db.prepare("SELECT a.id account_id,a.tenant_id account_tenant_id,a.customer_id,a.password_hash,a.status account_status,c.* FROM customer_portal_sessions s JOIN customer_portal_accounts a ON a.id=s.account_id JOIN customers c ON c.id=a.customer_id WHERE s.token_hash=? AND s.expires_at>? AND a.status='active' AND c.status='active'").get(hashToken(raw),new Date().toISOString());
   if(!account)return fail(res,401,"Customer session expired or invalid.");
-  req.portal={accountId:account.id,tenantId:account.tenant_id,customer:account};next();
+  req.portal={accountId:account.account_id,tenantId:account.account_tenant_id,customer:account};next();
  };
 }
 async function sendWhatsApp(env,to,body){
@@ -26,7 +26,7 @@ async function sendWhatsApp(env,to,body){
  });
  const payload=await response.json().catch(()=>({}));
  if(!response.ok)throw new Error(payload.error?.message||"WhatsApp provider rejected the message (HTTP "+response.status+").");
- return {configured:true,messageId:payload.messages?.[0]?.id||null,providerStatus:payload.messages?.[0]?.message_status||"accepted"};
+ const messageId=payload.messages?.[0]?.id;if(!messageId)throw new Error("WhatsApp provider returned no message ID; delivery cannot be confirmed.");\n return {configured:true,messageId,providerStatus:payload.messages?.[0]?.message_status||"accepted"};
 }
 export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
  const portalAuth=customerAuth(db,fail);
