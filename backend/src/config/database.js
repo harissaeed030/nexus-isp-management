@@ -124,4 +124,47 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(por
   }
 }
 
+
+const businessModulesMigrationVersion = "007_isp_business_modules";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(businessModulesMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/007_isp_business_modules.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(businessModulesMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${businessModulesMigrationVersion} failed: ${error.message}`);
+  }
+}
+
+const financialMigrationVersion = "008_financial_management";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(financialMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/008_financial_management.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(financialMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${financialMigrationVersion} failed: ${error.message}`);
+  }
+}
+
+const sessionHardeningMigrationVersion = "009_session_hardening";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(sessionHardeningMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/009_session_hardening.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(sessionHardeningMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${sessionHardeningMigrationVersion} failed: ${error.message}`);
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
