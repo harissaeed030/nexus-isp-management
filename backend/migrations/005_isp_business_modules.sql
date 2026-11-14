@@ -41,3 +41,18 @@ END;
 CREATE TRIGGER IF NOT EXISTS task10_notification_tenant BEFORE INSERT ON customer_notifications BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND tenant_id=NEW.tenant_id) THEN RAISE(ABORT,'notification customer tenant mismatch') END;
 END;
+
+CREATE TRIGGER IF NOT EXISTS task10_geo_parent_tenant BEFORE INSERT ON geo_locations WHEN NEW.parent_id IS NOT NULL BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM geo_locations WHERE id=NEW.parent_id AND tenant_id=NEW.tenant_id) THEN RAISE(ABORT,'geo parent tenant mismatch') END;
+END;
+CREATE TRIGGER IF NOT EXISTS task10_partner_parent_tenant BEFORE INSERT ON business_partners WHEN NEW.parent_partner_id IS NOT NULL BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM business_partners WHERE id=NEW.parent_partner_id AND tenant_id=NEW.tenant_id AND type='dealer') THEN RAISE(ABORT,'partner parent tenant mismatch') END;
+END;
+CREATE TRIGGER IF NOT EXISTS task10_officer_tenant BEFORE INSERT ON recovery_officers BEGIN
+ SELECT CASE WHEN NEW.user_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND tenant_id=NEW.tenant_id) THEN RAISE(ABORT,'recovery user tenant mismatch') END;
+ SELECT CASE WHEN NEW.area_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM coverage_areas WHERE id=NEW.area_id AND tenant_id=NEW.tenant_id) THEN RAISE(ABORT,'recovery area tenant mismatch') END;
+END;
+CREATE TRIGGER IF NOT EXISTS task10_collection_references_tenant BEFORE INSERT ON cash_collections BEGIN
+ SELECT CASE WHEN NEW.recovery_officer_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM recovery_officers WHERE id=NEW.recovery_officer_id AND tenant_id=NEW.tenant_id) THEN RAISE(ABORT,'collection officer tenant mismatch') END;
+ SELECT CASE WHEN NEW.partner_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM business_partners WHERE id=NEW.partner_id AND tenant_id=NEW.tenant_id) THEN RAISE(ABORT,'collection partner tenant mismatch') END;
+END;
