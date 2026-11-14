@@ -7,7 +7,7 @@ export function nextInvoiceNumber(db,tenantId,period) {
   return number;
 }
 export function invoiceBalance(db,tenantId,invoiceId) {
-  const row=db.prepare(`SELECT i.amount_pkr,
+  const row=db.prepare(`SELECT i.amount_pkr,i.due_date,
     COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE tenant_id=i.tenant_id AND invoice_id=i.id),0) paid,
     COALESCE((SELECT SUM(r.amount_pkr) FROM payment_reversals r JOIN payments p ON p.id=r.payment_id WHERE r.tenant_id=i.tenant_id AND p.invoice_id=i.id),0) reversed,
     COALESCE((SELECT SUM(amount_pkr) FROM credit_notes WHERE tenant_id=i.tenant_id AND invoice_id=i.id),0) credited
@@ -17,6 +17,7 @@ export function invoiceBalance(db,tenantId,invoiceId) {
 }
 export function syncInvoiceStatus(db,tenantId,invoiceId) {
   const b=invoiceBalance(db,tenantId,invoiceId); if(!b)return;
-  const status=b.credited>=b.amount_pkr?"credited":b.balance<=0?"paid":b.netPaid>0?"partial":"unpaid";
+  const today=new Date().toISOString().slice(0,10);
+  const status=b.credited>=b.amount_pkr?"credited":b.balance<=0?"paid":b.due_date&&b.due_date<today?"overdue":b.netPaid>0?"partial":"unpaid";
   db.prepare("UPDATE invoices SET status=? WHERE id=? AND tenant_id=?").run(status,invoiceId,tenantId);
 }
