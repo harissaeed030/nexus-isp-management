@@ -11,6 +11,7 @@ import { registerOperationsRoutes } from "./routes/operations.routes.js";
 import { registerCustomerRoutes } from "./routes/customer-subscription.routes.js";
 import { registerMikroTikRoutes } from "./routes/mikrotik.routes.js";
 import { registerOltRoutes } from "./routes/olt.routes.js";
+import { registerBusinessRoutes } from "./routes/business.routes.js";
 import { hasPermission, permissionFor } from "./lib/permissions.js";
 import { withTransaction } from "./lib/transactions.js";
 const app=express();app.disable("x-powered-by");app.use(helmet());
@@ -47,6 +48,7 @@ app.get("/api/v1/dashboard",auth,(req,res)=>{const t=req.user.tenant_id,c=sql=>d
 registerCustomerRoutes(app,{db,auth,id,audit,fail});
 registerMikroTikRoutes(app,{db,auth,id,audit,fail});
 registerOltRoutes(app,{db,auth,id,audit,fail});
+registerBusinessRoutes(app,{db,auth,id,audit,fail});
 app.get("/api/v1/packages",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT * FROM packages WHERE tenant_id=? ORDER BY created_at DESC").all(q.user.tenant_id)}));
 app.post("/api/v1/packages",auth,(q,r)=>{const b=q.body||{},d=Number(b.speedDownMbps),u=Number(b.speedUpMbps),p=Number(b.monthlyPricePkr);if(!required(b.name)||!Number.isInteger(d)||d<1||!Number.isInteger(u)||u<1||!Number.isInteger(p)||p<0)return fail(r,400,"Valid package name, speeds and price are required.");const pid=id();db.prepare("INSERT INTO packages(id,tenant_id,name,speed_down_mbps,speed_up_mbps,monthly_price_pkr) VALUES(?,?,?,?,?,?)").run(pid,q.user.tenant_id,b.name.trim(),d,u,p);audit(q.user,"create","package",pid);r.status(201).json({success:true,data:db.prepare("SELECT * FROM packages WHERE id=?").get(pid)});});
 app.patch("/api/v1/packages/:id",auth,(q,r)=>{const x=db.prepare("SELECT * FROM packages WHERE id=? AND tenant_id=?").get(q.params.id,q.user.tenant_id);if(!x)return fail(r,404,"Package not found.");const b=q.body||{},v={name:b.name??x.name,d:Number(b.speedDownMbps??x.speed_down_mbps),u:Number(b.speedUpMbps??x.speed_up_mbps),p:Number(b.monthlyPricePkr??x.monthly_price_pkr),s:b.status??x.status};if(!required(v.name)||!Number.isInteger(v.d)||v.d<1||!Number.isInteger(v.u)||v.u<1||!Number.isInteger(v.p)||v.p<0||!["active","archived"].includes(v.s))return fail(r,400,"Invalid package details.");db.prepare("UPDATE packages SET name=?,speed_down_mbps=?,speed_up_mbps=?,monthly_price_pkr=?,status=? WHERE id=? AND tenant_id=?").run(v.name,v.d,v.u,v.p,v.s,x.id,q.user.tenant_id);audit(q.user,"update","package",x.id);r.json({success:true,data:db.prepare("SELECT * FROM packages WHERE id=?").get(x.id)});});
