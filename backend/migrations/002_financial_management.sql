@@ -52,3 +52,23 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_unallocated_allocation_update BEFORE UPDATE ON unallocated_payments
 WHEN OLD.status='allocated' OR NEW.id<>OLD.id OR NEW.tenant_id<>OLD.tenant_id OR NEW.customer_id<>OLD.customer_id OR NEW.amount_pkr<>OLD.amount_pkr OR NEW.method<>OLD.method OR COALESCE(NEW.reference,'')<>COALESCE(OLD.reference,'') OR NEW.received_at<>OLD.received_at OR NEW.created_by<>OLD.created_by
 BEGIN SELECT RAISE(ABORT,'unallocated payment allocation is immutable'); END;
+
+-- Recalculate the permitted collection against reversals and credit notes, not gross historic payments.
+DROP TRIGGER IF EXISTS trg_payments_balance_insert;
+DROP TRIGGER IF EXISTS trg_payments_balance_update;
+CREATE TRIGGER trg_payments_balance_insert BEFORE INSERT ON payments BEGIN
+ SELECT CASE WHEN NEW.amount_pkr + COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE invoice_id=NEW.invoice_id),0)
+   - COALESCE((SELECT SUM(r.amount_pkr) FROM payment_reversals r JOIN payments p ON p.id=r.payment_id WHERE p.invoice_id=NEW.invoice_id),0)
+   > COALESCE((SELECT amount_pkr FROM invoices WHERE id=NEW.invoice_id AND tenant_id=NEW.tenant_id),-1)
+     - COALESCE((SELECT SUM(amount_pkr) FROM credit_notes WHERE invoice_id=NEW.invoice_id AND tenant_id=NEW.tenant_id),0)
+ THEN RAISE(ABORT,'payment exceeds adjusted invoice balance') END;
+ SELECT CASE WHEN NEW.method NOT IN ('cash','bank','jazzcash','easypaisa','other') THEN RAISE(ABORT,'unsupported payment method') END;
+END;
+CREATE TRIGGER trg_payments_balance_update BEFORE UPDATE OF tenant_id,invoice_id,amount_pkr,method ON payments BEGIN
+ SELECT CASE WHEN NEW.amount_pkr + COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE invoice_id=NEW.invoice_id AND id<>OLD.id),0)
+   - COALESCE((SELECT SUM(r.amount_pkr) FROM payment_reversals r JOIN payments p ON p.id=r.payment_id WHERE p.invoice_id=NEW.invoice_id),0)
+   > COALESCE((SELECT amount_pkr FROM invoices WHERE id=NEW.invoice_id AND tenant_id=NEW.tenant_id),-1)
+     - COALESCE((SELECT SUM(amount_pkr) FROM credit_notes WHERE invoice_id=NEW.invoice_id AND tenant_id=NEW.tenant_id),0)
+ THEN RAISE(ABORT,'payment exceeds adjusted invoice balance') END;
+ SELECT CASE WHEN NEW.method NOT IN ('cash','bank','jazzcash','easypaisa','other') THEN RAISE(ABORT,'unsupported payment method') END;
+END;
