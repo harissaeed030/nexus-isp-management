@@ -112,3 +112,23 @@ Staff roles have safe defaults (owner, admin, billing, NOC, support, technician 
 ## License
 
 All rights reserved until a license is added. Do not assume this project is open source for reuse or resale.
+
+
+### Financial management (Task 04)
+
+The financial lifecycle migration is additive: it keeps existing invoice and payment rows and adds tenant-scoped invoice sequences, credit notes, payment reversals, and unallocated receipts. On startup, SQLite applies `002_financial_management` once through the schema migration ledger.
+
+Financial API routes (all require a bearer token and tenant-scoped permissions):
+
+- `GET /api/v1/customers/:id/ledger` — customer debit/credit ledger and running balance.
+- `POST /api/v1/payments/:id/reversals` — append-only partial/full reversal with a required reason.
+- `POST /api/v1/invoices/:id/credit-notes` — append-only invoice credit note with a required reason.
+- `POST /api/v1/reconciliation/unallocated` — record an unallocated receipt.
+- `GET /api/v1/reconciliation/unallocated` and `POST /api/v1/reconciliation/unallocated/:id/allocate` — list and allocate receipts to the same customer's invoice.
+- `GET /api/v1/reports/aging` — overdue balances grouped into 1–30, 31–60, 61–90 and 90+ day buckets.
+- `GET /api/v1/reports/financial?from=YYYY-MM-DD&to=YYYY-MM-DD` — billed, collected, refunded, credit-note, outstanding and unallocated totals.
+- `GET /api/v1/invoices/:id/print` and `GET /api/v1/payments/:id/receipt` — print-ready HTML documents. Use the browser's Print / Save as PDF action; these endpoints do not generate server-side PDF binaries.
+
+Invoice numbering is sequential per tenant and billing period. Payment reversals and credit notes are stored as append-only events; balances are calculated in integer PKR. The reconciliation flow retains the original unallocated receipt and creates a linked payment only when allocated.
+
+Run `npm run verify` in `backend/` before deployment. A successful CI run is required before treating this task as complete.

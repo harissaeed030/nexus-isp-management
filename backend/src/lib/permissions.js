@@ -12,6 +12,10 @@ export const PERMISSIONS = [
   { key: "invoices.create", group: "Billing", label: "Create invoices" },
   { key: "payments.create", group: "Billing", label: "Record payments" },
   { key: "billing.generate", group: "Billing", label: "Generate monthly invoices" },
+  { key: "ledger.read", group: "Billing", label: "View customer ledger" },
+  { key: "refunds.manage", group: "Billing", label: "Record payment refunds and reversals" },
+  { key: "credit_notes.manage", group: "Billing", label: "Issue credit notes" },
+  { key: "reconciliation.manage", group: "Billing", label: "Reconcile unallocated payments" },
   { key: "reports.read", group: "Reports", label: "View financial reports" },
   { key: "tickets.read", group: "Support", label: "View complaints" },
   { key: "tickets.manage", group: "Support", label: "Create and update complaints" },
@@ -23,7 +27,7 @@ export const permissionKeys = new Set(PERMISSIONS.map(item => item.key));
 export const ROLE_PERMISSIONS = {
   owner: ["*"],
   admin: ["*"],
-  billing: ["dashboard.read","customers.read","packages.read","subscriptions.read","billing.read","invoices.create","payments.create","billing.generate","reports.read"],
+  billing: ["dashboard.read","customers.read","packages.read","subscriptions.read","billing.read","invoices.create","payments.create","billing.generate","reports.read","ledger.read","refunds.manage","credit_notes.manage","reconciliation.manage"],
   noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage"],
   support: ["dashboard.read","customers.read","packages.read","subscriptions.read","tickets.read","tickets.manage"],
   technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read"],
@@ -50,6 +54,12 @@ export function permissionFor(path,method) {
   const verb=String(method||"GET").toUpperCase();
   const matches=base=>path===base||path.startsWith(base+"/");
   if(path==="/api/v1/dashboard")return verb==="GET"?"dashboard.read":null;
+  if(matches("/api/v1/customers")&&path.endsWith("/ledger"))return verb==="GET"?"ledger.read":null;
+  if(matches("/api/v1/payments")&&path.includes("/reversals"))return verb==="POST"?"refunds.manage":null;
+  if(matches("/api/v1/invoices")&&path.includes("/credit-notes"))return verb==="POST"?"credit_notes.manage":null;
+  if(matches("/api/v1/reconciliation"))return verb==="GET"?"billing.read":verb==="POST"?"reconciliation.manage":null;
+  if(path==="/api/v1/reports/aging"||path==="/api/v1/reports/financial")return verb==="GET"?"reports.read":null;
+
   if(matches("/api/v1/customers"))return ({GET:"customers.read",POST:"customers.create",PATCH:"customers.update",DELETE:"customers.delete"})[verb]||null;
   if(matches("/api/v1/packages"))return verb==="GET"?"packages.read":["POST","PATCH"].includes(verb)?"packages.manage":null;
   if(matches("/api/v1/subscriptions"))return verb==="GET"?"subscriptions.read":["POST","PATCH"].includes(verb)?"subscriptions.manage":null;
