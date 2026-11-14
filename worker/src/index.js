@@ -219,6 +219,39 @@ if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
 const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status,token_version FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
+// Staging-only E2E teardown. This route is unreachable on production hostnames.
+if(path==='/api/e2e/tenant'&&m==='DELETE'){
+ if(url.hostname!=='nexus-saas-api-staging.harissaeed030.workers.dev')return json({error:'Not Found'},404);
+ if(role!=='owner')return json({error:'Owner access required'},403);
+ const body=await parseBody(request),org=await env.DB.prepare('SELECT id,slug FROM organizations WHERE id=?').bind(orgId).first();
+ if(!org||typeof body?.slug!=='string'||org.slug!==body.slug||!org.slug.startsWith('nexus-stage-'))return json({error:'Not Found'},404);
+ const statements=[
+  env.DB.prepare('DELETE FROM login_attempts WHERE email IN (SELECT email FROM users WHERE organization_id=?) OR email IN (SELECT email FROM customer_portal_accounts WHERE organization_id=?)').bind(orgId,orgId),
+  env.DB.prepare('DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE organization_id=?)').bind(orgId),
+  env.DB.prepare('DELETE FROM refunds WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM payments WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM invoices WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM subscriptions WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM support_tickets WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM customer_portal_accounts WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM api_keys WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM password_resets WHERE user_id IN (SELECT id FROM users WHERE organization_id=?)').bind(orgId),
+  env.DB.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE organization_id=?)').bind(orgId),
+  env.DB.prepare('DELETE FROM user_permissions WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM notifications WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM settings WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM pppoe_accounts WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM onu_devices WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM network_devices WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM audit_log WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM customers WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM packages WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM users WHERE organization_id=?').bind(orgId),
+  env.DB.prepare('DELETE FROM organizations WHERE id=? AND slug=?').bind(orgId,org.slug)
+ ];
+ await env.DB.batch(statements);
+ return json({success:true,deletedTenant:org.slug})
+}
 if(!await roleAllowedWithOverrides(env,orgId,userId,role,path,m))return json({error:'Forbidden',message:'Your role does not have permission for this action'},403);
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='GET')return await getPortalAccount(env,path,orgId,role);
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='POST')return await savePortalAccount(request,env,path,orgId,userId,role,ip);
