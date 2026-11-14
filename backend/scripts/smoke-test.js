@@ -30,6 +30,10 @@ try{
  const setup=await request("/api/v1/setup","POST",{companyName:"Nexus Test ISP",fullName:"Test Owner",email:"owner@nexus.test",password:"Strong-Test-Password-123"});
  assert.equal(setup.status,201);
  const token=setup.data.token;
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM schema_migrations WHERE version='001_database_hardening'").get().n,1);
+ db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run("other-tenant","Other ISP","other-isp");
+ db.prepare("INSERT INTO customers(id,tenant_id,customer_code,full_name) VALUES(?,?,?,?)").run("other-customer","other-tenant","OTHER-1","Other Subscriber");
+ assert.throws(() => db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr) VALUES(?,?,?,?,?)").run("cross-tenant-invoice",setup.data.user.tenantId,"other-customer","CROSS-1",100), /invoice customer tenant mismatch/);
  const customer=await request("/api/v1/customers","POST",{fullName:"Test Subscriber"},token);
  assert.equal(customer.status,201);
  const pack=await request("/api/v1/packages","POST",{name:"Test 10M",speedDownMbps:10,speedUpMbps:10,monthlyPricePkr:1500},token);
