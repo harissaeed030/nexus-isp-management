@@ -3,7 +3,7 @@ const MAX_EXPORT_ROWS = 50000;
 function csvCell(value) {
   let text = value === null || value === undefined ? "" : String(value);
   // Prevent spreadsheet formula execution when a CSV is opened in Excel/Sheets.
-  if (/^[\\s]*[=+@-]/.test(text) || /^[\\t\\r]/.test(text)) text = "'" + text;
+  if (/^[\s]*[=+@-]/.test(text) || /^[\t\r]/.test(text)) text = "'" + text;
   return '"' + text.replace(/"/g, '""') + '"';
 }
 
@@ -25,7 +25,7 @@ function csvResponse(res, filename, columns, rows) {
 function dateRange(req, fail) {
   const from = req.query.from || null;
   const to = req.query.to || null;
-  const valid = value => value === null || (typeof value === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value);
+  const valid = value => value === null || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value);
   if (!valid(from) || !valid(to) || (from && to && from > to)) {
     fail.status = 400;
     fail.message = "Use valid YYYY-MM-DD from/to dates; from must not be after to.";
