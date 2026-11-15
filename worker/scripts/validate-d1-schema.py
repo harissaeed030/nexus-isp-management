@@ -85,3 +85,57 @@ else:
     raise AssertionError("Case-insensitive per-organization user email uniqueness was not enforced")
 
 print("D1 schema validation passed: v6 -> idempotent v7/v8/v9 migrations, object parity, tenant guards and email uniqueness.")
+
+// Fresh-install path: the canonical snapshot is the only supported bootstrap
+// for an empty D1 database. Validate it independently from the v6 upgrade path.
+fresh = sqlite3.connect(":memory:")
+fresh.execute("PRAGMA foreign_keys=ON")
+fresh.executescript(current)
+fresh_tables = {
+    row[0] for row in fresh.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    )
+}
+required_fresh_tables = {
+    "organizations", "users", "customers", "packages", "subscriptions",
+    "invoices", "payments", "support_tickets", "audit_logs", "schema_migrations",
+}
+assert required_fresh_tables <= fresh_tables, (
+    "Fresh schema is missing tables: " + repr(sorted(required_fresh_tables - fresh_tables))
+)
+fresh_versions = [row[0] for row in fresh.execute("SELECT id FROM schema_migrations ORDER BY id")]
+assert fresh_versions and max(fresh_versions) == 9, "Fresh schema must include migration ledger through 0009"
+fresh_indexes = {
+    row[1] for row in fresh.execute("PRAGMA index_list('users')")
+}
+for required_index in (
+    "idx_users_organization",
+    "idx_users_email_global",
+    "idx_users_org_email_ci",
+):
+    assert required_index in fresh_indexes, (
+        "Fresh schema is missing required users index: " + required_index
+    )
+fresh_fk_violations = fresh.execute("PRAGMA foreign_key_check").fetchall()
+assert not fresh_fk_violations, "Fresh schema has foreign-key violations: " + repr(fresh_fk_violations)
+
+# Confirm the canonical fresh schema enforces the same email constraints as
+# the incremental upgrade path: global exact uniqueness and case-insensitive
+# uniqueness within an organization.
+fresh.execute("INSERT INTO organizations(id,name,slug) VALUES('fresh-a','Fresh A','fresh-a'),('fresh-b','Fresh B','fresh-b')")
+fresh.execute("INSERT INTO users(id,organization_id,email,role) VALUES('fresh-user-a','fresh-a','fresh-owner@example.invalid','owner')")
+try:
+    fresh.execute("INSERT INTO users(id,organization_id,email,role) VALUES('fresh-user-global-dup','fresh-b','fresh-owner@example.invalid','owner')")
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Fresh schema did not enforce global user email uniqueness")
+try:
+    fresh.execute("INSERT INTO users(id,organization_id,email,role) VALUES('fresh-user-case-dup','fresh-a','FRESH-OWNER@example.invalid','owner')")
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Fresh schema did not enforce case-insensitive organization email uniqueness")
+fresh.close()
+
+print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0009, required indexes and foreign keys.")
