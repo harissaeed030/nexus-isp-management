@@ -6,6 +6,7 @@ on:
       - build/nexus-isp-core
   pull_request:
     branches:
+      - main
       - build/nexus-isp-core
 
 jobs:
