@@ -5,7 +5,7 @@ const base = (process.env.NEXUS_STAGING_URL || 'https://nexus-saas-api-staging.h
 const suffix = randomUUID().replaceAll('-', '').slice(0, 18);
 const tenantSlug = `nexus-stage-${suffix}`;
 const ownerEmail = `owner-${suffix}@nexus.invalid`;
-const secondOwnerEmail = `owner-second-${suffix}@nexus.invalid`;
+const secondOwnerEmail = ownerEmail;
 const portalEmail = `portal-${suffix}@nexus.invalid`;
 const password = 'Nexus-Staging-Only-2026!';
 const checks = [];
@@ -67,7 +67,7 @@ try {
     password,
     name: 'Second Staging Owner'
   });
-  const secondOwner = ok('second ISP tenant registers with its own globally unique owner email', secondTenantRegistration, 201);
+  const secondOwner = ok('second ISP tenant registers using the same owner email in a separate organization', secondTenantRegistration, 201);
   secondOwnerToken = secondOwner.token;
   assert.ok(secondOwnerToken, 'second tenant registration must return an owner token');
   assert.notEqual(secondOwner.user.orgId, owner.user.orgId);
@@ -82,6 +82,10 @@ try {
   });
   const secondTenantLoginData = ok('second owner authenticates only in the second workspace', secondTenantLogin, 200);
   assert.equal(secondTenantLoginData.user.orgId, secondOwner.user.orgId);
+  const ambiguousOwnerLogin = await request('POST', '/api/auth/login', {
+    email: ownerEmail, password
+  });
+  ok('email-only owner login rejects ambiguous same-email tenant identity', ambiguousOwnerLogin, 400);
   const wrongWorkspaceLogin = await request('POST', '/api/auth/login', {
     email: ownerEmail, password, workspace: secondTenantSlug
   });
