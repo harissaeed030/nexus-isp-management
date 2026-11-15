@@ -4,7 +4,7 @@ process.env.ROUTER_CREDENTIAL_KEY="11".repeat(32);
 const {credentialCrypto}=await import("../src/routes/mikrotik.routes.js");
 const {safeRouterError}=await import("../src/services/mikrotik-api.js");
 const {MockMikroTikApi}=await import("../src/services/mock-mikrotik-api.js");
-const {permissionFor}=await import("../src/lib/permissions.js");
+const {permissionFor,roleHasPermission}=await import("../src/lib/permissions.js");
 test("router credentials encrypt and decrypt with authenticated encryption",()=>{const a=credentialCrypto.encrypt("secret-router-password");assert.notEqual(a,"secret-router-password");assert.equal(credentialCrypto.decrypt(a),"secret-router-password");});
 test("router encryption rejects modified ciphertext",()=>{const a=credentialCrypto.encrypt("secret");assert.throws(()=>credentialCrypto.decrypt(a.slice(0,-1)+"A"));});
 test("router errors redact password-like values",()=>{assert.match(safeRouterError(new Error("login password=hunter2 rejected")),/password=\[REDACTED\]/);});
@@ -17,4 +17,7 @@ test("router inventory and live provisioning use distinct permissions",()=>{
  assert.equal(permissionFor("/api/v1/routers/abc/test","POST"),"routers.provision");
  assert.equal(permissionFor("/api/v1/routers/abc/pppoe/secrets","POST"),"routers.provision");
  assert.equal(permissionFor("/api/v1/routers/abc/sync","GET"),"routers.provision");
+ assert.equal(roleHasPermission("noc","routers.provision"),true);
+ assert.equal(roleHasPermission("technician","routers.provision"),false);
+ assert.equal(roleHasPermission("billing","routers.provision"),false);
 });
