@@ -1,25 +1,48 @@
-# Nexus — ISP Management Platform
+# NEXUS — ISP Management SaaS
 
-**Mobile-first ISP operations software for FTTH providers.**
+**Mobile-first ISP operations platform for FTTH providers.**  
+Primary deployment: **Vancom Networks (Pvt) Ltd.**
 
-Nexus is being built as a multi-tenant platform for subscriber records, internet packages, billing, payments, support tickets and network operations.
+NEXUS is a multi-tenant ISP management system covering organization/user access, customer records, packages, subscriptions, invoices, payments, refunds, support tickets, customer self-service, notifications and network inventory.
 
-## Current development status
+## Environments
 
-The `build/nexus-isp-core` branch contains the first local API foundation:
-- Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
-- Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
-- Customer registration and CRUD with tenant-scoped account-number sequencing, service address, coverage area, installation date, account/connection status, searchable filters and pagination.
-- Customer profile views with subscription, invoice, payment, complaint, connection and subscription history.
-- Subscription assignment, package changes, start/expiry dates, renewal, suspension/resume/cancellation history and automatic expiry transition when subscription lists or customer profiles are read.
-- Package management, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
-- Staff account management with role defaults and per-user module permission overrides, router inventory, idempotent monthly invoice generation and financial summary reports.
-- Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
-- SQLite database is created automatically under `backend/data/`.
+| Environment | Frontend | API | Database |
+|---|---|---|---|
+| Production | https://nexus-isp-management.pages.dev | https://nexus-saas-api.harissaeed030.workers.dev | `nexus-saas-db` |
+| Staging | GitHub/Cloudflare preview workflow | https://nexus-saas-api-staging.harissaeed030.workers.dev | `nexus-saas-staging-db` |
 
-This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, backup/restore, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
+The production and staging Workers are separate and each binds only to its matching D1 database. Do not point staging at production data.
 
-## Local setup (Android Termux or desktop)
+## Verified deployment snapshot — 15 November 2026
+
+- Production Worker: `nexus-saas-api`; Cloudflare reports it deployed and active.
+- Staging Worker: `nexus-saas-api-staging`; Cloudflare reports it deployed and active.
+- Production D1 schema ledger: migrations `0001` through `0007`.
+- Staging D1 schema ledger: migrations `0001` through `0007`.
+- Migration 0007 adds customer portal accounts and insert/update tenant-consistency triggers.
+- Production Worker bindings include D1 (`DB`) and server-side secrets (`JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY`). Secret values are never stored in this repository.
+- Cloudflare's release record reports production Worker version 22 at 100% traffic.
+- The production D1 release record reports one organization and one owner, with no customer, invoice, payment or customer-portal-account rows at the time of verification.
+
+This is evidence of deployed infrastructure and schema state, **not certification that every business workflow is production-ready**. Confirm live health, browser flows, backup recovery and tenant isolation before using NEXUS as the sole system of record for real customers.
+
+## Implemented application areas
+
+The Cloudflare Worker source includes:
+- Organization registration, authentication, JWT verification, login throttling, logout and token-version invalidation.
+- Organization-scoped users, staff roles and permission overrides.
+- Customers and customer portal account provisioning.
+- Packages, subscriptions, invoices, payments, refunds and billing generation.
+- Support tickets, ticket messages, notifications and audit records.
+- PPPoE account records, network-device inventory, OLT/ONU inventory and alarm records.
+- Customer portal login, profile, dashboard, invoices, payments, subscriptions, tickets and password changes.
+
+The frontend is deployed separately through Cloudflare Pages. The Worker root response is an API landing page; it is not the customer/admin frontend.
+
+## Local SQLite application
+
+The `backend/` directory is a separate local Node.js + SQLite application intended for offline development/testing (including Android Termux). It is not the Cloudflare production D1 database.
 
 Requirements: Node.js 22.13 or newer.
 
@@ -28,99 +51,56 @@ cd backend
 npm install
 cp .env.example .env
 npm run check
+npm test
 npm start
 ```
 
-Open the dashboard in your phone browser: `http://127.0.0.1:4000/`.
+Open `http://127.0.0.1:4000/`. The local SQLite file is created under `backend/data/`; keep it private and outside Git.
 
-API health check: `http://127.0.0.1:4000/api/v1/health`.
-
-The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep this file private and backed up. Do not commit it. Customer portal and notification migration `003_customer_portal_notifications.sql` is applied automatically on startup.
-
-### Database migrations, backup and restore
-
-The database initializer maintains a `schema_migrations` ledger. Existing 0.2.0 databases are upgraded automatically on next startup by additive migrations in `backend/migrations/001_database_hardening.sql` and `backend/migrations/002_customer_subscription_management.sql`; they preserve existing rows and add tenant-consistency triggers, customer account sequencing, connection/subscription history and query indexes. Do not manually delete the SQLite file to apply a migration.
-
-Run commands from the `backend/` directory:
+Useful commands from `backend/`:
 
 ```sh
-npm run db:backup
-npm run db:backup -- ./backups/before-upgrade.sqlite
-npm run db:restore -- ./backups/before-upgrade.sqlite
 npm run verify
-```
-
-Backups use SQLite's online-consistent `VACUUM INTO` operation, are written with owner-only file permissions where supported, and are checked with `PRAGMA integrity_check` and `PRAGMA foreign_key_check`. Restore refuses invalid backups, retains a validated pre-restore safety backup, and validates the restored file before replacing the live database. **Stop the Nexus server before restore**; restart it afterward so pending migrations can run. Keep backup files private and outside Git.
-
-## First owner setup
-
-Send a POST request to `/api/v1/setup` with JSON:
-```json
-{
-  "companyName": "Your ISP Name",
-  "fullName": "Owner Name",
-  "email": "owner@example.com",
-  "password": "use-a-long-private-password"
-}
-```
-The first setup creates the tenant and owner. The API returns a bearer token. Keep it private. Setup is locked after the first user exists.
-
-### Recovering a local owner password
-
-If the owner login stops working, run this from the `backend` directory. It only resets a uniquely matching owner account in the configured SQLite database, asks for the new password without echoing it, and revokes existing sessions:
-
-```sh
+npm run db:backup
+npm run db:restore -- ./backups/before-upgrade.sqlite
 npm run auth:reset -- owner@example.com
 ```
 
-Do not delete `backend/data/nexus.sqlite` to fix a login problem; that file contains the ISP's local data.
+Stop the local server before restore. Restore validates the backup and keeps a safety backup before replacing the database. Never delete `backend/data/nexus.sqlite` to solve a login issue.
 
-## API overview
+## Cloudflare schema and deployment
 
-All endpoints except health, root, initial setup and login require `Authorization: Bearer <token>`.
+- D1 database bindings and migration history: [cloudflare/d1/README.md](cloudflare/d1/README.md)
+- Worker environment/configuration: [worker/README.md](worker/README.md)
+- Staging Wrangler config: [worker/wrangler.toml](worker/wrangler.toml)
+- Production Wrangler config: [worker/wrangler.production.toml](worker/wrangler.production.toml)
+- Incremental D1 migrations: [cloudflare/d1/migrations](cloudflare/d1/migrations)
+- Production release and backup evidence: [docs/production-release-2026-11-15](docs/production-release-2026-11-15)
 
-- `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`
-- `GET /api/v1/dashboard`
-- `GET|POST /api/v1/customers` (search/filter: `q`, `status`, `connectionStatus`, `coverageArea`; pagination: `page`, `pageSize`), `GET|PATCH|DELETE /api/v1/customers/:id`
-- `GET /api/v1/customers/:id/profile`, `GET /api/v1/customers/:id/history`
-- `GET|POST /api/v1/packages`, `PATCH /api/v1/packages/:id`
-- `GET|POST /api/v1/subscriptions`, `PATCH /api/v1/subscriptions/:id`, `POST /api/v1/subscriptions/:id/renew`
-- `GET|POST /api/v1/invoices`
-- `GET|POST /api/v1/payments`
-- `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
-- Customer portal: `/portal` (customer login, package, invoices, dues, payments and complaints)\n- `POST /api/v1/customer-portal/login`, `GET /api/v1/customer-portal/me`, `GET /api/v1/customer-portal/invoices`, `GET /api/v1/customer-portal/payments`, `GET|POST /api/v1/customer-portal/complaints`, `POST /api/v1/customer-portal/logout`\n- Staff customer portal provisioning: `POST /api/v1/portal-admin/customers/:customerId/account`, `POST /api/v1/portal-admin/customers/:customerId/reset-password`\n- Notification console: `/notifications`; templates, queued messages, provider send/retry and delivery history under `/api/v1/notifications/*`\n- WhatsApp Cloud API uses Meta-approved template names and language codes for template sends (optional provider template name on each local template); without a provider template name, the API sends a free-form text message subject to Meta's 24-hour customer-care window. WhatsApp Cloud API secrets are server-only environment variables: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Configure the Meta webhook callback to `/api/v1/notifications/whatsapp/webhook`; the endpoint verifies the provider signature before accepting delivery updates.\n- `GET /api/v1/audit-logs`
-- `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
-- `GET|POST /api/v1/olts`, `PATCH|DELETE /api/v1/olts/:id`, `GET /api/v1/olts/:id/capabilities`
-- `GET /api/v1/olts/:id/pons`, `PATCH /api/v1/pons/:id`
-- `GET|POST /api/v1/onus`, `PATCH|DELETE /api/v1/onus/:id`, `POST /api/v1/onus/:id/service-mapping`, `GET /api/v1/onus/:id/history`
-- `GET|POST /api/v1/olt-alarms`, `PATCH /api/v1/olt-alarms/:id/clear`
-- `GET /api/v1/olts/:id/monitoring` (inventory/capability response; live telemetry pending verified HSGQ interface documentation)
-- `GET|PUT /api/v1/staff/:id/permissions` (owner/admin only)
+Use `worker/schema.sql` only to initialize a new, empty D1 database. For existing databases, apply reviewed incremental migrations only. Before production changes, export/backup D1, verify staging, check the exact Worker/D1 binding and prepare a rollback.
 
-Money values are integer Pakistani rupees (PKR). Payments cannot exceed the outstanding invoice balance.
+## Network integration — limitations
 
-Staff roles have safe defaults (owner, admin, billing, NOC, support, technician and limited staff). Owners and administrators can grant or revoke individual module permissions for non-owner staff accounts. Permission changes are checked by the API on every request; dashboard checkboxes are not a security boundary.
+- RouterOS/MikroTik integration must be considered unverified until a real router connection and safe PPPoE/profile operations are tested against a non-production test account.
+- PPPoE account records in the database do not by themselves prove that a router has been provisioned.
+- OLT/ONU records and alarms are inventory/application data unless a supported vendor adapter is connected.
+- HSGQ-G04R live telemetry and GenieACS/TR-069 device control require verified vendor/ACS endpoints, credentials and end-to-end tests. Do not infer live ONT control from inventory endpoints.
+- Never expose router, ACS, WhatsApp, JWT or Cloudflare secrets to browser JavaScript or commit them to Git.
 
-## Security rules
+See [backend/MIKROTIK.md](backend/MIKROTIK.md) and the HSGQ integration documentation for supported capabilities and prerequisites.
 
-- Never commit passwords, tokens, database files, router credentials or customer records.
-- Do not expose network-device credentials in browser JavaScript.
-- Keep tenant scoping enforced in API queries.
-- Use HTTPS, proper role permissions, backups and security review before production use.
+## Security and operational rules
 
-## Roadmap
+- Keep tenant scoping enforced server-side; frontend filtering is not an authorization boundary.
+- Keep all secrets in Cloudflare Worker secrets or local environment variables.
+- Use HTTPS, least-privilege staff permissions, rate limiting and validated input.
+- Preserve production customer/financial records; use additive migrations and verified backups.
+- Do not deploy staging configuration against production or run a full schema snapshot over an existing database.
 
-1. Local SQLite API and data model.
-2. Connect dashboard UI to authentication and CRUD modules.
-3. Complete subscriptions, invoices, payment receipts and reports.
-4. Add staff roles, permissions, tests and backup/restore.
-5. Add MikroTik adapter and equipment inventory.
-6. Add vendor-specific OLT/ONU and GenieACS/TR-069 adapters.
-7. Review deployment architecture and production migration.
+## Verification
 
-## HSGQ-G04R hardware integration
-See [docs/HSGQ-G04R-INTEGRATION.md](docs/HSGQ-G04R-INTEGRATION.md) for verified management methods, adapter limitations, credential encryption and the vendor documentation required before enabling live telemetry.
+The repository includes GitHub Actions for backend checks, Worker source checks, D1 schema validation, live endpoint smoke checks and staging customer-portal/tenant-isolation tests. Check the latest run for the exact commit being released; a passing run on a different branch or SHA is not evidence for the current `main` commit.
 
 ## License
 
-All rights reserved until a license is added. Do not assume this project is open source for reuse or resale.
+All rights reserved until a license is added. Do not assume the project is open source for reuse or resale.
