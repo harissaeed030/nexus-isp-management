@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from pathlib import Path
 
@@ -6,9 +7,13 @@ baseline = (root / "worker" / "schema-production-v6.sql").read_text()
 current = (root / "worker" / "schema.sql").read_text()
 migration = (root / "cloudflare" / "d1" / "migrations" / "0007_customer_portal_tenant_guards.sql").read_text()
 
+def normalize_sql(value):
+    compact = " ".join((value or "").split()).lower()
+    return re.sub(r"\\s*([(),])\\s*", r"\\1", compact)
+
 def objects(db):
     return {
-        (row[0], row[1]): " ".join((row[2] or "").split()).lower()
+        (row[0], row[1]): normalize_sql(row[2])
         for row in db.execute(
             "SELECT type,name,sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name <> '_cf_KV'"
