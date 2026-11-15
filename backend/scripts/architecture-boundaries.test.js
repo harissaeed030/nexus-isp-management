@@ -13,7 +13,7 @@ const prodConfig = read("../../worker/wrangler.production.toml");
 const stageConfig = read("../../worker/wrangler.toml");
 const reconciliation = read("../../docs/DATABASE-ARCHITECTURE-RECONCILIATION.md");
 
-assert.match(env, /process\.env\.SQLITE_PATH\s*\?\?\s*"\.\/data\/nexus\.sqlite"/);
+assert.match(env, /process\.env\.SQLITE_PATH\s*\|\|\s*"\.\/data\/nexus\.sqlite"/);
 assert.match(db, /from "node:sqlite"/);
 assert.match(db, /schema_migrations/);
 assert.match(localMigrations, /001_database_hardening/);
