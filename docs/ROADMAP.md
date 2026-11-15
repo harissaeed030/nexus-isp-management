@@ -1,40 +1,52 @@
 # Nexus Delivery Roadmap
 
 ## Phase 1 — Foundation
-- Product identity, repository standards and architecture.
-- Mobile-first dashboard prototype.
-- Security and integration boundaries.
+- [x] Product identity, repository standards and architecture.
+- [x] Mobile-first dashboard foundation and responsive navigation.
+- [x] Security and integration boundaries documented.
 
 ## Phase 2 — Core backend
-- Node.js / TypeScript API.
-- MongoDB Atlas connection through environment configuration.
-- Health endpoint, structured validation and error handling.
-- Tenant, user, role and audit models.
+- [x] Node.js API with local SQLite database and additive schema migrations.
+- [x] Health endpoint, validation, error handling and rate limiting.
+- [x] Tenant, user, role, session and audit models.
+- [x] Owner setup, tenant-aware login and staff permission overrides.
 
 ## Phase 3 — ISP operations
 - [x] Customer CRUD, generated account numbers, service locations and coverage areas.
 - [x] Customer search, filters, pagination and profile history.
-- [x] Package assignment, plan changes, subscription dates, renewals and suspension history.
-- [ ] Package catalog refinements and remaining ISP operations.
-- Invoice generation and payment ledger.
-- Complaint/ticket workflow.
+- [x] Package catalog and subscription assignment, plan changes, renewal, expiry and suspension history.
+- [x] Invoice generation, invoice/payment ledger, financial adjustments and summary reports.
+- [x] Complaint/ticket workflow and customer portal.
+- [x] Coverage areas, new connection applications and application status workflow.
+- [x] Dealer/partner records and recovery officer assignments.
+- [x] Cash collection records, customer ledger entries and operator attribution.
+- [x] Equipment inventory, stock-in/out, assignment and adjustment movements.
+- [ ] Scheduled recurring billing and automated collection reminders.
+- [ ] CSV exports and complete invoice/receipt document workflow.
 
 ## Phase 4 — Network operations
-- Router inventory and secure MikroTik adapter.
-- OLT / PON / ONU inventory.
-- Device-to-customer service mapping.
-- Read-only status collection before provisioning.
+- [x] Router inventory and encrypted credential storage.
+- [x] Server-side MikroTik RouterOS API-SSL adapter and PPPoE operations.
+- [x] OLT / PON / ONU inventory and customer service mapping.
+- [x] Mobile dashboard screens for OLT and ONU inventory.
+- [ ] Verified HSGQ-G04R live management, optical levels and alarms.
+- [ ] Live MikroTik device acceptance and customer connection synchronization.
 
 ## Phase 5 — TR-069 / ACS
-- GenieACS connection via server-side adapter.
-- Device discovery and parameter display.
-- Explicitly authorized reboot / configuration actions.
-- Vendor compatibility testing.
+- [x] Server-side GenieACS connection adapter and encrypted ACS credentials.
+- [x] Device discovery, parameter display, connection request and queued task endpoints.
+- [x] Explicit Wi-Fi parameter writes using discovered device parameter paths.
+- [ ] Vendor/model compatibility verification with real ONU devices.
+- [ ] Live ACS/ONU acceptance and task-completion confirmation.
 
 ## Phase 6 — SaaS readiness
-- Tenant isolation tests.
-- Backups and restore drills.
-- Monitoring, rate limits and incident handling.
-- Security review and deployment documentation.
+- [x] Tenant-scoped API design, permission checks and audit logging foundations.
+- [x] Database backup/restore utilities and integrity safeguards.
+- [ ] Automated verification suite and CI on the final integrated branch.
+- [ ] Tenant-isolation and independent security review.
+- [ ] Production storage, HTTPS, secrets, firewall and monitoring configuration.
+- [ ] Backup/restore rehearsal using a copy of the intended production database.
+- [ ] Android browser acceptance and operational usability review.
+- [ ] Production deployment and controlled migration.
 
-Each phase must include tests and documentation before moving production data into the system.
+**Status rule:** A code module marked complete means its implementation and dashboard/API wiring exist. It does not mean live hardware compatibility, operational acceptance, automated testing or production certification has passed. Those release gates remain explicitly pending.
