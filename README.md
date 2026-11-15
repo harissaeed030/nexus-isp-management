@@ -70,6 +70,8 @@ Stop the local server before restore. Restore validates the backup and keeps a s
 
 ## Cloudflare schema and deployment
 
+- Database ownership and SQLite/D1 boundaries: [docs/DATABASE-ARCHITECTURE-RECONCILIATION.md](docs/DATABASE-ARCHITECTURE-RECONCILIATION.md)
+
 - D1 database bindings and migration history: [cloudflare/d1/README.md](cloudflare/d1/README.md)
 - Worker environment/configuration: [worker/README.md](worker/README.md)
 - Staging Wrangler config: [worker/wrangler.toml](worker/wrangler.toml)
