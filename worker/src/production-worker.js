@@ -1,3 +1,4 @@
+// Production build: same verified API/portal implementation as staging; staging-only tenant cleanup route omitted.
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 function uuid(){return crypto.randomUUID()}
@@ -15,7 +16,7 @@ function b64u(b){return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').repla
 function b64uDec(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const b=atob(s);const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
 function getSec(env){if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');return env.JWT_SECRET}
 async function getAuth(r,env){const a=r.headers.get('Authorization');if(!a||!a.startsWith('Bearer '))return null;return await verifyJWT(a.slice(7),getSec(env))}
-async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT INTO audit_log(id,organization_id,user_id,action,detail,ip_address)VALUES(?,?,?,?,?,?)').bind(uuid(),oid,uid,act,det||null,ip||null).run()}catch{}}
+async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT INTO audit_log(id,organization_id,user_id,action,detail,ip_address)VALUES(?,?,?,?,?,?)').bind(uuid(),oid,uid,act,det||null,ip||null).run()}catch(e){console.error('NEXUS_AUDIT_WRITE_FAILED',{action:act,organizationId:oid,error:e?.message||String(e)})}}
 function vEmail(e){return/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e||'')}
 function vReq(o,f){return f.filter(x=>!o[x]&&o[x]!==0)}
 function s(v){return typeof v==='string'?v.trim():v}
@@ -26,11 +27,11 @@ function corsHeaders(request,env){
  const origin=request.headers.get('Origin'),allowed=(env.ALLOWED_ORIGINS||'').split(',').map(v=>v.trim()).filter(Boolean),h=new Headers(CORS);
  h.set('Access-Control-Max-Age','86400');
  let trustedPagesOrigin=false;
- try{const u=new URL(origin||'');trustedPagesOrigin=u.protocol==='https:'&&(u.hostname==='nexus-isp-management.pages.dev'||u.hostname.endsWith('.nexus-isp-management.pages.dev'))}catch{}
+ try{const u=new URL(origin||'');trustedPagesOrigin=u.protocol==='https:'&&u.hostname==='nexus-isp-management.pages.dev'}catch{}
  if(origin&&(allowed.includes(origin)||trustedPagesOrigin)){h.set('Access-Control-Allow-Origin',origin);h.set('Vary','Origin')}
  return h
 }
-function withCors(response,request,env){for(const [k,v] of corsHeaders(request,env))response.headers.set(k,v);for(const[k2,v2]of Object.entries(SEC_HDRS))response.headers.set(k2,v2);return response}
+function withCors(response,request,env){for(const [k,v] of corsHeaders(request,env))response.headers.set(k,v);for(const[k,v]of Object.entries(SEC_HDRS))response.headers.set(k,v);return response}
 const PERMISSIONS=[
  {key:'dashboard.read',group:'Dashboard',label:'View dashboard'},
  {key:'customers.read',group:'Customers',label:'View customers'},
@@ -183,6 +184,7 @@ async function runMigrations(env){
  ['refunds.idempotency_key','ALTER TABLE refunds ADD COLUMN idempotency_key TEXT'],
  ['refunds.idempotency_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_refunds_org_idempotency ON refunds(organization_id,idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key<>''"],
  ['refunds.payment_index','CREATE INDEX IF NOT EXISTS idx_refunds_payment_status ON refunds(organization_id,payment_id,status)'],
+ ['customer_portal_accounts',"CREATE TABLE IF NOT EXISTS customer_portal_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,email TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),token_version INTEGER NOT NULL DEFAULT 0,last_login TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,email),UNIQUE(organization_id,customer_id),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE)"],
  ['notif',"CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,title TEXT NOT NULL,message TEXT,type TEXT DEFAULT 'info',is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT(datetime('now')))"],
  ['settings',"CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,key))"],
  ['pppoe',"CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT 'active',created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,username))"],
@@ -205,19 +207,24 @@ async function runMigrations(env){
 }
 
 let _migrated=false;
-export default{async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
-if(m==='OPTIONS'){const _oh=corsHeaders(request,env);for(const[sk,sv]of Object.entries(SEC_HDRS))_oh.set(sk,sv);return new Response(null,{status:204,headers:_oh})};
+export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS scheduled billing failed',e?.message||e)))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
+if(m==='OPTIONS')return withCors(new Response(null,{status:204}),request,env);
 if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
 if(path.startsWith('/api/'))return withCors(await handleApi(request,env,url,path,m),request,env);
-return new Response(FRONTEND_HTML,{headers:{'Content-Type':'text/html;charset=utf-8','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'}})}};
+return new Response(FRONTEND_HTML,{headers:{'Content-Type':'text/html;charset=utf-8'}})}};
 
 async function handleApi(request,env,url,path,m){const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
+if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
+if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
 const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status,token_version FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
+// Staging-only E2E teardown. This route is unreachable on production hostnames.
 if(!await roleAllowedWithOverrides(env,orgId,userId,role,path,m))return json({error:'Forbidden',message:'Your role does not have permission for this action'},403);
+if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='GET')return await getPortalAccount(env,path,orgId,role);
+if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='POST')return await savePortalAccount(request,env,path,orgId,userId,role,ip);
 if(path==='/api/auth/me'&&m==='GET')return await authMe(env,auth);
 if(path==='/api/auth/logout'&&m==='POST'){await env.DB.prepare('UPDATE users SET token_version=COALESCE(token_version,0)+1,updated_at=datetime(\'now\') WHERE id=? AND organization_id=?').bind(userId,orgId).run();return json({success:true})}
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
@@ -284,7 +291,146 @@ if(path==='/api/profile'&&m==='PUT')return await updProf(request,env,auth,ip);
 if(path==='/api/profile/password'&&m==='PUT')return await chgPw(request,env,auth,ip);
 if(path==='/api/company'&&m==='GET')return await getCo(env,orgId);
 if(path==='/api/company'&&m==='PUT')return await updCo(request,env,orgId,userId,ip);
-return json({error:'Not Found',path},404)}catch(e){console.error('Unhandled error in handleApi:',e?.message||String(e),e?.stack||'');return json({error:'Server Error',message:'An internal error occurred'},500)}}
+return json({error:'Not Found',path},404)}catch(e){return json({error:'Server Error',message:e.message},500)}}
+
+
+async function portalLogin(r,env,ip){
+ const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const slug=typeof b.workspace==='string'?b.workspace.trim().toLowerCase():typeof b.slug==='string'?b.slug.trim().toLowerCase():'',email=typeof b.email==='string'?b.email.trim().toLowerCase():'';
+ if(!slug||!vEmail(email)||typeof b.password!=='string'||!b.password)return json({error:'Workspace, email and password are required'},400);
+ if(await loginRateLimited(env,ip,email))return json({error:'Too many login attempts. Try again in 15 minutes.'},429);
+ const org=await env.DB.prepare('SELECT id,name,slug,currency FROM organizations WHERE slug=?').bind(slug).first();
+ const account=org?await env.DB.prepare("SELECT a.*,c.first_name,c.last_name,c.customer_code,c.status customer_status FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id AND c.organization_id=a.organization_id WHERE a.organization_id=? AND a.email=? AND a.status='active'").bind(org.id,email).first():null;
+ if(!account||!await verifyPw(b.password,account.password_hash,account.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid portal credentials'},401)}
+ await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,email).run();
+ await env.DB.prepare("UPDATE customer_portal_accounts SET last_login=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(account.id,org.id).run();
+ const token=await signJWT({principalType:'customer',portalAccountId:account.id,customerId:account.customer_id,orgId:org.id,tokenVersion:Number(account.token_version||0),exp:Date.now()+604800000},getSec(env));
+ await audit(env,org.id,null,'customer_portal_login','Customer portal login',ip);
+ return json({success:true,token,customer:{id:account.customer_id,first_name:account.first_name,last_name:account.last_name,customer_code:account.customer_code},tenant:{id:org.id,name:org.name,slug:org.slug,currency:org.currency||'PKR'}})
+}
+async function getPortalAccount(env,path,oid,role){
+ if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);
+ const id=path.split('/')[3],customer=await env.DB.prepare('SELECT id,email FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!customer)return json({error:'Customer not found'},404);
+ const [account,org]=await Promise.all([
+  env.DB.prepare('SELECT id,email,status,last_login,created_at,updated_at FROM customer_portal_accounts WHERE customer_id=? AND organization_id=?').bind(id,oid).first(),
+  env.DB.prepare('SELECT slug FROM organizations WHERE id=?').bind(oid).first()
+ ]);
+ return json({customer:{email:customer.email},account:account||null,workspaceSlug:org?.slug||''})
+}
+async function savePortalAccount(r,env,path,oid,uid,role,ip){
+ if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);
+ const id=path.split('/')[3],b=await parseBody(r);
+ if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const customer=await env.DB.prepare('SELECT id,email FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!customer)return json({error:'Customer not found'},404);
+ const email=s(b.email||customer.email||'').toLowerCase(),password=typeof b.password==='string'?b.password:'',status=b.status||'active';
+ if(!vEmail(email))return json({error:'A valid customer portal email is required'},400);
+ if(!['active','disabled'].includes(status))return json({error:'Portal status must be active or disabled'},400);
+ if(password&&password.length<8)return json({error:'Portal password must be at least 8 characters'},400);
+ const existing=await env.DB.prepare('SELECT id FROM customer_portal_accounts WHERE customer_id=? AND organization_id=?').bind(id,oid).first();
+ if(!existing&&!password)return json({error:'Set an initial portal password of at least 8 characters'},400);
+ const credentials=password?await hashPw(password):null;
+ try{
+  if(existing){
+   await env.DB.prepare("UPDATE customer_portal_accounts SET email=?,password_hash=COALESCE(?,password_hash),password_salt=COALESCE(?,password_salt),status=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(email,credentials?.hash||null,credentials?.salt||null,status,existing.id,oid).run();
+  }else{
+   await env.DB.prepare("INSERT INTO customer_portal_accounts(id,organization_id,customer_id,email,password_hash,password_salt,status) VALUES(?,?,?,?,?,?,?)").bind(uuid(),oid,id,email,credentials.hash,credentials.salt,status).run();
+  }
+ }catch(e){if(/unique|constraint/i.test(String(e?.message||'')))return json({error:'This email is already assigned to another portal account in this workspace'},409);throw e}
+ await audit(env,oid,uid,existing?'update_customer_portal_access':'create_customer_portal_access','Customer:'+id,ip);
+ const account=await env.DB.prepare('SELECT id,email,status,last_login,created_at,updated_at FROM customer_portal_accounts WHERE customer_id=? AND organization_id=?').bind(id,oid).first();
+ return json({success:true,account},existing?200:201)
+}
+async function handlePortalApi(request,env,url,path,m,auth,ip){
+ const account=await env.DB.prepare('SELECT * FROM customer_portal_accounts WHERE id=? AND organization_id=? AND customer_id=?').bind(auth.portalAccountId,auth.orgId,auth.customerId).first();
+ if(!account||account.status!=='active'||Number(account.token_version||0)!==Number(auth.tokenVersion||0))return json({error:'Portal session expired or disabled. Please sign in again.'},401);
+ if(path==='/api/portal/auth/logout'&&m==='POST'){
+  await env.DB.prepare("UPDATE customer_portal_accounts SET token_version=COALESCE(token_version,0)+1,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(account.id,account.organization_id).run();
+  return json({success:true})
+ }
+ if(path==='/api/portal/me'&&m==='GET')return await portalMe(env,account);
+ if(path==='/api/portal/dashboard'&&m==='GET')return await portalDashboard(env,account);
+ if(path==='/api/portal/subscriptions'&&m==='GET')return await portalSubscriptions(env,account);
+ if(path==='/api/portal/invoices'&&m==='GET')return await portalInvoices(env,url,account);
+ if(path.startsWith('/api/portal/invoices/')&&path.split('/').length===5&&m==='GET')return await portalInvoice(env,path,account);
+ if(path==='/api/portal/payments'&&m==='GET')return await portalPayments(env,url,account);
+ if(path==='/api/portal/tickets'&&m==='GET')return await portalTickets(env,url,account);
+ if(path==='/api/portal/tickets'&&m==='POST')return await createPortalTicket(request,env,account,ip);
+ if(path==='/api/portal/password'&&m==='PUT')return await changePortalPassword(request,env,account);
+ return json({error:'Forbidden'},403)
+}
+async function portalMe(env,account){
+ const [customer,tenant,settingsRows]=await Promise.all([
+  env.DB.prepare('SELECT id,first_name,last_name,email,phone,address,city,status,customer_code,created_at FROM customers WHERE id=? AND organization_id=?').bind(account.customer_id,account.organization_id).first(),
+  env.DB.prepare('SELECT id,name,slug,email,phone,address,currency FROM organizations WHERE id=?').bind(account.organization_id).first(),
+  env.DB.prepare('SELECT key,value FROM settings WHERE organization_id=?').bind(account.organization_id).all()
+ ]);
+ const settings={};for(const row of settingsRows.results||[])settings[row.key]=row.value;
+ return json({customer,tenant,settings})
+}
+const portalNetPaid="COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)";
+async function portalInvoiceRows(env,account,limit=20,offset=0){
+ const sql="SELECT i.*,"+portalNetPaid+" AS paid_amount,MAX(0,i.total-"+portalNetPaid+") AS outstanding_amount,CASE WHEN "+portalNetPaid+">0 AND "+portalNetPaid+"<i.total THEN 'partial' ELSE i.status END AS display_status FROM invoices i WHERE i.organization_id=? AND i.customer_id=? ORDER BY i.created_at DESC LIMIT ? OFFSET ?";
+ return await env.DB.prepare(sql).bind(account.organization_id,account.customer_id,limit,offset).all()
+}
+async function portalDashboard(env,account){
+ const [subscriptions,invoices,payments,balance,tickets]=await Promise.all([
+  portalSubscriptionsRows(env,account),
+  portalInvoiceRows(env,account,5,0),
+  env.DB.prepare('SELECT p.id,p.amount,p.payment_method,p.transaction_ref,p.status,p.paid_at,i.invoice_number FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id AND i.organization_id=p.organization_id WHERE p.organization_id=? AND p.customer_id=? ORDER BY p.paid_at DESC LIMIT 5').bind(account.organization_id,account.customer_id).all(),
+  env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN i.total-'+portalNetPaid+'>0 THEN i.total-'+portalNetPaid+' ELSE 0 END),0) AS outstanding FROM invoices i WHERE i.organization_id=? AND i.customer_id=?').bind(account.organization_id,account.customer_id).first(),
+  env.DB.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE organization_id=? AND customer_id=? AND status IN ('open','in_progress')").bind(account.organization_id,account.customer_id).first()
+ ]);
+ return json({subscriptions:subscriptions.results||[],recentInvoices:invoices.results||[],recentPayments:payments.results||[],outstanding:Number(balance?.outstanding||0),openTickets:Number(tickets?.total||0)})
+}
+async function portalSubscriptionsRows(env,account){
+ return await env.DB.prepare('SELECT s.id,s.status,s.start_date,s.end_date,p.name package_name,p.speed_down,p.speed_up,p.speed_mbps,p.price,p.billing_cycle FROM subscriptions s JOIN packages p ON p.id=s.package_id AND p.organization_id=s.organization_id WHERE s.organization_id=? AND s.customer_id=? ORDER BY s.created_at DESC').bind(account.organization_id,account.customer_id).all()
+}
+async function portalSubscriptions(env,account){const rows=await portalSubscriptionsRows(env,account);return json({data:rows.results||[]})}
+async function portalInvoices(env,url,account){
+ const{page,pp,off}=pg(url);const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM invoices WHERE organization_id=? AND customer_id=?').bind(account.organization_id,account.customer_id).first();
+ const rows=await portalInvoiceRows(env,account,pp,off);
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}})
+}
+async function portalInvoice(env,path,account){
+ const id=path.split('/')[4],sql="SELECT i.*,"+portalNetPaid+" AS paid_amount,MAX(0,i.total-"+portalNetPaid+") AS outstanding_amount,CASE WHEN "+portalNetPaid+">0 AND "+portalNetPaid+"<i.total THEN 'partial' ELSE i.status END AS display_status FROM invoices i WHERE i.id=? AND i.organization_id=? AND i.customer_id=?";
+ const inv=await env.DB.prepare(sql).bind(id,account.organization_id,account.customer_id).first();
+ if(!inv)return json({error:'Invoice not found'},404);
+ const payments=await env.DB.prepare('SELECT id,amount,payment_method,transaction_ref,status,paid_at,notes FROM payments WHERE invoice_id=? AND organization_id=? AND customer_id=? ORDER BY paid_at DESC').bind(id,account.organization_id,account.customer_id).all();
+ return json({...inv,payments:payments.results||[]})
+}
+async function portalPayments(env,url,account){
+ const{page,pp,off}=pg(url);const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM payments WHERE organization_id=? AND customer_id=?').bind(account.organization_id,account.customer_id).first();
+ const rows=await env.DB.prepare('SELECT p.id,p.invoice_id,p.amount,p.payment_method,p.transaction_ref,p.status,p.paid_at,i.invoice_number FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id AND i.organization_id=p.organization_id WHERE p.organization_id=? AND p.customer_id=? ORDER BY p.paid_at DESC LIMIT ? OFFSET ?').bind(account.organization_id,account.customer_id,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}})
+}
+async function portalTickets(env,url,account){
+ const{page,pp,off}=pg(url);const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM support_tickets WHERE organization_id=? AND customer_id=?').bind(account.organization_id,account.customer_id).first();
+ const rows=await env.DB.prepare('SELECT id,subject,description,priority,status,resolution,created_at,updated_at FROM support_tickets WHERE organization_id=? AND customer_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(account.organization_id,account.customer_id,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}})
+}
+async function createPortalTicket(r,env,account,ip){
+ const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ if(typeof b.subject!=='string'||typeof (b.description??'')!=='string')return json({error:'Subject and description must be text'},400);
+ const subject=b.subject.trim(),description=(b.description||'').trim();
+ if(!subject||subject.length>180)return json({error:'Subject must be 1-180 characters'},400);
+ if(description.length>4000)return json({error:'Description is too long'},400);
+ const id=uuid();
+ await env.DB.prepare("INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status) VALUES(?,?,?,?,?,'medium','open')").bind(id,account.organization_id,account.customer_id,subject,description||null).run();
+ await notifyAdmins(env,account.organization_id,'New customer portal complaint',subject,'support');
+ await audit(env,account.organization_id,null,'customer_portal_ticket','Ticket:'+id,ip);
+ return json(await env.DB.prepare('SELECT id,subject,description,priority,status,created_at FROM support_tickets WHERE id=? AND organization_id=? AND customer_id=?').bind(id,account.organization_id,account.customer_id).first(),201)
+}
+async function changePortalPassword(r,env,account){
+ const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords are required'},400);
+ if(typeof b.newPassword!=='string'||b.newPassword.length<8)return json({error:'New password must be at least 8 characters'},400);
+ if(!await verifyPw(b.currentPassword,account.password_hash,account.password_salt))return json({error:'Current password is incorrect'},401);
+ const credentials=await hashPw(b.newPassword);
+ await env.DB.prepare("UPDATE customer_portal_accounts SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(credentials.hash,credentials.salt,account.id,account.organization_id).run();
+ return json({success:true,message:'Password changed. Sign in again.'})
+}
 
 async function authReg(r,env,ip){
  const raw=await parseBody(r);if(!raw||typeof raw!=='object'||Array.isArray(raw))return json({error:'Invalid body'},400);
@@ -298,7 +444,9 @@ async function authReg(r,env,ip){
  if(!b.slug)return json({error:'A valid organization slug could not be generated'},400);
  const slug=b.slug.toLowerCase().replace(/[^a-z0-9-]/g,'').replace(/-+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);if(!slug)return json({error:'Invalid organization slug'},400);
  if(await env.DB.prepare('SELECT id FROM organizations WHERE slug=?').bind(slug).first())return json({error:'Slug taken'},409);
- const email=b.email.toLowerCase();if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first())return json({error:'Email registered'},409);
+ const email=b.email.toLowerCase();
+ // The current D1 users.email column has a global UNIQUE constraint.
+ // Keep registration behavior aligned with the deployed schema until a safe users-table migration is approved.
  const oid=uuid(),uid=uuid(),{hash,salt}=await hashPw(b.password);
  try{await env.DB.batch([env.DB.prepare('INSERT INTO organizations(id,name,slug,plan,email,phone)VALUES(?,?,?,?,?,?)').bind(oid,b.companyName,slug,'free',email,b.phone||null),env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(uid,oid,email,hash,salt,b.name,'owner',b.phone||null)]);}catch(e){const message=String(e?.message||'');if(/unique|constraint/i.test(message))return json({error:'Email or organization slug is already registered'},409);throw e;}
  await audit(env,oid,uid,'register','Company:'+b.companyName,ip);
@@ -308,9 +456,19 @@ async function authReg(r,env,ip){
 
 async function authLogin(r,env,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.email||!b.password)return json({error:'Email and password required'},400);
 const email=String(b.email).trim().toLowerCase();if(await loginRateLimited(env,ip,email))return json({error:'Too many login attempts. Try again in 15 minutes.'},429);
-const u=await env.DB.prepare("SELECT * FROM users WHERE email=? AND status='active'").bind(email).first();if(!u||!await verifyPw(b.password,u.password_hash,u.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid credentials'},401);}
+let u=null;
+if(b.workspace!==undefined&&b.workspace!==null&&String(b.workspace).trim()!==''){
+ const workspace=String(b.workspace).trim().toLowerCase();
+ u=await env.DB.prepare("SELECT users.* FROM users JOIN organizations ON organizations.id=users.organization_id WHERE users.email=? AND lower(organizations.slug)=? AND users.status='active'").bind(email,workspace).first();
+}else{
+ const matches=await env.DB.prepare("SELECT users.* FROM users JOIN organizations ON organizations.id=users.organization_id WHERE users.email=? AND users.status='active' ORDER BY users.id LIMIT 2").bind(email).all();
+ const rows=matches.results||[];
+ if(rows.length>1)return json({error:'Workspace slug required for this email address'},400);
+ u=rows[0]||null;
+}
+if(!u||!await verifyPw(b.password,u.password_hash,u.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid credentials'},401);}
 await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,email).run();
-await env.DB.prepare("UPDATE users SET last_login=datetime('now'),updated_at=datetime('now')WHERE id=?").bind(u.id).run();
+await env.DB.prepare("UPDATE users SET last_login=datetime('now'),updated_at=datetime('now')WHERE id=? AND organization_id=?").bind(u.id,u.organization_id).run();
 const tk=await signJWT({userId:u.id,orgId:u.organization_id,role:u.role,email:u.email,name:u.name||u.email,tokenVersion:Number(u.token_version||0),exp:Date.now()+604800000},getSec(env));
 await audit(env,u.organization_id,u.id,'login','User logged in',ip);
 return json({success:true,token:tk,user:{id:u.id,email:u.email,name:u.name||u.email,role:u.role,orgId:u.organization_id}})}
@@ -355,10 +513,7 @@ async function createInv(r,env,oid,uid,ip){
  await audit(env,oid,uid,'create_invoice','Invoice:'+num,ip);
  return json(await env.DB.prepare('SELECT * FROM invoices WHERE id=? AND organization_id=?').bind(id,oid).first(),201)
 }
-async function generateBilling(r,env,oid,uid,ip){
- const b=await parseBody(r);if(!b||typeof b.period!=='string'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(b.period))return json({error:'A valid billing period (YYYY-MM) is required'},400);
- const period=b.period,now=new Date(),currentMonth=now.toISOString().slice(0,7);
- if(period>currentMonth)return json({error:'Future billing periods cannot be generated'},400);
+async function generateBillingForOrganization(env,oid,period){
  const [year,month]=period.split('-').map(Number),periodStart=period+'-01';
  const periodEnd=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);
  const dueDate=new Date(Date.UTC(year,month-1,8)).toISOString().slice(0,10);
@@ -370,8 +525,34 @@ async function generateBilling(r,env,oid,uid,ip){
   const result=await env.DB.prepare("INSERT OR IGNORE INTO invoices(id,organization_id,customer_id,subscription_id,invoice_number,amount,tax,total,status,issue_date,due_date,notes,billing_period) VALUES(?,?,?,?,?,?,0,?,'pending',?,?,?,?)").bind(invoiceId,oid,row.customer_id,row.subscription_id,invoiceNumber,amount,amount,periodStart,dueDate,'Monthly subscription billing '+period,period).run();
   if(Number(result.meta?.changes||0)>0)created++;
  }
- if(created>0)await audit(env,oid,uid,'generate_monthly_invoices','Period:'+period+'; created:'+created,ip);
- return json({success:true,billingPeriod:period,invoicesCreated:created,subscriptionsEligible:(eligible.results||[]).length,alreadyGenerated:created===0&&(eligible.results||[]).length>0});
+ return {billingPeriod:period,invoicesCreated:created,subscriptionsEligible:(eligible.results||[]).length,alreadyGenerated:created===0&&(eligible.results||[]).length>0}
+}
+async function runScheduledBilling(controller,env){
+ await runMigrations(env);_migrated=true;
+ const period=new Date(Number(controller?.scheduledTime)||Date.now()).toISOString().slice(0,7);
+ const orgs=await env.DB.prepare('SELECT id FROM organizations ORDER BY id').all(),outcomes=[];
+ for(const org of orgs.results||[]){
+  try{
+   const result=await generateBillingForOrganization(env,org.id,period);
+   if(result.invoicesCreated>0){
+    await audit(env,org.id,null,'scheduled_monthly_billing','Period:'+period+'; created:'+result.invoicesCreated,null);
+    await notifyAdmins(env,org.id,'Monthly invoices generated',result.invoicesCreated+' invoices created for '+period,'billing');
+   }
+   outcomes.push({organizationId:org.id,...result});
+  }catch(e){
+   console.error('NEXUS scheduled billing failed for organization',org.id,e?.message||e);
+   outcomes.push({organizationId:org.id,error:String(e?.message||'Billing failed').slice(0,160)});
+  }
+ }
+ return outcomes
+}
+async function generateBilling(r,env,oid,uid,ip){
+ const b=await parseBody(r);if(!b||typeof b.period!=='string'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(b.period))return json({error:'A valid billing period (YYYY-MM) is required'},400);
+ const period=b.period,currentMonth=new Date().toISOString().slice(0,7);
+ if(period>currentMonth)return json({error:'Future billing periods cannot be generated'},400);
+ const result=await generateBillingForOrganization(env,oid,period);
+ if(result.invoicesCreated>0)await audit(env,oid,uid,'generate_monthly_invoices','Period:'+period+'; created:'+result.invoicesCreated,ip);
+ return json({success:true,...result})
 }
 async function getInv(env,path,oid){const id=path.split('/')[3];const inv=await env.DB.prepare("SELECT i.*,c.first_name,c.last_name,c.email,c.phone,COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) AS paid_amount,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_amount,CASE WHEN COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)>0 AND COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)<i.total THEN 'partial' ELSE i.status END AS display_status FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id AND c.organization_id=i.organization_id WHERE i.id=? AND i.organization_id=?").bind(id,oid).first();if(!inv)return json({error:'Not found'},404);const pays=await env.DB.prepare('SELECT * FROM payments WHERE invoice_id=? AND organization_id=?').bind(id,oid).all();return json({...inv,payments:pays.results})}
 async function recPay(r,env,path,oid,uid,ip){
@@ -704,4 +885,3 @@ async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json
 async function getCo(env,oid){const o=await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first();return json(o||{error:'Not found'},o?200:404)}
 async function updCo(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Company name must be 1-120 characters'},400);if(b.email&&!vEmail(b.email))return json({error:'Invalid company email'},400);if(b.currency!==undefined&&!/^[A-Z]{3}$/.test(String(b.currency)))return json({error:'Currency must be a 3-letter ISO code'},400);const f=['name','email','phone','address','logo','currency'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(oid);await env.DB.prepare('UPDATE organizations SET '+u.join(', ')+' WHERE id=?').bind(...p).run();await audit(env,oid,uid,'update_company','Company updated',ip);return json(await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first())}
 
-
