@@ -40,7 +40,7 @@ These are GitHub-hosted PR checks on the tested head. They are not evidence of l
 
 - `build/nexus-isp-core` is the local Node.js/SQLite development line.
 - `main` contains the separately released Cloudflare Worker/D1 customer-portal path.
-- The two lines have diverged (208 commits ahead and 11 behind at the latest check; current development head `5b418f6b5ff93e45337768efaf0ac14bc6e8db29`). Do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker. Do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker.
+- The two lines have diverged (208 commits ahead and 11 behind at the latest check; current development head `5b418f6b5ff93e45337768efaf0ac14bc6e8db29`). Do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker.
 - The older draft tenant-login PR #48 is not required for this integration: the merged local API already supports tenant-aware login selection via `tenantSlug` and safely rejects ambiguous identities.
 
 ## Latest branch-head CI — 2026-11-15
@@ -117,3 +117,17 @@ These checks cannot be honestly marked complete from source code or CI alone:
 ## Release decision
 
 **Production remains NO-GO until the required production configuration, live-device, backup/restore, and independent security checks have documented evidence.** The original backend startup/import blocker is fixed and merged; the current integration PR's automated checks passed, but that does not establish full production readiness.
+
+
+## Non-test implementation work — 2026-11-15
+
+The user requested that remaining implementation work proceed without running additional tests. The following source changes were committed to `build/nexus-isp-core`:
+
+- Added tenant-scoped CSV exports for customers, invoices, payments and support tickets at `/api/v1/exports/{type}.csv`.
+- Added optional inclusive `from` / `to` date filters, per-module permissions, a 50,000-row cap, UTF-8 BOM, safe CSV quoting and spreadsheet-formula injection mitigation.
+- Added Reports-screen download controls for the four CSV exports.
+- Added an opt-in monthly invoice scheduler using the Asia/Karachi timezone (05:15 on day 1), tenant-by-tenant transactional invoice generation, unique-period idempotency and catch-up after downtime.
+- Automatic billing remains disabled by default. An operator must explicitly set `AUTO_BILLING_ENABLED=true` in the backend environment after reviewing the financial workflow.
+- Updated README and `.env.example` to document the new features and opt-in setting.
+
+The new implementation was committed without running tests or CI, as requested. Do not interpret these commits as tested or production-approved. The scheduler is code-complete but intentionally inactive unless enabled. Live MikroTik, HSGQ OLT, Huawei ONU / GenieACS integrations still require vendor interfaces and device access; no hardware test or production change was performed.
