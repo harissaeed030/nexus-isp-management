@@ -1,46 +1,75 @@
-# Nexus Architecture
+# Nexus architecture
 
-## 1. System boundaries
-Nexus is a multi-tenant SaaS application. A platform operator manages ISP tenants. Each tenant manages its own staff, customers, service plans, subscriptions, invoices, payments, support cases and network inventory.
+## 1. Product boundary
 
-## 2. Initial domain modules
-- Identity: users, roles, permissions, sessions.
-- Tenancy: ISP organizations, tenant settings, subscription plans.
-- CRM: customers, contacts, addresses and service locations.
-- Catalog: internet packages, speed profiles and prices.
-- Provisioning: subscriptions, service state and activation workflow.
-- Finance: invoices, payment records, adjustments and ledger entries.
-- Network: routers, OLTs, PON ports, ONUs/ONTs and service mappings.
+Nexus is a multi-tenant ISP operations platform. An ISP tenant manages its own staff, customers, packages, subscriptions, invoices, payments, support cases and network inventory. Platform-level tenant administration is a separate concern from tenant-owned business records.
+
+## 2. Maintained local runtime
+
+The Android/Termux and desktop development runtime is:
+
+`Browser → Node.js/Express API → SQLite`
+
+- API and authentication: `backend/src/`.
+- Local database and additive SQLite migrations: `backend/src/config/database.js` and `backend/migrations/`.
+- Dashboard assets: `assets/`.
+- Local database default: `backend/data/nexus.sqlite`.
+
+The API derives tenant scope from the authenticated user. Every tenant-owned route must apply server-side tenant filtering and authorization; a tenant identifier supplied by the browser is never sufficient authorization.
+
+## 3. Cloudflare runtime boundary
+
+The repository also contains a Cloudflare Worker/D1 track. On this development branch, `worker/src/index.js` is only a health-check foundation. The separately released customer-portal Worker path is recorded in the [2026-11-15 production release note on main](https://github.com/harissaeed030/nexus-isp-management/blob/main/docs/PRODUCTION-RELEASE-2026-11-15.md).
+
+These are distinct runtimes and schemas:
+
+- SQLite migrations in `backend/migrations/` must never be applied to D1.
+- The minimal Worker in this branch must not be deployed over the released production Worker.
+- Frontend API base URLs, authentication contracts, response shapes and CORS must be verified for the selected runtime before deployment.
+
+A unified single-backend deployment architecture remains a release decision; do not claim that the local SQLite API and production Worker/D1 are already interchangeable.
+
+## 4. Domain modules
+
+- Identity: users, roles, permissions and sessions.
+- Tenancy: ISP organizations and tenant settings.
+- CRM: customers, contacts, addresses, service locations and coverage areas.
+- Catalog and provisioning: packages, subscriptions, service lifecycle and router profiles.
+- Finance: invoices, payments, ledgers, credits, reversals and outstanding balances.
+- Network: routers, OLTs, PON ports, ONUs/ONTs and customer service mappings.
 - ACS: GenieACS device inventory, parameter reads and approved actions.
-- Support: complaints, tickets, assignments and status history.
+- Support: complaints, tickets and status history.
+- Operations: connection applications, technicians, dealers, collections, payment promises and stock movements.
 - Audit: actor, tenant, action, target and timestamp.
 
-## 3. Tenant isolation
-Every tenant-owned record must include tenantId. Every API request must derive the authorized tenant from the authenticated identity and verify access on the server. Never trust a tenantId supplied by the browser alone. Add database indexes beginning with tenantId where appropriate. Automated tests must prove that one tenant cannot read or modify another tenant's records.
+## 5. Integration design
 
-## 4. Integration design
-Browser -> Nexus API -> Integration adapter -> vendor/service.
+`Browser → Nexus API → Integration adapter → vendor/service`
 
-The browser must never communicate directly with routers, OLTs or ACS using privileged credentials. Each adapter has explicit timeouts, validation, authorization, logging and safe error handling. Begin with read-only status and inventory operations. Add write/provisioning operations only after device-specific testing and confirmation flows.
+The browser must never communicate directly with routers, OLTs or ACS using privileged credentials. Adapters require timeouts, input validation, authorization, redacted logs and safe error handling. Begin with read-only device operations; enable provisioning only after device-specific acceptance testing and an explicit operator action.
 
-## 5. Security baseline
+## 6. Security baseline
+
 - Password hashing with a modern password-hashing algorithm.
-- Secure, HttpOnly, SameSite cookies or carefully configured short-lived tokens.
-- Role-based access control and tenant scoping on every endpoint.
-- Rate limiting, request validation and CSRF protection where applicable.
+- Hashed bearer-session tokens and bounded expiry.
+- Role-based access control and tenant scoping on every protected endpoint.
+- Rate limiting, request validation and safe error responses.
 - Secrets in environment variables or a managed secret store.
 - Redacted logs; never log passwords, tokens or full customer secrets.
-- HTTPS, database backups, restore tests and dependency updates.
+- HTTPS, private database storage, backups and restore tests.
 
-## 6. Delivery stages
-1. Static UX prototype and product requirements.
-2. API skeleton, database connection and health checks.
-3. Authentication, tenants, roles and audit trail.
-4. Customers, packages, subscriptions and billing.
-5. MikroTik read-only adapter, then controlled provisioning.
-6. OLT/ONU inventory and vendor-specific support.
-7. GenieACS integration and approved TR-069 workflows.
-8. Tests, observability, backup/restore and production review.
+## 7. Release and verification boundaries
 
-## 7. Important limitations
-This repository's initial dashboard is a visual prototype with sample values. It does not currently store customer records, issue real invoices, change router configurations or control ONUs. Do not use it for live ISP operations until backend security, data integrity and device integration tests are complete.
+A code module being present does not certify production readiness. Separate evidence is required for:
+
+1. Automated syntax, unit, integration and smoke tests.
+2. Tenant-isolation and independent security review.
+3. Persistent hosting, HTTPS, secrets, firewall and monitoring.
+4. Backup/restore rehearsal on a disposable copy of the intended database.
+5. Android/browser acceptance.
+6. Live MikroTik RouterOS API-SSL acceptance.
+7. Vendor-verified HSGQ OLT/ONU communication and telemetry.
+8. Live GenieACS/TR-069 ONU inform and approved task verification.
+9. Payment-provider and scheduled billing acceptance.
+
+No live hardware or external service integration is considered successful solely because an adapter test passes.

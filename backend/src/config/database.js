@@ -167,4 +167,12 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(ses
   }
 }
 
+const paymentPromisesMigrationVersion="010_payment_promises";
+if(!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(paymentPromisesMigrationVersion)){
+ const migrationSql=readFileSync(new URL("../../migrations/010_payment_promises.sql",import.meta.url),"utf8");
+ db.exec("BEGIN IMMEDIATE");
+ try{db.exec(migrationSql);db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(paymentPromisesMigrationVersion);db.exec("COMMIT");}
+ catch(error){try{db.exec("ROLLBACK");}catch{}throw new Error(`Database migration ${paymentPromisesMigrationVersion} failed: ${error.message}`);}
+}
+
 export function getDatabaseStatus(){return "connected";}
