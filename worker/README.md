@@ -1,26 +1,29 @@
-# Nexus API — Phase 1
+# Nexus Cloudflare Worker — repository scope
 
-This is the initial Cloudflare Worker API foundation for Nexus.
+The `worker/` directory on this development branch is a minimal Cloudflare Worker/D1 health-check foundation. Its current source exposes `GET /api/health` and `OPTIONS`; it does **not** implement the full local Node.js API contract or the full ISP-management module set.
 
-## Current scope
-- `GET /api/health` service and D1 connectivity check.
-- D1 schema for tenants, users, customers, packages, subscriptions, invoices, payments, support tickets and audit logs.
-- No customer CRUD or login endpoints are enabled yet.
+The maintained local development runtime is `backend/` (Node.js + SQLite). Its setup and test instructions are in [Backend setup](../docs/BACKEND-SETUP.md).
 
-## Cloudflare setup (Android browser)
-1. In Cloudflare Dashboard, open Workers & Pages and create a D1 database named `nexus-db`.
-2. Open the database Console and execute the complete SQL in `worker/schema.sql`.
-3. Open the database Settings and copy its Database ID.
-4. Replace `REPLACE_WITH_D1_DATABASE_ID` in `worker/wrangler.toml` with that ID.
-5. Connect this GitHub repository to a new Worker named `nexus-api`, with the Worker root directory set to `worker`.
-6. Deploy, then open `https://YOUR-WORKER-DOMAIN/api/health`.
+## Health endpoint
 
-## Security before production
-- Do not add real customer data until authentication and authorization are implemented.
-- Never expose router, OLT, ACS or database credentials in browser JavaScript.
-- Configure exact frontend origins in the Worker variable `ALLOWED_ORIGINS`.
-- Every tenant-owned query must be scoped to the authenticated tenant on the server.
-- The health route is public and intentionally reveals only service/database status.
+Configure the D1 binding in `wrangler.toml` for a disposable development database, then deploy only when the target Worker and database have been explicitly reviewed. The health route is:
 
-## Important
-This is a foundation, not a production-ready ISP backend. Login, password hashing, sessions, tenant authorization, CRUD validation, rate limiting and audit events must be completed and tested before live use.
+```
+GET /api/health
+```
+
+It reports Worker status and whether the configured D1 binding can execute a simple query. It is not an authentication or business API readiness check.
+
+## Important production boundary
+
+The repository's `main` branch contains the separately released Cloudflare customer-portal Worker path. The production release record is documented in [Production release 2026-11-15](../docs/PRODUCTION-RELEASE-2026-11-15.md). Do not deploy this branch's minimal `worker/` directory over the production Worker: it is not a replacement for the released Worker source.
+
+The SQLite migrations under `backend/migrations/` are not D1 migrations. Never apply them to a Cloudflare D1 database. Use additive D1 migrations and the documented release procedure for the Cloudflare runtime.
+
+## Security
+
+- Keep D1 bindings and Worker secrets in Cloudflare configuration, never in source control.
+- Restrict CORS to exact approved origins.
+- Do not add real customer records to this health-only Worker foundation.
+- Do not expose router, OLT or ACS credentials to browser JavaScript.
+- Verify the deployment target, Worker source, D1 binding and current production backup before any production change.
