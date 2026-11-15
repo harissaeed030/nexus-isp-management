@@ -11,24 +11,16 @@ const cases = [
 
 function loadVerifier(source) {
   const verifyStart = source.indexOf("async function verifyJWT(");
-  const verifyEnd = source.indexOf("\\nfunction b64u(", verifyStart);
+  const verifyEnd = source.indexOf("\nfunction b64u(", verifyStart);
   const decodeStart = source.indexOf("function b64uDec(");
-  const decodeEnd = source.indexOf("\\nfunction getSec(", decodeStart);
+  const decodeEnd = source.indexOf("\nfunction getSec(", decodeStart);
   assert.ok(verifyStart >= 0 && verifyEnd > verifyStart, "verifyJWT function must exist");
   assert.ok(decodeStart >= 0 && decodeEnd > decodeStart, "base64url decoder must exist");
-  const context = {
-    crypto: webcrypto,
-    TextEncoder,
-    TextDecoder,
-    atob,
-    btoa,
-    Date
-  };
+  const context = { crypto: webcrypto, TextEncoder, TextDecoder, atob, btoa, Date };
   runInNewContext(
-    source.slice(decodeStart, decodeEnd) + "\\n" +
+    source.slice(decodeStart, decodeEnd) + "\n" +
     source.slice(verifyStart, verifyEnd) +
-    "
-globalThis.verifyJWT = verifyJWT;",
+    "\nglobalThis.verifyJWT = verifyJWT;",
     context
   );
   return context.verifyJWT;
@@ -49,23 +41,19 @@ async function token(payload, secret = "test-only-secret-for-worker-jwt") {
     false,
     ["sign"]
   );
-  const signature = await webcrypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(signingInput)
-  );
+  const signature = await webcrypto.subtle.sign("HMAC", key, new TextEncoder().encode(signingInput));
   return signingInput + "." + Buffer.from(signature).toString("base64url");
 }
 
 for (const [label, file] of cases) {
-  test(`${label} Worker rejects missing, malformed and expired JWT expiry`, async () => {
+  test(label + " Worker rejects missing, malformed and expired JWT expiry", async () => {
     const source = await readFile(file, "utf8");
     assert.ok(source.includes("if(!Number.isSafeInteger(pl.exp)||pl.exp<=Date.now())return null"));
     assert.ok(!source.includes("if(pl.exp&&Date.now()>pl.exp)return null"));
     const verify = loadVerifier(source);
     const secret = "test-only-secret-for-worker-jwt";
 
-    assert.equal(await verify(await token({ sub: "valid", exp: Date.now() + 60_000 }, secret), secret) !== null, true);
+    assert.notEqual(await verify(await token({ sub: "valid", exp: Date.now() + 60_000 }, secret), secret), null);
     assert.equal(await verify(await token({ sub: "expired", exp: Date.now() - 1 }, secret), secret), null);
     assert.equal(await verify(await token({ sub: "missing-exp" }, secret), secret), null);
     assert.equal(await verify(await token({ sub: "string-exp", exp: String(Date.now() + 60_000) }, secret), secret), null);
