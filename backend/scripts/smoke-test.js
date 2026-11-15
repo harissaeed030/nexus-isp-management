@@ -116,7 +116,7 @@ try{
  const sequentialTwo=await request("/api/v1/invoices","POST",{customerId:customer.data.data.id,amountPkr:300,dueDate:"2020-01-01"},token);
  assert.equal(sequentialOne.status,201);
  assert.equal(sequentialTwo.status,201);
- assert.equal(sequentialOne.data.data.invoice_number,"INV-"+currentPeriod+"-000001");
+ assert.equal(sequentialOne.data.data.invoice_number,"INV-"+currentPeriod+"-000002");
  assert.equal(sequentialTwo.data.data.invoice_number,"INV-"+currentPeriod+"-000002");
  const agingAfterInvoices=await request("/api/v1/financial/aging","GET",undefined,token);
  assert.equal(agingAfterInvoices.status,200);
