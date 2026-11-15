@@ -139,4 +139,5 @@ The new implementation was committed without running tests or CI, as requested. 
 - Added a server-side Gemini proxy with server-only API key configuration, per-user request throttling, bounded alternating chat history, response timeout handling, and a dedicated `ai.chat` permission.
 - The assistant is guidance-only: it receives no customer records, balances, credentials, router/OLT data and cannot perform operational changes.
 - Configure `GEMINI_API_KEY` in the backend environment to activate it. Without a key, the endpoint responds with a safe 503 message; other NEXUS features remain available.
+- Updated `docs/ROADMAP.md` to distinguish completed source features from remaining provider configuration and live acceptance.
 - No tests or CI were run for these additional source changes, per the user's instruction.
