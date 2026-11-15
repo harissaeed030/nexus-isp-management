@@ -75,3 +75,25 @@ A defensible overall completion percentage cannot be calculated from this reposi
 - Verify production Worker version/source/configuration against the candidate commit.
 - Run backend, Worker, migration, API, tenant-isolation, billing and portal E2E checks on one integrated candidate SHA.
 - Record hardware integration results separately; keep untested adapters marked as unverified.
+
+
+## Repository refresh — 2026-11-15 (after initial audit)
+
+The following PR metadata and workflow evidence was rechecked after the initial audit. This section supersedes earlier PR-state wording where it differs; it does not change the production **NO-GO** decision.
+
+| PR | Current repository state | Exact head / CI evidence | Release interpretation |
+|---|---|---|---|
+| #11 — SQLite backup utility | Open, draft; targets `build/nexus-isp-core` | `f2bb5d9`; Nexus backend checks completed successfully | Backup creation plus integrity-check code is present in a draft branch. It is not merged into `main`; it does not provide a restore workflow or prove a disposable D1 restore. |
+| #21 — customer portal / recurring billing | Open, draft | `7e88490`; no PR-triggered workflow run returned by the inspected workflow-run endpoint | The PR adds portal UI/API and a manual-only staging E2E workflow. Its manual workflow must be explicitly run; no browser/device test is implied by PR state. |
+| #31 — release-gate hardening | Open, draft | `2d7f25a`; NEXUS release-gate CI completed successfully | Local regression/cleanup and CI changes remain unmerged. Passing branch CI is not staging or production approval. |
+| #33 — tenant-scoped staff-email migration | **Merged** | `6ddb0da`; tenant-email migration check completed successfully | Correction: this PR is no longer open. Its SQLite fixture test passed, but the manual D1 migration still requires a disposable restored D1 rehearsal, exact schema/data comparison and foreign-key validation before staging/production application. |
+| #57 — Worker password hardening | Open, draft | `5433c2c`; four inspected workflow runs completed successfully | Source regression checks passed; the PR itself explicitly blocks production approval pending a real Cloudflare Worker CPU benchmark and independent security review. |
+| #58 — master audit | Open, draft; targets `main` | `42fd42c`; latest inspected backend/database verification runs completed successfully (the earlier exact check-run query recorded 6/6 checks passing) | Documentation-only audit; no release integration or production deployment. |
+
+### Updated interpretation of the tenant-email migration
+
+PR #33 merged a manual migration that copies the user rows and dependent rows into temporary tables, rebuilds the `users` table, restores dependent tables/indexes/triggers, and removes temporary copies. Its automated test uses a local SQLite fixture with foreign keys enabled. This is useful evidence, but it is not equivalent to executing the migration against a disposable D1 restored from the actual staging export. Therefore, the D1 parity/restore gate remains open and the migration must not be applied to production based only on the merged PR or SQLite test.
+
+### Current merge/deployment boundary
+
+No PR was merged as part of this refresh. PR #33 had already been merged before this refresh; PRs #11, #21, #31, #57 and #58 remain open. No production Worker deployment, production D1 write/migration, secret change, or customer-data modification was performed.
