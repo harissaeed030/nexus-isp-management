@@ -77,8 +77,8 @@ export function permissionFor(path,method) {
     if(path === "/api/v1/routers") {
       return ({GET:"routers.read",POST:"routers.manage",PATCH:"routers.manage",DELETE:"routers.manage"})[verb] || null;
     }
-    if(verb === "GET") return "routers.read";
     if(path.endsWith("/sync") && verb === "GET") return "routers.provision";
+    if(verb === "GET") return "routers.read";
     if(["POST","PATCH"].includes(verb)) return "routers.provision";
     return null;
   }
