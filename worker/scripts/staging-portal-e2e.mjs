@@ -78,7 +78,7 @@ try {
   const tenantLoginData = ok('staff login scoped to the first workspace', tenantLogin, 200);
   assert.equal(tenantLoginData.user.orgId, owner.user.orgId);
   const secondTenantLogin = await request('POST', '/api/auth/login', {
-    email: secondOwnerEmail, password, workspace: `nexus-stage-invalid-${suffix}`
+    email: secondOwnerEmail, password, workspace: secondTenantSlug
   });
   const secondTenantLoginData = ok('second owner authenticates only in the second workspace', secondTenantLogin, 200);
   assert.equal(secondTenantLoginData.user.orgId, secondOwner.user.orgId);
@@ -87,7 +87,7 @@ try {
   });
   ok('email-only owner login rejects ambiguous same-email tenant identity', ambiguousOwnerLogin, 400);
   const wrongWorkspaceLogin = await request('POST', '/api/auth/login', {
-    email: ownerEmail, password, workspace: secondTenantSlug
+    email: ownerEmail, password, workspace: `nexus-stage-invalid-${suffix}`
   });
   ok('staff login rejects an email from another workspace', wrongWorkspaceLogin, 401);
 
