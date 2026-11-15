@@ -15,4 +15,5 @@ The Worker regression suite tests both bundles for fresh versioned hashes, corre
 - Do not modify production secrets or deploy this branch automatically.
 - Existing records without a valid salt cannot authenticate; handle them through an owner-controlled password reset.
 - 600,000 PBKDF2 iterations must be benchmarked in the target Workers runtime and tested under expected login load before production rollout. Node CI timing alone is not a Cloudflare runtime benchmark.
+- Cloudflare Workers Free has a 10 ms CPU-time limit per HTTP request. Treat the 600,000-iteration setting as **not production-approved** until a real Worker-runtime benchmark proves it fits the configured CPU budget; if it does not, keep this PR/deployment blocked and choose an architecture that preserves the security requirement without exceeding the Free-tier limit.
 - A third-party penetration test remains a separate release gate.
