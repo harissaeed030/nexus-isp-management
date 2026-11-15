@@ -19,7 +19,7 @@ The API derives tenant scope from the authenticated user. Every tenant-owned rou
 
 ## 3. Cloudflare runtime boundary
 
-The repository also contains a Cloudflare Worker/D1 track. On this development branch, `worker/src/index.js` is only a health-check foundation. The separately released customer-portal Worker path is recorded in [the 2026-11-15 production release note](PRODUCTION-RELEASE-2026-11-15.md).
+The repository also contains a Cloudflare Worker/D1 track. On this development branch, `worker/src/index.js` is only a health-check foundation. The separately released customer-portal Worker path is recorded in the [2026-11-15 production release note on main](https://github.com/harissaeed030/nexus-isp-management/blob/main/docs/PRODUCTION-RELEASE-2026-11-15.md).
 
 These are distinct runtimes and schemas:
 
