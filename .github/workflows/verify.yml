@@ -19,6 +19,8 @@ jobs:
       - name: Install dependencies
         working-directory: backend
         run: npm install
+      - name: Verify Cloudflare Worker JWT expiry behavior
+        run: node --test worker/scripts/jwt-expiry.test.js
       - name: Verify backend and dashboard
         working-directory: backend
         run: npm run verify
