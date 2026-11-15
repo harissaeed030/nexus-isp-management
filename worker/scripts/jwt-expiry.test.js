@@ -11,11 +11,9 @@ const cases = [
 
 function loadVerifier(source) {
   const verifyStart = source.indexOf("async function verifyJWT(");
-  const verifyEnd = source.indexOf("
-function b64u(", verifyStart);
+  const verifyEnd = source.indexOf("\\nfunction b64u(", verifyStart);
   const decodeStart = source.indexOf("function b64uDec(");
-  const decodeEnd = source.indexOf("
-function getSec(", decodeStart);
+  const decodeEnd = source.indexOf("\\nfunction getSec(", decodeStart);
   assert.ok(verifyStart >= 0 && verifyEnd > verifyStart, "verifyJWT function must exist");
   assert.ok(decodeStart >= 0 && decodeEnd > decodeStart, "base64url decoder must exist");
   const context = {
@@ -27,8 +25,7 @@ function getSec(", decodeStart);
     Date
   };
   runInNewContext(
-    source.slice(decodeStart, decodeEnd) + "
-" +
+    source.slice(decodeStart, decodeEnd) + "\\n" +
     source.slice(verifyStart, verifyEnd) +
     "
 globalThis.verifyJWT = verifyJWT;",
