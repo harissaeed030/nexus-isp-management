@@ -89,6 +89,18 @@ try{
  const payment=await request("/api/v1/payments","POST",{invoiceId:invoice.id,amountPkr:100,method:"cash"},token);
  assert.equal(payment.status,201);
  assert.equal(db.prepare("SELECT status FROM invoices WHERE id=?").get(invoice.id).status,"partial");
+ const invoicePdfResponse=await fetch(base+"/api/v1/invoices/"+invoice.id+"/pdf",{headers:{Authorization:"Bearer "+token}});
+ assert.equal(invoicePdfResponse.status,200);
+ assert.equal(invoicePdfResponse.headers.get("content-type"),"application/pdf");
+ const invoicePdf=Buffer.from(await invoicePdfResponse.arrayBuffer());
+ assert.ok(invoicePdf.toString("ascii").startsWith("%PDF-1.4"));
+ assert.ok(invoicePdf.toString("ascii").includes(invoice.invoice_number));
+ const receiptPdfResponse=await fetch(base+"/api/v1/payments/"+payment.data.data.id+"/receipt.pdf",{headers:{Authorization:"Bearer "+token}});
+ assert.equal(receiptPdfResponse.status,200);
+ assert.equal(receiptPdfResponse.headers.get("content-type"),"application/pdf");
+ const receiptPdf=Buffer.from(await receiptPdfResponse.arrayBuffer());
+ assert.ok(receiptPdf.toString("ascii").startsWith("%PDF-1.4"));
+ assert.ok(receiptPdf.toString("ascii").includes(payment.data.data.id));
  const creditNote=await request("/api/v1/credit-notes","POST",{invoiceId:invoice.id,amountPkr:50,reason:"Goodwill adjustment"},token);
  assert.equal(creditNote.status,201);
  const reversal=await request("/api/v1/payment-reversals","POST",{paymentId:payment.data.data.id,amountPkr:25,reason:"Cash correction"},token);
