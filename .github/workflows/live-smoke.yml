@@ -33,9 +33,10 @@ jobs:
       - name: Check production and staging Workers
         env:
           PRODUCTION_API: https://nexus-saas-api.harissaeed030.workers.dev
-          PRODUCTION_CANDIDATE_API: https://754901bc-nexus-saas-api.harissaeed030.workers.dev
+          PRODUCTION_CANDIDATE_API: https://9944c775-nexus-saas-api.harissaeed030.workers.dev
           STAGING_API: https://nexus-saas-api-staging.harissaeed030.workers.dev
           FRONTEND_URL: https://nexus-isp-management.pages.dev
+          REQUIRE_PRODUCTION_PORTAL: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
           node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
@@ -91,7 +92,7 @@ jobs:
               );
             }
 
-            if (environment !== "production") {
+            if (environment !== "production" || process.env.REQUIRE_PRODUCTION_PORTAL === "true") {
               const portalGuard = await fetch(base + "/api/portal/me", {
                 headers: { Accept: "application/json" },
                 signal: AbortSignal.timeout(15000),
