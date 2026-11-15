@@ -67,6 +67,12 @@ try{
  assert.ok(profile.data.data.subscriptionHistory.some(x=>x.event_type==="renewed"));
  const router=await request("/api/v1/routers","POST",{name:"Core Router",host:"192.0.2.1",apiPort:8729,username:"router-test",password:"Router-Test-Secret-123"},token);
  assert.equal(router.status,201);
+ const storedRouter=db.prepare("SELECT credential_username,credential_password FROM routers WHERE id=? AND tenant_id=?").get(router.data.data.id,setup.data.user.tenantId);
+ assert.ok(storedRouter.credential_username);
+ assert.ok(storedRouter.credential_password);
+ assert.notEqual(storedRouter.credential_username,"router-test");
+ assert.notEqual(storedRouter.credential_password,"Router-Test-Secret-123");
+
  const billingPeriod=new Date().toISOString().slice(0,7);
  const billingAttempts=await Promise.all([request("/api/v1/billing/generate","POST",{period:billingPeriod},token),request("/api/v1/billing/generate","POST",{period:billingPeriod},token)]);
  assert.equal(billingAttempts.filter(x=>x.status===201).length,1);

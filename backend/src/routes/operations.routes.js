@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PERMISSIONS, getEffectivePermissions, hasPermission, permissionKeys, roleHasPermission } from "../lib/permissions.js";
+import { credentialCrypto } from "./mikrotik.routes.js";
 
 export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash,cleanUser}) {
   const roles=(...allowed)=>(req,res,next)=>allowed.includes(req.user.role)?next():fail(res,403,"Your staff role does not have permission for this action.");
@@ -84,26 +85,42 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
     res.json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at,updated_at FROM routers WHERE tenant_id=? ORDER BY created_at DESC").all(req.user.tenant_id)});
   });
   app.post("/api/v1/routers",auth,networkManage,(req,res)=>{
-    const b=req.body||{},port=Number(b.apiPort??8728);
-    if(!b.name?.trim()||!b.host?.trim()||!Number.isInteger(port)||port<1||port>65535)return fail(res,400,"Router name, host/IP and valid API port are required.");
+    const b=req.body||{},port=Number(b.apiPort??8729);
+    const hasUsername=b.username!==undefined,hasPassword=b.password!==undefined;
+    if(!b.name?.trim()||!b.host?.trim()||b.host.length>253||/[\\s/\\\\]/.test(b.host)||!Number.isInteger(port)||port<1||port>65535)
+      return fail(res,400,"Router name, valid host/IP and API port are required.");
+    if(hasUsername!==hasPassword|| (hasUsername&&(!String(b.username).trim()||String(b.username).length>128||typeof b.password!=="string"||b.password.length>512)))
+      return fail(res,400,"Provide both a valid router API username and password, or neither.");
+    if(port===8728&&process.env.NODE_ENV==="production")
+      return fail(res,400,"Unencrypted RouterOS API is disabled in production. Use API-SSL port 8729.");
     const rid=id();
     try{
-      db.prepare("INSERT INTO routers(id,tenant_id,name,host,api_port,location,notes) VALUES(?,?,?,?,?,?,?)")
-        .run(rid,req.user.tenant_id,b.name.trim(),b.host.trim(),port,b.location?.trim()||null,b.notes?.trim()||null);
+      db.prepare("INSERT INTO routers(id,tenant_id,name,host,api_port,location,notes,credential_username,credential_password) VALUES(?,?,?,?,?,?,?,?,?)")
+        .run(rid,req.user.tenant_id,b.name.trim(),b.host.trim(),port,b.location?.trim()||null,b.notes?.trim()||null,
+          hasUsername?credentialCrypto.encrypt(String(b.username)):null,
+          hasPassword?credentialCrypto.encrypt(b.password):null);
       audit(req.user,"create","router",rid);
-      res.status(201).json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at FROM routers WHERE id=?").get(rid)});
+      res.status(201).json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at FROM routers WHERE id=? AND tenant_id=?").get(rid,req.user.tenant_id)});
     }catch(e){if(String(e.message).includes("UNIQUE"))return fail(res,409,"This router host and API port are already registered.");throw e;}
   });
   app.patch("/api/v1/routers/:id",auth,networkManage,(req,res)=>{
     const r=db.prepare("SELECT * FROM routers WHERE id=? AND tenant_id=?").get(req.params.id,req.user.tenant_id);
     if(!r)return fail(res,404,"Router not found.");
     const b=req.body||{},name=b.name??r.name,host=b.host??r.host,port=Number(b.apiPort??r.api_port),status=b.status??r.status;
-    if(!name?.trim()||!host?.trim()||!Number.isInteger(port)||port<1||port>65535||!["configured","maintenance","disabled"].includes(status))return fail(res,400,"Invalid router details.");
+    const hasUsername=b.username!==undefined,hasPassword=b.password!==undefined;
+    if(!name?.trim()||!host?.trim()||host.length>253||/[\\s/\\\\]/.test(host)||!Number.isInteger(port)||port<1||port>65535||!["configured","maintenance","disabled"].includes(status))
+      return fail(res,400,"Invalid router details.");
+    if(hasUsername!==hasPassword||(hasUsername&&(!String(b.username).trim()||String(b.username).length>128||typeof b.password!=="string"||b.password.length>512)))
+      return fail(res,400,"Provide both a valid router API username and password for credential rotation.");
+    if(port===8728&&process.env.NODE_ENV==="production")
+      return fail(res,400,"Unencrypted RouterOS API is disabled in production. Use API-SSL port 8729.");
+    const username=hasUsername?credentialCrypto.encrypt(String(b.username)):r.credential_username;
+    const password=hasPassword?credentialCrypto.encrypt(b.password):r.credential_password;
     try{
-      db.prepare("UPDATE routers SET name=?,host=?,api_port=?,location=?,notes=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
-        .run(name.trim(),host.trim(),port,b.location??r.location,b.notes??r.notes,status,r.id,req.user.tenant_id);
+      db.prepare("UPDATE routers SET name=?,host=?,api_port=?,location=?,notes=?,status=?,credential_username=?,credential_password=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
+        .run(name.trim(),host.trim(),port,b.location??r.location,b.notes??r.notes,status,username,password,r.id,req.user.tenant_id);
       audit(req.user,"update","router",r.id);
-      res.json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at,updated_at FROM routers WHERE id=?").get(r.id)});
+      res.json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at,updated_at FROM routers WHERE id=? AND tenant_id=?").get(r.id,req.user.tenant_id)});
     }catch(e){if(String(e.message).includes("UNIQUE"))return fail(res,409,"This router host and API port are already registered.");throw e;}
   });
   app.delete("/api/v1/routers/:id",auth,networkManage,(req,res)=>{
