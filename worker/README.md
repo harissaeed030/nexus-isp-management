@@ -1,26 +1,48 @@
-# Nexus API — Phase 1
+# NEXUS Cloudflare Worker
 
-This is the initial Cloudflare Worker API foundation for Nexus.
+## Deployed environments
 
-## Current scope
-- `GET /api/health` service and D1 connectivity check.
-- D1 schema for tenants, users, customers, packages, subscriptions, invoices, payments, support tickets and audit logs.
-- No customer CRUD or login endpoints are enabled yet.
+| Environment | Worker | D1 database |
+|---|---|---|
+| Production | `nexus-saas-api` | `nexus-saas-db` |
+| Staging | `nexus-saas-api-staging` | `nexus-saas-staging-db` |
 
-## Cloudflare setup (Android browser)
-1. In Cloudflare Dashboard, open Workers & Pages and create a D1 database named `nexus-db`.
-2. Open the database Console and execute the complete SQL in `worker/schema.sql`.
-3. Open the database Settings and copy its Database ID.
-4. Replace `REPLACE_WITH_D1_DATABASE_ID` in `worker/wrangler.toml` with that ID.
-5. Connect this GitHub repository to a new Worker named `nexus-api`, with the Worker root directory set to `worker`.
-6. Deploy, then open `https://YOUR-WORKER-DOMAIN/api/health`.
+The production Worker is built from `src/production-worker.js`; staging is built from `src/index.js`. They share the same verified API and customer-portal implementation. The production bundle deliberately omits the staging-only synthetic-tenant cleanup endpoint.
 
-## Security before production
-- Do not add real customer data until authentication and authorization are implemented.
-- Never expose router, OLT, ACS or database credentials in browser JavaScript.
-- Configure exact frontend origins in the Worker variable `ALLOWED_ORIGINS`.
-- Every tenant-owned query must be scoped to the authenticated tenant on the server.
-- The health route is public and intentionally reveals only service/database status.
+## Implemented API areas
 
-## Important
-This is a foundation, not a production-ready ISP backend. Login, password hashing, sessions, tenant authorization, CRUD validation, rate limiting and audit events must be completed and tested before live use.
+- ISP organization registration and owner authentication
+- JWT validation, password hashing, login throttling, logout/token-version invalidation
+- Tenant-scoped users, permissions, customers and customer portal accounts
+- Packages, subscriptions, invoices, payments, refunds and billing generation
+- Support tickets, ticket messages, notifications and audit log
+- PPPoE accounts and network inventory
+- OLT/ONU inventory, alarms, service mapping and adapter capability reporting
+- Customer portal login, profile, dashboard, invoices, payments, subscriptions, tickets and password changes
+
+The RouterOS and HSGQ adapters must be treated according to their documented capabilities. A configured inventory record is not proof of a live router/OLT connection. See `docs/HSGQ-G04R-INTEGRATION.md` for the current HSGQ limitation and required vendor documentation.
+
+## Configuration and secrets
+
+- Production D1 binding: `DB` -> `nexus-saas-db`
+- Staging D1 binding: `DB` -> `nexus-saas-staging-db`
+- Secret bindings: `JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY`
+- Never put secret values in source files, Wrangler vars, frontend code or GitHub commits.
+
+## Schema
+
+- `schema.sql` is a canonical schema snapshot from staging at migration 0007. Use it only for a new, empty D1 database.
+- Existing production/staging databases must use incremental migrations under `cloudflare/d1/migrations/`.
+- Do not run the full schema snapshot over an existing database.
+- See `cloudflare/d1/README.md` for migration history and release notes.
+
+## Local deployment commands
+
+Run from the `worker/` directory after authenticating Wrangler and verifying the target account:
+
+```sh
+npx wrangler deploy --config wrangler.toml
+npx wrangler deploy --config wrangler.production.toml
+```
+
+The first command targets staging; the second targets production. Before any production deployment, verify the production D1 backup, migration state, inherited bindings and staging E2E checks. Never use a staging config against production data.

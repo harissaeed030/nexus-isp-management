@@ -28,6 +28,13 @@ jobs:
       - name: Verify backend and dashboard
         working-directory: backend
         run: npm run verify
+      - name: Verify production Worker source and staging-only route isolation
+        run: |
+          node --check worker/src/index.js
+          node --check worker/src/production-worker.js
+          node worker/scripts/verify-production-worker.mjs
+      - name: Validate D1 schema and migration 0007
+        run: python3 worker/scripts/validate-d1-schema.py
 
   live-smoke:
     name: Verify production and staging endpoints
