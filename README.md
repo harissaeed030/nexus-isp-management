@@ -22,7 +22,7 @@ The production and staging Workers are separate and each binds only to its match
 - Staging D1 schema ledger: migrations `0001` through `0007`.
 - Migration 0007 adds customer portal accounts and insert/update tenant-consistency triggers.
 - Production Worker bindings include D1 (`DB`) and server-side secrets (`JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY`). Secret values are never stored in this repository.
-- Cloudflare's release record reports production Worker version 22 at 100% traffic.
+- Cloudflare's release record reports production Worker version 25 at 100% traffic (security logging redaction deployed 2026-11-15).
 - The production D1 release record reports one organization and one owner, with no customer, invoice, payment or customer-portal-account rows at the time of verification.
 
 This is evidence of deployed infrastructure and schema state, **not certification that every business workflow is production-ready**. Confirm live health, browser flows, backup recovery and tenant isolation before using NEXUS as the sole system of record for real customers.
