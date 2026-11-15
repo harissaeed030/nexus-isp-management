@@ -64,3 +64,47 @@ for (const [label, file] of cases) {
     assert.equal(await verify(tampered.join("."), secret), null);
   });
 }
+
+
+function loadPasswordHelpers(source) {
+  const start = source.indexOf("const PASSWORD_HASH_ITERATIONS=");
+  const end = source.indexOf("\nasync function signJWT(", start);
+  assert.ok(start >= 0 && end > start, "password helper functions must exist");
+  const context = { crypto: webcrypto, TextEncoder };
+  runInNewContext(
+    source.slice(start, end) +
+      "\nglobalThis.passwordHelpers = { hashPw, verifyPw, passwordHashNeedsUpgrade, derivePasswordHash };",
+    context
+  );
+  return context.passwordHelpers;
+}
+
+for (const [label, file] of cases) {
+  test(label + " Worker rejects unsalted/plaintext passwords and upgrades legacy salted hashes", async () => {
+    const source = await readFile(file, "utf8");
+    const { hashPw, verifyPw, passwordHashNeedsUpgrade, derivePasswordHash } = loadPasswordHelpers(source);
+    const password = "Nexus-test-password-2026!";
+    const fresh = await hashPw(password);
+
+    assert.match(fresh.hash, /^pbkdf2-sha256\$600000\$[a-f0-9]{64}$/);
+    assert.equal(await verifyPw(password, fresh.hash, fresh.salt), true);
+    assert.equal(await verifyPw("wrong-password", fresh.hash, fresh.salt), false);
+    assert.equal(passwordHashNeedsUpgrade(fresh.hash, fresh.salt), false);
+    assert.equal(await verifyPw("legacy-plaintext", "legacy-plaintext", null), false);
+    assert.equal(await verifyPw("legacy-plaintext", "legacy-plaintext", ""), false);
+
+    const legacySalt = new Uint8Array(16).fill(7);
+    const legacyHash = await derivePasswordHash(password, legacySalt, 100000);
+    const legacySaltHex = Buffer.from(legacySalt).toString("hex");
+    assert.equal(await verifyPw(password, legacyHash, legacySaltHex), true);
+    assert.equal(passwordHashNeedsUpgrade(legacyHash, legacySaltHex), true);
+    assert.equal(await verifyPw("wrong-password", legacyHash, legacySaltHex), false);
+  });
+
+  test(label + " Worker never returns raw exception messages to API clients", async () => {
+    const source = await readFile(file, "utf8");
+    assert.ok(!source.includes("message:e.message"));
+    assert.ok(source.includes("NEXUS_REQUEST_FAILED"));
+    assert.ok(source.includes("Internal server error"));
+  });
+}
