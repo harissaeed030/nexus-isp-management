@@ -133,4 +133,35 @@ export function registerFinancialRoutes(app, { db, auth, id, audit, fail }) {
     }catch(e){if(String(e.message).includes("payment exceeds"))return fail(res,409,"Payment exceeds the adjusted invoice balance.");throw e;}
     res.status(201).json({success:true,data:db.prepare("SELECT * FROM payments WHERE id=? AND tenant_id=?").get(paymentId,tenant)});
   });
+  app.get("/api/v1/financial/reconciliation", auth, (req,res) => {
+    const tenant=req.user.tenant_id;
+    const invoices=db.prepare("SELECT * FROM invoices WHERE tenant_id=? ORDER BY created_at DESC").all(tenant);
+    const statusMismatches=[];
+    for(const invoice of invoices){
+      const totals=invoiceTotals(db,tenant,invoice);
+      const adjustedTotal=Math.max(0,Number(invoice.amount_pkr)-totals.credits);
+      const expected=totals.netPaid>=adjustedTotal?"paid":totals.netPaid>0?"partial":"unpaid";
+      if(invoice.status!==expected)statusMismatches.push({invoiceId:invoice.id,invoiceNumber:invoice.invoice_number,storedStatus:invoice.status,expectedStatus:expected,outstandingPkr:totals.outstanding});
+    }
+    const unallocatedPayments=db.prepare("SELECT u.id,u.customer_id,c.full_name customer_name,u.amount_pkr,u.method,u.reference,u.received_at FROM unallocated_payments u JOIN customers c ON c.id=u.customer_id AND c.tenant_id=u.tenant_id WHERE u.tenant_id=? AND u.status='unallocated' ORDER BY u.received_at").all(tenant);
+    const unallocatedTotalPkr=unallocatedPayments.reduce((sum,row)=>sum+Number(row.amount_pkr),0);
+    const duplicateReferences=db.prepare("SELECT transaction_ref,COUNT(*) count FROM payments WHERE tenant_id=? AND transaction_ref IS NOT NULL AND trim(transaction_ref)<>'' GROUP BY transaction_ref HAVING COUNT(*)>1").all(tenant);
+    res.json({success:true,data:{checkedInvoices:invoices.length,statusMismatches,unallocatedPayments,unallocatedTotalPkr,duplicatePaymentReferences:duplicateReferences,hasDiscrepancies:statusMismatches.length>0||unallocatedPayments.length>0||duplicateReferences.length>0}});
+  });
+
+  app.get("/api/v1/reports/financial", auth, (req,res) => {
+    const tenant=req.user.tenant_id,today=new Date().toISOString().slice(0,10);
+    const from=text(req.query.from)||today.slice(0,8)+"01",to=text(req.query.to)||today;
+    const validDate=value=>/^\\d{4}-\\d{2}-\\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+"T00:00:00Z"));
+    if(!validDate(from)||!validDate(to)||from>to)return fail(res,400,"Valid from/to dates in YYYY-MM-DD order are required.");
+    const sum=(table,column,dateColumn)=>Number(db.prepare("SELECT COALESCE(SUM("+column+"),0) total FROM "+table+" WHERE tenant_id=? AND date("+dateColumn+") BETWEEN date(?) AND date(?)").get(tenant,from,to).total);
+    const billedPkr=sum("invoices","amount_pkr","created_at");
+    const collectedPkr=sum("payments","amount_pkr","received_at");
+    const reversedPkr=sum("payment_reversals","amount_pkr","created_at");
+    const creditNotesPkr=sum("credit_notes","amount_pkr","created_at");
+    const outstandingPkr=db.prepare("SELECT * FROM invoices WHERE tenant_id=?").all(tenant).reduce((total,invoice)=>total+invoiceTotals(db,tenant,invoice).outstanding,0);
+    const unallocatedPaymentsPkr=Number(db.prepare("SELECT COALESCE(SUM(amount_pkr),0) total FROM unallocated_payments WHERE tenant_id=? AND status='unallocated'").get(tenant).total);
+    res.json({success:true,data:{currency:"PKR",from,to,billedPkr,collectedPkr,reversedPkr,netCollectedPkr:collectedPkr-reversedPkr,creditNotesPkr,outstandingPkr,unallocatedPaymentsPkr}});
+  });
+
 }
