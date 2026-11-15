@@ -4,7 +4,7 @@
 **Target branch:** `build/nexus-isp-core`  
 **Target branch head at audit start:** `278352624227f64200022c447332ef5cb7daea4f`  
 **Repair branch:** `fix/restore-mikrotik-routes`  
-**Repair head:** `9f562a1ebedbd0a355c46535652a5e46676eb55a`  
+**Verified repair code/test commit:** `4981854aa68fb4fcb4b4682fe07bfac804d674e7`  
 **Pull request:** [#39 — restore MikroTik API routes and RBAC permissions](https://github.com/harissaeed030/nexus-isp-management/pull/39)
 
 ## Executive summary
@@ -27,13 +27,13 @@ The repair is implemented on a separate branch and submitted as PR #39. The PR r
 
 ## CI evidence for repair head
 
-All three workflows completed successfully on `9f562a1ebedbd0a355c46535652a5e46676eb55a`:
+All three workflows completed successfully on `4981854aa68fb4fcb4b4682fe07bfac804d674e7`:
 
 | Workflow | Run | Result |
 |---|---:|---|
-| Nexus backend verification | [43665827452](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827452) | **Success** |
-| Nexus backend checks | [43665827494](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827494) | **Success** |
-| Database hardening tests | [43665827466](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827466) | **Success** |
+| Nexus backend verification | [43665890678](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827452) | **Success** |
+| Nexus backend checks | [43665890705](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827494) | **Success** |
+| Database hardening tests | [43665890782](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827466) | **Success** |
 
 The successful verification workflows ran `npm run verify` (which runs `npm run check` and `npm test`). The backend-checks workflow also completed the dashboard JavaScript syntax check. The database-hardening workflow ran the same verification script.
 
