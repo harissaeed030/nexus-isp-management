@@ -19,7 +19,9 @@
 - [x] Complaint/ticket workflow and customer portal.
 - [x] Coverage areas, new connection applications and application status workflow.
 - [x] Dealer/partner records and recovery officer assignments.
-- [x] Cash collection records, customer ledger entries and operator attribution.\n- [x] Payment promise dates and kept/broken/cancelled follow-up states.\n- [x] Geographic country/city/locality hierarchy and field technician assignments.
+- [x] Cash collection records, customer ledger entries and operator attribution.
+- [x] Payment promise dates and kept/broken/cancelled follow-up states.
+- [x] Geographic country/city/locality hierarchy and field technician assignments.
 - [x] Equipment inventory, stock-in/out, assignment and adjustment movements.
 - [ ] Scheduled recurring billing and automated collection reminders.
 - [ ] CSV exports and complete invoice/receipt document workflow.
