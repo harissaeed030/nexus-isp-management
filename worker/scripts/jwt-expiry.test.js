@@ -11,9 +11,11 @@ const cases = [
 
 function loadVerifier(source) {
   const verifyStart = source.indexOf("async function verifyJWT(");
-  const verifyEnd = source.indexOf("\\nfunction b64u(", verifyStart);
+  const verifyEnd = source.indexOf("
+function b64u(", verifyStart);
   const decodeStart = source.indexOf("function b64uDec(");
-  const decodeEnd = source.indexOf("\\nfunction getSec(", decodeStart);
+  const decodeEnd = source.indexOf("
+function getSec(", decodeStart);
   assert.ok(verifyStart >= 0 && verifyEnd > verifyStart, "verifyJWT function must exist");
   assert.ok(decodeStart >= 0 && decodeEnd > decodeStart, "base64url decoder must exist");
   const context = {
@@ -25,9 +27,11 @@ function loadVerifier(source) {
     Date
   };
   runInNewContext(
-    source.slice(decodeStart, decodeEnd) + "\\n" +
+    source.slice(decodeStart, decodeEnd) + "
+" +
     source.slice(verifyStart, verifyEnd) +
-    "\\nglobalThis.verifyJWT = verifyJWT;",
+    "
+globalThis.verifyJWT = verifyJWT;",
     context
   );
   return context.verifyJWT;
@@ -70,7 +74,8 @@ for (const [label, file] of cases) {
     assert.equal(await verify(await token({ sub: "string-exp", exp: String(Date.now() + 60_000) }, secret), secret), null);
     assert.equal(await verify(await token({ sub: "unsafe-exp", exp: Number.MAX_SAFE_INTEGER + 1 }, secret), secret), null);
 
-    const tampered = await token({ sub: "tampered", exp: Date.now() + 60_000 }, secret);
-    assert.equal(await verify(tampered.slice(0, -1) + (tampered.endsWith("A") ? "B" : "A"), secret), null);
+    const tampered = (await token({ sub: "tampered", exp: Date.now() + 60_000 }, secret)).split(".");
+    tampered[2] = (tampered[2][0] === "A" ? "B" : "A") + tampered[2].slice(1);
+    assert.equal(await verify(tampered.join("."), secret), null);
   });
 }
