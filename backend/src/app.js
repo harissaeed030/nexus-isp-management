@@ -64,7 +64,7 @@ app.post("/api/v1/invoices",auth,(q,r)=>{
   if(!required(b.customerId)||!Number.isInteger(a)||a<0)return fail(r,400,"Customer and valid amount required.");
   if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,q.user.tenant_id))return fail(r,404,"Customer not found.");
   const iid=id(),period=required(b.billingPeriod)?b.billingPeriod:new Date().toISOString().slice(0,7);
-  if(!/^\\d{4}-(0[1-9]|1[0-2])$/.test(period))return fail(r,400,"Billing period must use YYYY-MM format.");
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(period))return fail(r,400,"Billing period must use YYYY-MM format.");
   try{
     const invoice=withTransaction(db,()=>{
       let no;
