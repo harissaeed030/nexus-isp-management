@@ -22,13 +22,11 @@ function csvResponse(res, filename, columns, rows) {
   return res.status(200).send("\uFEFF" + body + "\r\n");
 }
 
-function dateRange(req, fail) {
+function dateRange(req) {
   const from = req.query.from || null;
   const to = req.query.to || null;
   const valid = value => value === null || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value);
   if (!valid(from) || !valid(to) || (from && to && from > to)) {
-    fail.status = 400;
-    fail.message = "Use valid YYYY-MM-DD from/to dates; from must not be after to.";
     return null;
   }
   return { from, to };
@@ -36,7 +34,7 @@ function dateRange(req, fail) {
 
 export function registerExportRoutes(app, { db, auth, fail }) {
   app.get("/api/v1/exports/:type.csv", auth, (req, res) => {
-    const range = dateRange(req, {});
+    const range = dateRange(req);
     if (!range) return fail(res, 400, "Use valid YYYY-MM-DD from/to dates; from must not be after to.");
     const tenant = req.user.tenant_id;
     const dateFilter = (column, params) => {
