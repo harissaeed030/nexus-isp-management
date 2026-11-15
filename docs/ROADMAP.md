@@ -44,11 +44,11 @@
 ## Phase 6 — SaaS readiness
 - [x] Tenant-scoped API design, permission checks and audit logging foundations.
 - [x] Database backup/restore utilities and integrity safeguards.
-- [ ] Automated verification suite and CI on the final integrated branch.
+- [x] Automated verification suite and CI on the integrated development branch (GitHub Actions passed on the PR head and merge commit; live acceptance remains separate).
 - [ ] Tenant-isolation and independent security review.
 - [ ] Production storage, HTTPS, secrets, firewall and monitoring configuration.
 - [ ] Backup/restore rehearsal using a copy of the intended production database.
 - [ ] Android browser acceptance and operational usability review.
 - [ ] Production deployment and controlled migration.
 
-**Status rule:** A code module marked complete means its implementation and dashboard/API wiring exist. It does not mean live hardware compatibility, operational acceptance, automated testing or production certification has passed. Those release gates remain explicitly pending.
+**Status rule:** A code module marked complete means its implementation and dashboard/API wiring exist. Automated CI passing does not mean live hardware compatibility, operational acceptance, independent security review or production certification has passed. Those release gates remain explicitly pending.
