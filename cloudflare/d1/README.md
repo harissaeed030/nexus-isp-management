@@ -5,9 +5,16 @@
 - Production: `nexus-saas-db` (`ce88098b-bff4-4d06-a0df-7bf29622a085`)
 - Staging: `nexus-saas-staging-db` (`194f62e2-2766-48ab-be17-81248610c0cd`)
 
-## Migration state observed 2026-11-15
+## Current state after the 2026-11-15 release
 
-Both databases had migrations 0001 through 0006. Staging also had migration 0007; production was one additive migration behind. The only missing production objects were the `customer_portal_accounts` table and its two tenant-integrity triggers. Shared table definitions, indexes and existing tenant guard triggers were otherwise aligned.
+Both production and staging are at schema migration 0007.
+
+- Production migration 0007 was applied after a full D1 export.
+- `customer_portal_accounts` exists in both databases.
+- Both tenant-integrity triggers (`trg_d1_portal_org_i`, `trg_d1_portal_org_u`) exist in both databases.
+- Production and staging table, index and trigger definitions were reconciled and verified.
+- Production records were preserved. At release verification, production had 1 organization, 1 owner user, 0 customers, 0 invoices, 0 payments and 0 customer portal accounts.
+- The production Worker customer-portal release is version 22 at 100% traffic.
 
 The SQL artifacts for migrations 0001-0005 are not present in the current repository history. Their applied names and timestamps are recorded in each database's `schema_migrations` table. Do not invent replacement historical migrations or rerun them. `worker/schema.sql` is the canonical full snapshot for creating a fresh database at schema version 0007.
 
@@ -15,9 +22,17 @@ The SQL artifacts for migrations 0001-0005 are not present in the current reposi
 
 `migrations/0007_customer_portal_tenant_guards.sql` is additive and idempotent. It creates the customer portal account table, enforces that the account's customer belongs to the same organization on insert/update, and records migration 7. It does not drop or rewrite existing customer, invoice, payment or user records.
 
+## Schema artifacts
+
+- `worker/schema-production-v6.sql`: schema-only production baseline before migration 0007.
+- `worker/schema.sql`: canonical full schema snapshot at migration 0007.
+- `worker/scripts/validate-d1-schema.py`: validates v6-to-v7 migration parity and rejects cross-tenant portal-account writes.
+
+Use schema snapshots only for empty databases. Existing databases must be upgraded with incremental migrations.
+
 ## Production backup record
 
-A full D1 SQL export completed before the production portal migration was prepared:
+A full D1 SQL export completed before the production portal migration:
 
 - File: `ce88098b-bff4-4d06-a0df-7bf29622a085-0000007f-00000000-00005124-3d10acf27af286f65269ddf3b096b78f.sql`
 - Export bookmark: `0000007f-00000000-00005124-3d10acf27af286f65269ddf3b096b78f`
