@@ -33,6 +33,13 @@ try{
  const token=setup.data.token;
  assert.equal(db.prepare("SELECT COUNT(*) n FROM schema_migrations WHERE version='001_database_hardening'").get().n,1);
  db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run("other-tenant","Other ISP","other-isp");
+ const ownerHash=db.prepare("SELECT password_hash FROM users WHERE id=?").get(setup.data.user.id).password_hash;
+ db.prepare("INSERT INTO users(id,tenant_id,email,password_hash,full_name,role) VALUES(?,?,?,?,?,?)").run("other-owner","other-tenant","owner@nexus.test",ownerHash,"Other Owner","owner");
+ const ambiguousLogin=await request("/api/v1/auth/login","POST",{email:"owner@nexus.test",password:"Strong-Test-Password-123"});
+ assert.equal(ambiguousLogin.status,409);
+ const scopedLogin=await request("/api/v1/auth/login","POST",{email:"owner@nexus.test",password:"Strong-Test-Password-123",tenantSlug:"other-isp"});
+ assert.equal(scopedLogin.status,200);
+ assert.equal(scopedLogin.data.tenant.slug,"other-isp");
  db.prepare("INSERT INTO customers(id,tenant_id,customer_code,full_name) VALUES(?,?,?,?)").run("other-customer","other-tenant","OTHER-1","Other Subscriber");
  assert.throws(() => db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr) VALUES(?,?,?,?,?)").run("cross-tenant-invoice",setup.data.user.tenantId,"other-customer","CROSS-1",100), /invoice customer tenant mismatch/);
  const customer=await request("/api/v1/customers","POST",{fullName:"Test Subscriber"},token);
