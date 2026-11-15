@@ -7,7 +7,7 @@
   const apiBase = (() => {
     const local = ["localhost", "127.0.0.1"].includes(location.hostname);
     const saved = sessionStorage.getItem("nexus_api");
-    if (saved && (local || !/^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:|\\/)/i.test(saved))) return saved;
+    if (saved && (local || !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/i.test(saved))) return saved;
     if (saved && !local) sessionStorage.removeItem("nexus_api");
     return location.port === "4000" ? location.origin :
       (local ? "http://127.0.0.1:4000" : "https://nexus-saas-api.harissaeed030.workers.dev");
