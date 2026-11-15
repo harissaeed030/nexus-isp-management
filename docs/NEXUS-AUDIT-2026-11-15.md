@@ -40,7 +40,7 @@ These are GitHub-hosted PR checks on the tested head. They are not evidence of l
 
 - `build/nexus-isp-core` is the local Node.js/SQLite development line.
 - `main` contains the separately released Cloudflare Worker/D1 customer-portal path.
-- The two lines have diverged (225 commits ahead and 11 behind at the latest check; the previously CI-verified code head was `5b418f6b5ff93e45337768efaf0ac14bc6e8db29`). Do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker.
+- The two lines have diverged substantially; do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker. The previously CI-verified code head was `5b418f6b5ff93e45337768efaf0ac14bc6e8db29`.
 - The older draft tenant-login PR #48 is not required for this integration: the merged local API already supports tenant-aware login selection via `tenantSlug` and safely rejects ambiguous identities.
 
 ## Latest branch-head CI — 2026-11-15
