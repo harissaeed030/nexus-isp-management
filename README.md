@@ -17,7 +17,7 @@ The `build/nexus-isp-core` branch contains the first local API foundation:
 - Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
 - SQLite database is created automatically under `backend/data/`.
 
-This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, backup/restore, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
+This is an early development build, **not production-ready**. The dashboard uses the local API for core records, and invoice/receipt PDFs, financial reports, credit notes, payment reversals, unallocated receipt allocation, encrypted router/OLT/ACS credentials and backup/restore utilities are included. Still unfinished: scheduled hands-free recurring billing, CSV exports, live hardware integrations and a production security review. Router records store AES-256-GCM encrypted credentials and send live RouterOS commands unless `NEXUS_ROUTER_ADAPTER=mock` disables the adapter. OLT/ONU is inventory-only pending verified HSGQ interface documentation; TR-069 actions require a reachable GenieACS ACS. Do not use it as the only system of record for live customers until backups and testing are in place.
 
 ## Local setup (Android Termux or desktop)
 
@@ -39,7 +39,7 @@ The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep th
 
 ### Database migrations, backup and restore
 
-The database initializer maintains a `schema_migrations` ledger. Existing 0.2.0 databases are upgraded automatically on next startup by additive migrations in `backend/migrations/001_database_hardening.sql` and `backend/migrations/002_customer_subscription_management.sql`; they preserve existing rows and add tenant-consistency triggers, customer account sequencing, connection/subscription history and query indexes. Do not manually delete the SQLite file to apply a migration.
+The database initializer maintains a `schema_migrations` ledger (currently through version 011). Existing databases are upgraded automatically on next startup by additive migrations under `backend/migrations/`, which preserve existing rows and add tenant-consistency triggers, customer account sequencing, connection/subscription history, RBAC staff columns and permission overrides, tenant profile columns and query indexes. Do not manually delete the SQLite file to apply a migration. See `docs/MIGRATION-VERSION-REGISTRY.md` for the version map.
 
 Run commands from the `backend/` directory:
 
@@ -88,7 +88,12 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - `GET|POST /api/v1/invoices`
 - `GET|POST /api/v1/payments`
 - `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
-- Customer portal: `/portal` (customer login, package, invoices, dues, payments and complaints)\n- `POST /api/v1/customer-portal/login`, `GET /api/v1/customer-portal/me`, `GET /api/v1/customer-portal/invoices`, `GET /api/v1/customer-portal/payments`, `GET|POST /api/v1/customer-portal/complaints`, `POST /api/v1/customer-portal/logout`\n- Staff customer portal provisioning: `POST /api/v1/portal-admin/customers/:customerId/account`, `POST /api/v1/portal-admin/customers/:customerId/reset-password`\n- Notification console: `/notifications`; templates, queued messages, provider send/retry and delivery history under `/api/v1/notifications/*`\n- WhatsApp Cloud API uses Meta-approved template names and language codes for template sends (optional provider template name on each local template); without a provider template name, the API sends a free-form text message subject to Meta's 24-hour customer-care window. WhatsApp Cloud API secrets are server-only environment variables: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Configure the Meta webhook callback to `/api/v1/notifications/whatsapp/webhook`; the endpoint verifies the provider signature before accepting delivery updates.\n- `GET /api/v1/audit-logs`
+- Customer portal: `/portal` (customer login, package, invoices, dues, payments and complaints)
+- `POST /api/v1/customer-portal/login`, `GET /api/v1/customer-portal/me`, `GET /api/v1/customer-portal/invoices`, `GET /api/v1/customer-portal/payments`, `GET|POST /api/v1/customer-portal/complaints`, `POST /api/v1/customer-portal/logout`
+- Staff customer portal provisioning: `POST /api/v1/portal-admin/customers/:customerId/account`, `POST /api/v1/portal-admin/customers/:customerId/reset-password`
+- Notification console: `/notifications`; templates, queued messages, provider send/retry and delivery history under `/api/v1/notifications/*`
+- WhatsApp Cloud API uses Meta-approved template names and language codes for template sends (optional provider template name on each local template); without a provider template name, the API sends a free-form text message subject to Meta's 24-hour customer-care window. WhatsApp Cloud API secrets are server-only environment variables: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Configure the Meta webhook callback to `/api/v1/notifications/whatsapp/webhook`; the endpoint verifies the provider signature before accepting delivery updates.
+- `GET /api/v1/audit-logs`
 - `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
 - `GET|POST /api/v1/olts`, `PATCH|DELETE /api/v1/olts/:id`, `GET /api/v1/olts/:id/capabilities`
 - `GET /api/v1/olts/:id/pons`, `PATCH /api/v1/pons/:id`
@@ -96,6 +101,11 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - `GET|POST /api/v1/olt-alarms`, `PATCH /api/v1/olt-alarms/:id/clear`
 - `GET /api/v1/olts/:id/monitoring` (inventory/capability response; live telemetry pending verified HSGQ interface documentation)
 - `GET|PUT /api/v1/staff/:id/permissions` (owner/admin only)
+- Routers and PPPoE provisioning: `/api/v1/routers` (inventory CRUD), `/api/v1/routers/:id/test`, `/api/v1/routers/:id/sync`, `/api/v1/routers/:id/logs`, `/api/v1/routers/:id/pppoe/*` and `/api/v1/routers/:id/customers/:customerId/pppoe` (permissions: `routers.read`, `routers.manage`, `routers.provision`)
+- Billing and finance: `/api/v1/billing/generate`, `/api/v1/billing/runs`, `/api/v1/financial/ledger/:customerId`, `/api/v1/financial/aging`, `/api/v1/financial/reconciliation`, `/api/v1/credit-notes`, `/api/v1/payment-reversals`, `/api/v1/unallocated-payments` (+ `:id/allocate`)
+- Reports and documents: `/api/v1/reports/summary`, `/api/v1/reports/financial`, `/api/v1/invoices/:id/pdf`, `/api/v1/payments/:id/receipt.pdf`
+- Tenant profile: `GET|PATCH /api/v1/tenant` (owner/admin)
+- ACS/TR-069: `/api/v1/acs/connections` (+ `:id/sync`, `:id/test`), `/api/v1/tr069/devices` (+ `:id/parameters`, `:id/reboot`, `:id/wifi`, `:id/diagnostics`), `/api/v1/tr069/audit-logs`
 
 Money values are integer Pakistani rupees (PKR). Payments cannot exceed the outstanding invoice balance.
 

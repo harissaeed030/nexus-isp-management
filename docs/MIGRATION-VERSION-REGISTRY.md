@@ -13,6 +13,8 @@ The SQLite migration history for the local/backend runtime uses the complete des
 | 007 | `007_isp_business_modules.sql` | Task 10 business operations, inventory and ledger |
 | 008 | `008_financial_management.sql` | Invoice sequences, credit notes, reversals and unallocated receipts |
 | 009 | `009_session_hardening.sql` | Session lifecycle metadata |
+| 010 | `003_rbac_staff.sql` | Staff RBAC columns, per-user permission overrides, audit enrichment, installations/renewals/expenses and OLT ONU history (legacy filename retained) |
+| 011 | inline in `src/config/database.js` | Tenant profile columns (email, phone, address, timezone); guarded `ALTER TABLE` so fresh and pre-existing databases converge |
 
 ## Conflict resolution
 
@@ -21,7 +23,9 @@ Two independent feature branches reused numeric prefixes:
 - Task 10 introduced `005_isp_business_modules.sql`, while the core line already uses version 005 for TR-069.
 - Financial management introduced `002_financial_management.sql`, while the core line already uses version 002 for customer/subscription management.
 
-Those migrations are retained, but assigned the next unused versions 007 and 008. Session hardening is assigned 009. Existing 001–006 migration IDs and SQL files are not renamed or rewritten.
+Those migrations are retained, but assigned the next unused versions 007 and 008. Session hardening is assigned 009. RBAC/staff schema reuses the legacy filename `003_rbac_staff.sql` under version 010. Existing 001–006 migration IDs and SQL files are not renamed or rewritten.
+
+`002_multitenant_registration.sql` is deliberately not wired into the ledger: it adds a global unique index on `users(email)` (which would break multi-tenant registration) and platform-admin tables with no application wiring. It is retained as reference-only for a future platform-admin design review.
 
 ## Safety rules
 

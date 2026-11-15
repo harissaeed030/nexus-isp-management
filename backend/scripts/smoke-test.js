@@ -171,6 +171,16 @@ try{
  assert.equal(techLogin.status,200);
  assert.equal((await request("/api/v1/routers","GET",undefined,techLogin.data.token)).status,200);
  assert.equal((await request("/api/v1/routers","POST",{name:"Blocked Router",host:"192.0.2.2"},techLogin.data.token)).status,403);
+ const tenantGet=await request("/api/v1/tenant","GET",undefined,token);
+ assert.equal(tenantGet.status,200);
+ assert.equal(tenantGet.data.data.name,"Nexus Test ISP");
+ const tenantPatch=await request("/api/v1/tenant","PATCH",{email:"office@nexus.test",phone:"+92-300-0000000",address:"Latifabad",timezone:"Asia/Karachi"},token);
+ assert.equal(tenantPatch.status,200);
+ assert.equal(tenantPatch.data.data.email,"office@nexus.test");
+ assert.equal(tenantPatch.data.data.timezone,"Asia/Karachi");
+ assert.equal((await request("/api/v1/tenant","PATCH",{name:"   "},token)).status,400);
+ assert.equal((await request("/api/v1/tenant","GET",undefined,billingToken)).status,403);
+ assert.equal((await request("/api/v1/tenant","PATCH",{name:"Nope"},billingToken)).status,403);
  const reports=await request("/api/v1/reports/summary","GET",undefined,token);
  assert.equal(reports.status,200);
  console.log("Nexus smoke tests passed: core CRUD, atomic setup/payment rollback, concurrent monthly billing, role permissions, staff controls and router access.");

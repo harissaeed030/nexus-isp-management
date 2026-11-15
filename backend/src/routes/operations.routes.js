@@ -5,8 +5,6 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
   const roles=(...allowed)=>(req,res,next)=>allowed.includes(req.user.role)?next():fail(res,403,"Your staff role does not have permission for this action.");
   const ownerOrAdmin=roles("owner","admin");
   const permit=permission=>(req,res,next)=>hasPermission(db,req.user,permission)?next():fail(res,403,"Your staff role does not have permission for this action.");
-  const networkRead=permit("routers.read");
-  const networkManage=permit("routers.manage");
   const billingGenerate=permit("billing.generate");
   const billingRead=permit("billing.read");
   const reportsRead=permit("reports.read");
@@ -79,38 +77,34 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
     res.json({success:true,data:{role:target.role,permissions:getEffectivePermissions(db,target)}});
   });
 
-  // Router inventory only. No RouterOS credentials are stored and no device commands are sent.
-  app.get("/api/v1/routers",auth,networkRead,(req,res)=>{
-    res.json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at,updated_at FROM routers WHERE tenant_id=? ORDER BY created_at DESC").all(req.user.tenant_id)});
+  // Router inventory CRUD is registered by registerMikroTikRoutes, which also
+  // stores encrypted credentials and runs live RouterOS commands. That earlier
+  // registration is the single source of truth for /api/v1/routers, so this
+  // inventory-only block is intentionally omitted here to avoid a duplicate
+  // route shadowing the live integration path.
+
+  // Tenant profile for the authenticated workspace.
+  app.get("/api/v1/tenant",auth,ownerOrAdmin,(req,res)=>{
+    const t=db.prepare("SELECT id,name,slug,email,phone,address,timezone,status,created_at FROM tenants WHERE id=?").get(req.user.tenant_id);
+    if(!t)return fail(res,404,"Tenant not found.");
+    res.json({success:true,data:t});
   });
-  app.post("/api/v1/routers",auth,networkManage,(req,res)=>{
-    const b=req.body||{},port=Number(b.apiPort??8728);
-    if(!b.name?.trim()||!b.host?.trim()||!Number.isInteger(port)||port<1||port>65535)return fail(res,400,"Router name, host/IP and valid API port are required.");
-    const rid=id();
-    try{
-      db.prepare("INSERT INTO routers(id,tenant_id,name,host,api_port,location,notes) VALUES(?,?,?,?,?,?,?)")
-        .run(rid,req.user.tenant_id,b.name.trim(),b.host.trim(),port,b.location?.trim()||null,b.notes?.trim()||null);
-      audit(req.user,"create","router",rid);
-      res.status(201).json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at FROM routers WHERE id=?").get(rid)});
-    }catch(e){if(String(e.message).includes("UNIQUE"))return fail(res,409,"This router host and API port are already registered.");throw e;}
-  });
-  app.patch("/api/v1/routers/:id",auth,networkManage,(req,res)=>{
-    const r=db.prepare("SELECT * FROM routers WHERE id=? AND tenant_id=?").get(req.params.id,req.user.tenant_id);
-    if(!r)return fail(res,404,"Router not found.");
-    const b=req.body||{},name=b.name??r.name,host=b.host??r.host,port=Number(b.apiPort??r.api_port),status=b.status??r.status;
-    if(!name?.trim()||!host?.trim()||!Number.isInteger(port)||port<1||port>65535||!["configured","maintenance","disabled"].includes(status))return fail(res,400,"Invalid router details.");
-    try{
-      db.prepare("UPDATE routers SET name=?,host=?,api_port=?,location=?,notes=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
-        .run(name.trim(),host.trim(),port,b.location??r.location,b.notes??r.notes,status,r.id,req.user.tenant_id);
-      audit(req.user,"update","router",r.id);
-      res.json({success:true,data:db.prepare("SELECT id,name,host,api_port,location,status,notes,created_at,updated_at FROM routers WHERE id=?").get(r.id)});
-    }catch(e){if(String(e.message).includes("UNIQUE"))return fail(res,409,"This router host and API port are already registered.");throw e;}
-  });
-  app.delete("/api/v1/routers/:id",auth,networkManage,(req,res)=>{
-    const result=db.prepare("DELETE FROM routers WHERE id=? AND tenant_id=?").run(req.params.id,req.user.tenant_id);
-    if(!result.changes)return fail(res,404,"Router not found.");
-    audit(req.user,"delete","router",req.params.id);
-    res.json({success:true});
+  app.patch("/api/v1/tenant",auth,ownerOrAdmin,(req,res)=>{
+    const t=db.prepare("SELECT * FROM tenants WHERE id=?").get(req.user.tenant_id);
+    if(!t)return fail(res,404,"Tenant not found.");
+    const b=req.body||{};
+    const name=b.name===undefined?t.name:String(b.name).trim();
+    const email=b.email===undefined?t.email:String(b.email||"").trim()||null;
+    const phone=b.phone===undefined?t.phone:String(b.phone||"").trim()||null;
+    const address=b.address===undefined?t.address:String(b.address||"").trim()||null;
+    const timezone=b.timezone===undefined?t.timezone:String(b.timezone||"").trim()||"UTC";
+    if(!name||name.length>160)return fail(res,400,"Valid company name is required.");
+    if(email&&email.length>200)return fail(res,400,"Email is too long.");
+    if(phone&&phone.length>40)return fail(res,400,"Phone is too long.");
+    if(address&&address.length>400)return fail(res,400,"Address is too long.");
+    db.prepare("UPDATE tenants SET name=?,email=?,phone=?,address=?,timezone=? WHERE id=?").run(name,email,phone,address,timezone,req.user.tenant_id);
+    audit(req.user,"update","tenant",req.user.tenant_id);
+    res.json({success:true,data:db.prepare("SELECT id,name,slug,email,phone,address,timezone,status,created_at FROM tenants WHERE id=?").get(req.user.tenant_id)});
   });
 
   // Generate one invoice per active subscription for a selected month; unique run prevents duplicates.

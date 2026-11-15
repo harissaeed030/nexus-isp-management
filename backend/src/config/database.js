@@ -6,7 +6,7 @@ const file=resolve(env.databasePath);mkdirSync(dirname(file),{recursive:true});
 export const db=new DatabaseSync(file);
 db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
 db.exec(`
-CREATE TABLE IF NOT EXISTS tenants(id TEXT PRIMARY KEY,name TEXT NOT NULL,slug TEXT NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'active',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS tenants(id TEXT PRIMARY KEY,name TEXT NOT NULL,slug TEXT NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'active',email TEXT,phone TEXT,address TEXT,timezone TEXT NOT NULL DEFAULT 'UTC',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),email TEXT NOT NULL,password_hash TEXT NOT NULL,full_name TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'owner',status TEXT NOT NULL DEFAULT 'active',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(tenant_id,email));
 CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS customers(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),customer_code TEXT NOT NULL,full_name TEXT NOT NULL,phone TEXT,email TEXT,address TEXT,status TEXT NOT NULL DEFAULT 'active',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(tenant_id,customer_code));
@@ -164,6 +164,42 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(ses
   } catch (error) {
     try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
     throw new Error(`Database migration ${sessionHardeningMigrationVersion} failed: ${error.message}`);
+  }
+}
+
+const rbacStaffMigrationVersion = "010_rbac_staff";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(rbacStaffMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/003_rbac_staff.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(rbacStaffMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${rbacStaffMigrationVersion} failed: ${error.message}`);
+  }
+}
+
+// Tenant profile columns were introduced outside the wired migration chain;
+// apply them defensively so every database (fresh or pre-existing) converges.
+const tenantProfileVersion = "011_tenant_profile";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(tenantProfileVersion)) {
+  const tenantColumns = db.prepare("PRAGMA table_info(tenants)").all().map(column => column.name);
+  const addColumn = (name, definition) => {
+    if (!tenantColumns.includes(name)) db.exec("ALTER TABLE tenants ADD COLUMN " + name + " " + definition);
+  };
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    addColumn("email", "TEXT");
+    addColumn("phone", "TEXT");
+    addColumn("address", "TEXT");
+    addColumn("timezone", "TEXT NOT NULL DEFAULT 'UTC'");
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(tenantProfileVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${tenantProfileVersion} failed: ${error.message}`);
   }
 }
 
