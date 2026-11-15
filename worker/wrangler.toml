@@ -1,12 +1,11 @@
-name = "nexus-api"
+name = "nexus-saas-api-staging"
 main = "src/index.js"
 compatibility_date = "2026-11-02"
 
 [vars]
-ENVIRONMENT = "production"
-# Set ALLOWED_ORIGINS in Worker Variables after the frontend URL is known.
+ENVIRONMENT = "staging"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "nexus-db"
-database_id = "9f108166-244d-442e-9b0a-5a0efa4d1823"
+database_name = "nexus-saas-staging-db"
+database_id = "194f62e2-2766-48ab-be17-81248610c0cd"
