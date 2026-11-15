@@ -29,7 +29,18 @@ assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=7").fetch
 
 expected = sqlite3.connect(":memory:")
 expected.executescript(current)
-assert objects(before) == objects(expected), "Production v6 + migration 0007 does not match canonical v7 schema"
+actual_objects = objects(before)
+expected_objects = objects(expected)
+missing = sorted(set(expected_objects) - set(actual_objects))
+extra = sorted(set(actual_objects) - set(expected_objects))
+different = sorted(key for key in set(actual_objects) & set(expected_objects) if actual_objects[key] != expected_objects[key])
+if missing or extra or different:
+    print("Missing objects after migration:", missing)
+    print("Unexpected objects after migration:", extra)
+    print("Different object definitions:", different)
+    for key in different:
+        print("DIFF", key, "actual=", actual_objects[key][:500], "expected=", expected_objects[key][:500])
+    raise AssertionError("Production v6 + migration 0007 does not match canonical v7 schema")
 
 before.execute("INSERT INTO organizations(id,name,slug) VALUES('org-a','Org A','org-a'),('org-b','Org B','org-b')")
 before.execute("INSERT INTO customers(id,organization_id,first_name,last_name) VALUES('cust-a','org-a','A','Test'),('cust-b','org-b','B','Test')")
