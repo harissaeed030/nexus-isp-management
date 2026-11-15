@@ -53,9 +53,9 @@ A table rebuild was not attempted. Rebuilding users can affect foreign-key depen
 
 | Table | Production | Staging |
 |---|---:|---:|
-| organizations | 1 | 5 |
-| users | 1 | 5 |
-| customers | 0 | 5 |
+| organizations | 1 | 7 |
+| users | 1 | 7 |
+| customers | 0 | 7 |
 | invoices | 0 | 2 |
 | payments | 0 | 0 |
 | customer portal accounts | 0 | 4 |
@@ -63,6 +63,8 @@ A table rebuild was not attempted. Rebuilding users can affect foreign-key depen
 Staging contains synthetic QA data. Two synthetic tenants from the first E2E attempt (run 43730835265) remain because their cleanup requests coincided with the long-running D1 export and returned HTTP 500. The later E2E run passed and cleaned its own tenants. These two remaining tenants are staging-only test fixtures, not customer data. Production customer tables are empty at the time of this audit.
 
 ## Runtime checks
+
+- Final live recheck after migration 0009 and Worker security deployments confirmed both migration ledgers at version 9, all three expected indexes in both databases, and unchanged production counts (1 organization, 1 user, 0 customers, 0 invoices, 0 payments). Staging had 7 organizations, 7 users, 7 customers, 2 invoices and 0 payments at that recheck.
 
 - GitHub backend verification passed, including local backend tests and D1 migration snapshot validation.
 - Staging tenant-isolation/customer-portal E2E passed after the D1 export operations completed.
