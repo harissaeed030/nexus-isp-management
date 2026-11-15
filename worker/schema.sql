@@ -349,6 +349,8 @@ CREATE INDEX IF NOT EXISTS idx_tickets_org_customer_assignee ON support_tickets(
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON support_tickets(status);
 
 CREATE INDEX IF NOT EXISTS idx_users_organization ON users(organization_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_global ON users(email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_org_email_ci ON users(organization_id, lower(email));
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_audit_org_i BEFORE INSERT ON audit_log WHEN NEW.organization_id IS NOT NULL AND NEW.user_id IS NOT NULL BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'audit actor organization mismatch') END;
@@ -463,4 +465,5 @@ INSERT OR IGNORE INTO schema_migrations(id,name,applied_at) VALUES
 (4,'0004_add_missing_columns_and_tables','2026-11-12 17:51:19'),
 (5,'0005_sync_staging_schema','2026-11-13 23:41:19'),
 (6,'0006_d1_tenant_integrity_guards','2026-11-15 01:17:52'),
-(7,'0007_customer_portal_tenant_guards','2026-11-15 01:18:15');
+(7,'0007_customer_portal_tenant_guards','2026-11-15 01:18:15'),
+(8,'0008_user_email_index_parity','2026-11-15 15:35:00');
