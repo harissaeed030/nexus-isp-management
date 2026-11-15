@@ -145,7 +145,7 @@ export function registerFinancialRoutes(app, { db, auth, id, audit, fail }) {
     }
     const unallocatedPayments=db.prepare("SELECT u.id,u.customer_id,c.full_name customer_name,u.amount_pkr,u.method,u.reference,u.received_at FROM unallocated_payments u JOIN customers c ON c.id=u.customer_id AND c.tenant_id=u.tenant_id WHERE u.tenant_id=? AND u.status='unallocated' ORDER BY u.received_at").all(tenant);
     const unallocatedTotalPkr=unallocatedPayments.reduce((sum,row)=>sum+Number(row.amount_pkr),0);
-    const duplicateReferences=db.prepare("SELECT transaction_ref,COUNT(*) count FROM payments WHERE tenant_id=? AND transaction_ref IS NOT NULL AND trim(transaction_ref)<>'' GROUP BY transaction_ref HAVING COUNT(*)>1").all(tenant);
+    const duplicateReferences=db.prepare("SELECT reference,COUNT(*) count FROM payments WHERE tenant_id=? AND reference IS NOT NULL AND trim(reference)<>'' GROUP BY reference HAVING COUNT(*)>1").all(tenant);
     res.json({success:true,data:{checkedInvoices:invoices.length,statusMismatches,unallocatedPayments,unallocatedTotalPkr,duplicatePaymentReferences:duplicateReferences,hasDiscrepancies:statusMismatches.length>0||unallocatedPayments.length>0||duplicateReferences.length>0}});
   });
 
