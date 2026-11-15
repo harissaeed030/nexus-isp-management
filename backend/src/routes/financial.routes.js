@@ -152,7 +152,7 @@ export function registerFinancialRoutes(app, { db, auth, id, audit, fail }) {
   app.get("/api/v1/reports/financial", auth, (req,res) => {
     const tenant=req.user.tenant_id,today=new Date().toISOString().slice(0,10);
     const from=text(req.query.from)||today.slice(0,8)+"01",to=text(req.query.to)||today;
-    const validDate=value=>/^\\d{4}-\\d{2}-\\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+"T00:00:00Z"));
+    const validDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+"T00:00:00Z"));
     if(!validDate(from)||!validDate(to)||from>to)return fail(res,400,"Valid from/to dates in YYYY-MM-DD order are required.");
     const sum=(table,column,dateColumn)=>Number(db.prepare("SELECT COALESCE(SUM("+column+"),0) total FROM "+table+" WHERE tenant_id=? AND date("+dateColumn+") BETWEEN date(?) AND date(?)").get(tenant,from,to).total);
     const billedPkr=sum("invoices","amount_pkr","created_at");
