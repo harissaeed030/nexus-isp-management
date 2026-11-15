@@ -337,7 +337,7 @@ async function portalLogin(r,env,ip){
   else if(identity.includes('@')){email=identity.toLowerCase();accountNumber='';}
   else{accountNumber=identity.toUpperCase();email='';}
  }
- if((!workspace&&!email&&!accountNumber)||typeof b.password!=='string'||!b.password)return json({error:'Account identity and password are required'},400);
+ if((!email&&!accountNumber)||typeof b.password!=='string'||!b.password)return json({error:'Account identity and password are required'},400);
  if(email&&!vEmail(email))return json({error:'Enter a valid email address'},400);
  if(accountNumber&&!/^[A-Z0-9._-]{2,80}$/.test(accountNumber))return json({error:'Enter a valid account number'},400);
  const rateKey=(identity||email||accountNumber).trim().toLowerCase();
