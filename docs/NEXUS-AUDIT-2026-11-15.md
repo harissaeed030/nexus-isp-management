@@ -10,11 +10,38 @@
 
 The missing `registerMikroTikRoutes` export and RouterOS route handlers were restored in PR #39, which was merged into `build/nexus-isp-core`. The repair restores tenant-scoped PPPoE/router actions, encrypts stored router API credentials using AES-256-GCM, and separates inventory permissions from live provisioning permissions.
 
-The PR repair head passed the three GitHub Actions workflows listed below. After merge, branch push workflows were started. Additional post-merge hardening fixes were then committed:
+The PR repair head passed the three GitHub Actions workflows listed below. After merge, additional hardening commits were added:
 - Wait for the TLS `secureConnect` event (not merely TCP `connect`) before sending RouterOS API credentials over API-SSL.
 - Fail production startup when `ROUTER_CREDENTIAL_KEY` is missing or is not exactly 32 bytes represented as 64 hexadecimal characters.
 
-These post-merge commits require their own completed CI runs before the latest branch head can be called green.
+The later PR #49 integration pass re-ran the backend, database-hardening, migration-reconciliation and syntax workflows successfully on its head. See the current integration status below.
+
+## Latest integration status — 2026-11-15
+
+PR [#49](https://github.com/harissaeed030/nexus-isp-management/pull/49), **Complete ISP operations and connect network inventory dashboard**, was merged into `build/nexus-isp-core`.
+
+- Merge commit: `bb1be993b43fe628db0c329d6f36433477df61da`.
+- PR head tested: `d3a13a58fb5ddb50acb9e3ff2c98cf9c4608af16`.
+- Changes include tenant-scoped ISP operations APIs, OLT/ONU inventory dashboard screens and mapping, payment-promise migration, and corrected local SQLite / Cloudflare runtime documentation.
+- The OLT credential-tampering test was corrected to modify the AES-GCM authentication tag rather than the last Base64URL character, which could alter only unused padding bits.
+
+GitHub Actions on the PR head completed successfully:
+
+| Workflow | Run | Result |
+|---|---:|---|
+| Nexus backend verification (`npm run verify`) | [43681606695](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43681606695) | Success |
+| Nexus backend checks | [43681606701](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43681606701) | Success |
+| Database hardening tests | [43681606698](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43681606698) | Success |
+| SQLite migration reconciliation | [43681606705](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43681606705) | Success |
+
+These are GitHub-hosted PR checks on the tested head. They are not evidence of live hardware compatibility, a production deployment, or an operational database restore rehearsal.
+
+### Branch and runtime separation
+
+- `build/nexus-isp-core` is the local Node.js/SQLite development line.
+- `main` contains the separately released Cloudflare Worker/D1 customer-portal path.
+- The two lines have diverged (206 commits ahead and 9 behind in the comparison performed for this audit). Do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker.
+- The older draft tenant-login PR #48 is not required for this integration: the merged local API already supports tenant-aware login selection via `tenantSlug` and safely rejects ambiguous identities.
 
 ## Changes merged in PR #39
 
@@ -78,4 +105,4 @@ These checks cannot be honestly marked complete from source code or CI alone:
 
 ## Release decision
 
-**Production remains NO-GO until the latest post-merge CI is green and the required production configuration, live-device, backup/restore, and security checks have documented evidence.** The original backend startup/import blocker is fixed and merged; that does not by itself establish full production readiness.
+**Production remains NO-GO until the required production configuration, live-device, backup/restore, and independent security checks have documented evidence.** The original backend startup/import blocker is fixed and merged; the current integration PR's automated checks passed, but that does not establish full production readiness.
