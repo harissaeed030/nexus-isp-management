@@ -18,15 +18,42 @@ function encrypt(value) {
   return [b64(iv), b64(cipher.getAuthTag()), b64(data)].join(".");
 }
 
+function decodeBase64Url(segment, expectedLength, label) {
+  if (typeof segment !== "string" || !/^[A-Za-z0-9_-]*$/.test(segment) ||
+      segment.length % 4 === 1) {
+    throw new Error("Stored router credentials are invalid.");
+  }
+  const decoded = Buffer.from(segment, "base64url");
+  if (decoded.toString("base64url") !== segment ||
+      (expectedLength !== null && decoded.length !== expectedLength)) {
+    throw new Error("Stored router credentials are invalid.");
+  }
+  return decoded;
+}
+
 function decrypt(value) {
-  const [iv, tag, data] = String(value || "").split(".");
-  if (!iv || !tag || !data) throw new Error("Stored router credentials are invalid.");
-  const decipher = createDecipheriv("aes-256-gcm", key(), Buffer.from(iv, "base64url"));
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(data, "base64url")),
-    decipher.final()
-  ]).toString("utf8");
+  if (typeof value !== "string") {
+    throw new Error("Stored router credentials are invalid.");
+  }
+  const parts = value.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Stored router credentials are invalid.");
+  }
+  const [ivPart, tagPart, dataPart] = parts;
+  const iv = decodeBase64Url(ivPart, 12, "IV");
+  const tag = decodeBase64Url(tagPart, 16, "authentication tag");
+  const data = decodeBase64Url(dataPart, null, "ciphertext");
+
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", key(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([
+      decipher.update(data),
+      decipher.final()
+    ]).toString("utf8");
+  } catch {
+    throw new Error("Stored router credentials failed authentication.");
+  }
 }
 
 export const credentialCrypto = { encrypt, decrypt };
