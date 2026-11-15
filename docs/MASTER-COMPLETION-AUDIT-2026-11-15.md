@@ -128,3 +128,12 @@ No PR was merged as part of this refresh. PR #33 had already been merged before 
 ### Release decision
 
 The post-merge main CI passed, but the overall release decision remains **NO-GO**. Remaining gates include current-schema disposable D1 restore evidence, Worker-runtime PBKDF2 benchmarking, independent security review, Android Chrome acceptance, full admin billing/support/staff E2E, and live MikroTik / HSGQ / Huawei ONU / ACS-TR-069 verification. SQLite remains a separate offline runtime; automatic SQLite↔D1 synchronization is not implemented and must not be claimed.
+
+
+## Verification refresh — 2026-11-16 (latest CI and Worker settings)
+
+- The documentation follow-up commit `716a4556630fcb5cd53deeb08a8d870c13ad608b` completed workflow run `43757478649`: all three jobs passed — production/staging endpoint verification, backend/Worker/D1 verification (including migration checks 0007–0009), and tenant-isolation/customer-portal E2E.
+- Read-only Cloudflare settings inspection confirms both `nexus-saas-api` and `nexus-saas-api-staging` use the Standard usage model, have observability enabled, and bind to their respective D1 databases. Neither script's returned settings explicitly contained a custom `limits.cpu_ms` value. This does not establish the account plan or prove that 600,000-iteration PBKDF2 fits the deployed CPU limit.
+- Cloudflare's current Workers limits documentation (last updated 2026-11-13) states the Free plan CPU limit is 10 ms per HTTP request; Paid defaults to 30 seconds and can be configured up to 5 minutes. Worker runtime timers do not advance during CPU-only work, so a simple `performance.now()` timing measurement inside a deployed Worker is not valid proof of CPU cost. Use Cloudflare's CPU profiling/observability method on an isolated staging candidate and retain the measured profile and invocation outcome as evidence.
+- No staging or production Worker settings, versions, routes, secrets, D1 data, or migrations were changed during this check.
+- PR #59 and PR #57 remain unmerged; PR #59's branch conflict/divergence and PR #57's runtime/security release gates remain unresolved. The latest successful main CI does not waive those gates.
