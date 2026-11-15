@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d5d49">
+<meta name="description" content="NEXUS customer self-service portal for internet subscriptions, invoices and support.">
+<title>NEXUS Customer Portal</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#17352d;background:#f3f7f5;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#f3f7f5}button,input,textarea{font:inherit}a{color:#087b5d}
+.portal-shell{max-width:1120px;margin:auto;padding:20px}.portal-header{display:flex;align-items:center;justify-content:space-between;gap:16px;background:#0d5d49;color:white;padding:18px 22px;border-radius:16px;box-shadow:0 12px 35px #0d5d4920}.brand{display:flex;align-items:center;gap:12px}.brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#20a477;color:#fff;font-weight:900;font-size:22px}.brand strong{display:block;letter-spacing:.08em}.brand small{display:block;color:#bce6d5;font-size:10px;letter-spacing:.12em}.header-actions{display:flex;align-items:center;gap:12px}.header-actions span{font-size:13px;color:#d4eee4}.btn{border:0;border-radius:9px;background:#0c805f;color:#fff;padding:11px 15px;font-weight:700;cursor:pointer}.btn.light{background:#fff;color:#0d5d49}.btn.secondary{background:#e7f3ee;color:#0d5d49}.btn:disabled{opacity:.6;cursor:wait}
+.welcome{margin:22px 0 14px}.welcome h1{margin:0;font-size:26px}.muted{color:#6d827a}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.kpi,.panel{background:#fff;border:1px solid #e1ebe6;border-radius:14px;padding:17px;box-shadow:0 3px 14px #193c2d08}.kpi small{display:block;color:#6e847b;font-size:12px}.kpi strong{display:block;font-size:25px;margin-top:7px}.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-top:14px}.panel h2{font-size:16px;margin:0 0 13px}.panel p{line-height:1.55}.profile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.profile-item{background:#f5f8f6;padding:10px;border-radius:9px;min-width:0}.profile-item small{display:block;color:#74867e;font-size:10px;text-transform:uppercase;letter-spacing:.06em}.profile-item b{display:block;margin-top:5px;font-size:13px;overflow-wrap:anywhere}
+.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:520px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #edf2ef;font-size:12px;vertical-align:top}th{font-size:10px;color:#73877d;letter-spacing:.06em}td .btn{padding:7px 10px;font-size:11px}.status{display:inline-block;padding:4px 8px;border-radius:30px;background:#eef4f0;color:#46675a;font-size:10px;text-transform:capitalize}.status.paid,.status.resolved,.status.closed{background:#e2f5ea;color:#18734d}.status.overdue,.status.open{background:#fff2e6;color:#9b5b18}.form-grid{display:grid;gap:10px}.form-grid label{display:grid;gap:6px;font-size:12px;color:#50675d}.form-grid input,.form-grid textarea{width:100%;padding:11px;border:1px solid #dce7e1;border-radius:9px;background:#fff;color:#17352d}.form-grid textarea{min-height:90px;resize:vertical}.inline-form{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.inline-form input{flex:1;min-width:160px}.notice{padding:12px;border-radius:10px;background:#f0f7f3;color:#456458;font-size:12px;line-height:1.5}.login-wrap{min-height:100vh;display:grid;place-items:center;padding:20px}.login-card{width:min(100%,440px);background:#fff;border:1px solid #e1ebe6;border-radius:18px;padding:26px;box-shadow:0 20px 60px #17352d12}.login-card h1{margin:16px 0 6px}.login-card .form-grid{margin-top:20px}.login-card .btn{width:100%}.error{color:#b33d36;font-size:12px;min-height:18px}.empty{padding:18px;text-align:center;color:#7a8c84;font-size:12px}.section{margin-top:14px}.footer{text-align:center;color:#82928b;font-size:11px;padding:24px 0}
+@media(max-width:760px){.portal-shell{padding:12px}.portal-header{align-items:flex-start;flex-direction:column}.header-actions{width:100%;justify-content:space-between}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.layout{grid-template-columns:1fr}.welcome h1{font-size:22px}}
+@media(max-width:420px){.grid{grid-template-columns:1fr 1fr;gap:8px}.kpi,.panel{padding:13px}.kpi strong{font-size:20px}.profile-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main id="portalApp" aria-live="polite"><div class="login-wrap"><p>Loading NEXUS Customer Portal…</p></div></main>
+<script src="assets/js/customer-portal.js" defer></script>
+</body>
+</html>

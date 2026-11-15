@@ -16,4 +16,7 @@ jobs:
       - name: Check Cloudflare Worker JavaScript syntax
         run: |
           node --check worker/src/index.js
+          node --check worker/src/migration-runner.js
+          node --test worker/scripts/migration-ledger.test.mjs
           node --check assets/js/app.js
+          node --check assets/js/customer-portal.js
