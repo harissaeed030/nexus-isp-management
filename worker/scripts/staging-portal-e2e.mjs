@@ -78,7 +78,7 @@ try {
   const tenantLoginData = ok('staff login scoped to the first workspace', tenantLogin, 200);
   assert.equal(tenantLoginData.user.orgId, owner.user.orgId);
   const secondTenantLogin = await request('POST', '/api/auth/login', {
-    email: secondOwnerEmail, password, workspace: secondTenantSlug
+    email: secondOwnerEmail, password, workspace: `nexus-stage-invalid-${suffix}`
   });
   const secondTenantLoginData = ok('second owner authenticates only in the second workspace', secondTenantLogin, 200);
   assert.equal(secondTenantLoginData.user.orgId, secondOwner.user.orgId);
