@@ -137,6 +137,8 @@ try{
  assert.equal(aging.status,200);
  assert.equal(aging.data.data.bucketsPkr["90_plus"],0);
  const currentPeriod=new Date().toISOString().slice(0,7).replace("-","");
+ const invalidDueDate=await request("/api/v1/invoices","POST",{customerId:customer.data.data.id,amountPkr:100,dueDate:"2026-02-31"},token);
+ assert.equal(invalidDueDate.status,400);
  const sequentialOne=await request("/api/v1/invoices","POST",{customerId:customer.data.data.id,amountPkr:300,dueDate:"2020-01-01"},token);
  const sequentialTwo=await request("/api/v1/invoices","POST",{customerId:customer.data.data.id,amountPkr:300,dueDate:"2020-01-01"},token);
  assert.equal(sequentialOne.status,201);
