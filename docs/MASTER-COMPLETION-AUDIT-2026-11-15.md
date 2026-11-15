@@ -97,3 +97,34 @@ PR #33 merged a manual migration that copies the user rows and dependent rows in
 ### Current merge/deployment boundary
 
 No PR was merged as part of this refresh. PR #33 had already been merged before this refresh; PRs #11, #21, #31, #57 and #58 remain open. No production Worker deployment, production D1 write/migration, secret change, or customer-data modification was performed.
+
+
+## Live follow-up — 2026-11-16
+
+### GitHub integration status
+
+- PR #58 (documentation-only master audit) was marked ready and squash-merged into `main` as `bb35617a0e31be1d97c61ab909901b8ebfead454`.
+- The post-merge main-branch verification workflow completed successfully. Backend/Worker/D1 verification, staging tenant/customer-portal E2E, and production/staging endpoint checks all passed on that exact merge commit.
+- PR #59 remains a draft integration candidate. Its head `167a5c5acd61d568db28c5a025c88b0f8c7d0301` passed backend checks, backend verification, and its Pages preview. However, GitHub reported the PR as `mergeable=false` / `dirty`; its branch was 254 commits ahead and 33 behind the common base, with overlapping changes against `main`. It was not merged. A review note was posted to the PR.
+- PR #57 remains a draft security change. Its source/CI checks passed, but its own rollout notes prohibit production deployment until a real Cloudflare Worker CPU benchmark proves the 600,000-iteration PBKDF2 configuration fits the actual CPU budget, and an independent security assessment is completed.
+
+### Current Cloudflare read-only inventory
+
+- Production Worker `nexus-saas-api`: version 25 is deployed to 100% of traffic. Observability logs and traces are enabled. Its D1 binding points to `nexus-saas-db`; configured secret bindings remain present. No Worker deployment or secret change was made during this follow-up.
+- Staging Worker `nexus-saas-api-staging` and staging D1 `nexus-saas-staging-db` are present.
+- Production Pages project `nexus-isp-management` has a successful deployment; the PR #59 Pages check was a preview deployment.
+- Production and staging D1 each have 23 application tables, 52 application indexes, and migration records 0001–0009.
+- Production row counts: 1 organization, 1 user, 0 customers, 0 invoices, 0 payments, 0 subscriptions and 0 support tickets.
+- Staging row counts: 7 organizations, 7 users, 7 customers, 2 invoices, 0 payments, 2 subscriptions and 1 support ticket.
+- These were read-only queries. No customer or financial data was changed.
+
+### Restore-verification databases are not release evidence of a current full restore
+
+- `nexus-restore-verify-2026-11-15` contains only 8 application tables and 15 indexes; it has no `schema_migrations` table and lacks core tables including invoices, payments and subscriptions. It contains 2 organizations, 2 users, 1 customer and 1 support ticket. It is not a complete current production-schema restore.
+- `nexus-staging-restore-verify-20261115b` contains 23 application tables and 51 indexes, but its migration ledger stops at 0007, while current staging is at 0009. It contains 3 organizations, 3 users, 4 customers, 2 invoices, 0 payments, 2 subscriptions and 1 support ticket. It is not a current-schema restore of staging.
+- Attempts to run `PRAGMA integrity_check` and `PRAGMA foreign_key_check` through the D1 query API were rejected with `SQLITE_AUTH`. Therefore those integrity checks remain unverified; do not infer that they passed.
+- A proper restore rehearsal remains open: restore fresh production and staging exports into isolated D1 databases, apply only the intended migration sequence, compare schema objects and row counts, and run integrity/foreign-key checks through an authorized supported method.
+
+### Release decision
+
+The post-merge main CI passed, but the overall release decision remains **NO-GO**. Remaining gates include current-schema disposable D1 restore evidence, Worker-runtime PBKDF2 benchmarking, independent security review, Android Chrome acceptance, full admin billing/support/staff E2E, and live MikroTik / HSGQ / Huawei ONU / ACS-TR-069 verification. SQLite remains a separate offline runtime; automatic SQLite↔D1 synchronization is not implemented and must not be claimed.
