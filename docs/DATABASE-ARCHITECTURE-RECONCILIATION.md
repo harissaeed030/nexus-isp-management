@@ -1,6 +1,6 @@
 # NEXUS database architecture reconciliation
 
-**Status:** runtime boundaries documented and guarded by automated tests; cross-database synchronization is not implemented.
+**Status:** D1 production authority selected; SQLite remains an offline/local workspace. Runtime boundaries are guarded by automated tests; cross-database synchronization is not implemented.
 **Reviewed:** 2026-11-15
 
 ## Decision
@@ -11,6 +11,14 @@ NEXUS currently has two separate runtimes. They are not interchangeable and must
 2. **Hosted production/staging:** Cloudflare Worker + D1, maintained and released from the repository's `main` branch. The production release record is [2026-11-15 production release](https://github.com/harissaeed030/nexus-isp-management/blob/main/docs/PRODUCTION-RELEASE-2026-11-15.md).
 
 The `worker/` directory on this development branch is only a health-check Worker. It is not the production API and must never be deployed over the production Worker.
+
+## Selected data authority (2026-11-15)
+
+**Cloudflare D1 is the authoritative production source of truth.** The production Worker and its D1 database own hosted ISP customer, subscription, invoice and payment records. Local SQLite is an offline/local workspace only; it is not a competing production master.
+
+When offline sync is implemented, the only permitted direction for business writes is SQLite outbox → authenticated production Worker → D1. D1 changes must not be overwritten by stale local snapshots. The local client must retain pending operations until the server acknowledges them, and must surface conflicts for manual resolution. Financial records (invoices, payments, reversals, refunds and credit notes) are append-only or state-transition operations with idempotency keys; they must never use blind last-write-wins.
+
+This is an architectural decision, **not a claim that synchronization exists today**. See [SQLite-to-D1 synchronization implementation plan](SQLITE-TO-D1-SYNC-PLAN.md).
 
 ## Runtime ownership
 
