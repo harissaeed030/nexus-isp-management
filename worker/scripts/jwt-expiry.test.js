@@ -90,26 +90,7 @@ for (const [label, file] of cases) {
     assert.equal(await verifyPw(password, fresh.hash, fresh.salt), true);
     assert.equal(await verifyPw("wrong-password", fresh.hash, fresh.salt), false);
     assert.equal(passwordHashNeedsUpgrade(fresh.hash, fresh.salt), false);
-    assert.equal(passwordHashNeedsUpgrade('pbkdf2-sha256$700000
-    assert.equal(await verifyPw("legacy-plaintext", "legacy-plaintext", null), false);
-    assert.equal(await verifyPw("legacy-plaintext", "legacy-plaintext", ""), false);
-
-    const legacySalt = new Uint8Array(16).fill(7);
-    const legacyHash = await derivePasswordHash(password, legacySalt, 100000);
-    const legacySaltHex = Buffer.from(legacySalt).toString("hex");
-    assert.equal(await verifyPw(password, legacyHash, legacySaltHex), true);
-    assert.equal(passwordHashNeedsUpgrade(legacyHash, legacySaltHex), true);
-    assert.equal(await verifyPw("wrong-password", legacyHash, legacySaltHex), false);
-  });
-
-  test(label + " Worker never returns raw exception messages to API clients", async () => {
-    const source = await readFile(file, "utf8");
-    assert.ok(!source.includes("message:e.message"));
-    assert.ok(source.includes("NEXUS_REQUEST_FAILED"));
-    assert.ok(source.includes("Internal server error"));
-  });
-}
- + '0'.repeat(64), fresh.salt), false);
+    assert.equal(passwordHashNeedsUpgrade("pbkdf2-sha256$700000$" + "0".repeat(64), fresh.salt), false);
     assert.equal(await verifyPw("legacy-plaintext", "legacy-plaintext", null), false);
     assert.equal(await verifyPw("legacy-plaintext", "legacy-plaintext", ""), false);
 
