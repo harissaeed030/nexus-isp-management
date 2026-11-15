@@ -121,14 +121,28 @@ if sqlite3 "$DB" "INSERT INTO users(id,organization_id,email,role) VALUES('user-
   exit 1
 fi
 
-# Organization guard triggers must be restored and remain active.
+# All six organization-integrity triggers must be restored and remain active.
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_d1_%';")" = "6"
+
 if sqlite3 "$DB" "INSERT INTO notifications(id,organization_id,user_id,title) VALUES('bad-notification','org-b','user-a','bad');" >/dev/null 2>&1; then
   echo "FAIL: cross-workspace notification user was accepted" >&2
+  exit 1
+fi
+if sqlite3 "$DB" "INSERT INTO support_tickets(id,organization_id,customer_id,subject) VALUES('bad-ticket-customer','org-b','customer-a','bad');" >/dev/null 2>&1; then
+  echo "FAIL: cross-workspace ticket customer was accepted" >&2
+  exit 1
+fi
+if sqlite3 "$DB" "INSERT INTO support_tickets(id,organization_id,subject,assigned_to) VALUES('bad-ticket-assignee','org-a','bad','user-b');" >/dev/null 2>&1; then
+  echo "FAIL: cross-workspace ticket assignee was accepted" >&2
+  exit 1
+fi
+if sqlite3 "$DB" "INSERT INTO ticket_messages(id,ticket_id,user_id,message) VALUES('bad-message','ticket-a','user-b','bad');" >/dev/null 2>&1; then
+  echo "FAIL: cross-workspace ticket message author was accepted" >&2
   exit 1
 fi
 
 echo "PASS: user rows and all dependent rows preserved with foreign keys enabled"
 echo "PASS: same email accepted across different ISP workspaces"
 echo "PASS: case-insensitive duplicate rejected within one workspace"
-echo "PASS: organization-integrity triggers restored"
+echo "PASS: all six organization-integrity triggers restored and enforced"
 echo "PASS: foreign_key_check is clean"
