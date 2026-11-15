@@ -60,8 +60,9 @@ app.post("/api/v1/packages",auth,(q,r)=>{const b=q.body||{},d=Number(b.speedDown
 app.patch("/api/v1/packages/:id",auth,(q,r)=>{const x=db.prepare("SELECT * FROM packages WHERE id=? AND tenant_id=?").get(q.params.id,q.user.tenant_id);if(!x)return fail(r,404,"Package not found.");const b=q.body||{},v={name:b.name??x.name,d:Number(b.speedDownMbps??x.speed_down_mbps),u:Number(b.speedUpMbps??x.speed_up_mbps),p:Number(b.monthlyPricePkr??x.monthly_price_pkr),s:b.status??x.status};if(!required(v.name)||!Number.isInteger(v.d)||v.d<1||!Number.isInteger(v.u)||v.u<1||!Number.isInteger(v.p)||v.p<0||!["active","archived"].includes(v.s))return fail(r,400,"Invalid package details.");db.prepare("UPDATE packages SET name=?,speed_down_mbps=?,speed_up_mbps=?,monthly_price_pkr=?,status=? WHERE id=? AND tenant_id=?").run(v.name,v.d,v.u,v.p,v.s,x.id,q.user.tenant_id);audit(q.user,"update","package",x.id);r.json({success:true,data:db.prepare("SELECT * FROM packages WHERE id=?").get(x.id)});});
 app.get("/api/v1/invoices",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT i.*,c.full_name customer_name FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.tenant_id=? ORDER BY i.created_at DESC").all(q.user.tenant_id)}));
 app.post("/api/v1/invoices",auth,(q,r)=>{
-  const b=q.body||{},a=Number(b.amountPkr);
+  const b=q.body||{},a=Number(b.amountPkr),dueDate=b.dueDate??null;
   if(!required(b.customerId)||!Number.isInteger(a)||a<0)return fail(r,400,"Customer and valid amount required.");
+  if(dueDate!==null&&(typeof dueDate!=="string"||!/^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$/.test(dueDate)||Number.isNaN(Date.parse(dueDate))||new Date(dueDate+"T00:00:00Z").toISOString().slice(0,10)!==dueDate))return fail(r,400,"Due date must be a real calendar date in YYYY-MM-DD format.");
   if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,q.user.tenant_id))return fail(r,404,"Customer not found.");
   const iid=id(),period=required(b.billingPeriod)?b.billingPeriod:new Date().toISOString().slice(0,7);
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(period))return fail(r,400,"Billing period must use YYYY-MM format.");
@@ -73,7 +74,7 @@ app.post("/api/v1/invoices",auth,(q,r)=>{
         const sequence=db.prepare("INSERT INTO invoice_sequences(tenant_id,billing_period,last_number) VALUES(?,?,1) ON CONFLICT(tenant_id,billing_period) DO UPDATE SET last_number=last_number+1 RETURNING last_number").get(q.user.tenant_id,period);
         no="INV-"+period.replace("-","")+"-"+String(sequence.last_number).padStart(6,"0");
       }
-      db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES(?,?,?,?,?,?)").run(iid,q.user.tenant_id,b.customerId,no,a,b.dueDate||null);
+      db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES(?,?,?,?,?,?)").run(iid,q.user.tenant_id,b.customerId,no,a,dueDate);
       audit(q.user,"create","invoice",iid);
       return db.prepare("SELECT * FROM invoices WHERE id=?").get(iid);
     });
