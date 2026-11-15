@@ -74,6 +74,11 @@ try{
  assert.equal(billing.data.invoicesCreated,1);
  const invoice=(await request("/api/v1/invoices","GET",undefined,token)).data.data[0];
  assert.ok(invoice);
+ db.exec("CREATE TRIGGER fail_invoice_audit BEFORE INSERT ON audit_logs WHEN NEW.resource_type='invoice' BEGIN SELECT RAISE(ABORT, 'injected invoice audit failure'); END");
+ const failedInvoice=await request("/api/v1/invoices","POST",{customerId:customer.data.data.id,amountPkr:500,invoiceNumber:"ROLLBACK-INVOICE"},token);
+ assert.equal(failedInvoice.status,500);
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM invoices WHERE invoice_number='ROLLBACK-INVOICE'").get().n,0);
+ db.exec("DROP TRIGGER fail_invoice_audit");
  db.exec("CREATE TRIGGER fail_invoice_status BEFORE UPDATE OF status ON invoices BEGIN SELECT RAISE(ABORT, 'injected invoice status failure'); END");
  const failedPayment=await request("/api/v1/payments","POST",{invoiceId:invoice.id,amountPkr:100,method:"cash"},token);
  assert.equal(failedPayment.status,500);
