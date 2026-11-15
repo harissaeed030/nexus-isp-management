@@ -7,12 +7,12 @@
 
 ## Current state after the 2026-11-15 release
 
-Both production and staging are at schema migration 0007.
+Both production and staging were verified at schema migration 0007; migration 0008 is the reviewed next step for aligning user email indexes.
 
 - Production migration 0007 was applied after a full D1 export.
 - `customer_portal_accounts` exists in both databases.
 - Both tenant-integrity triggers (`trg_d1_portal_org_i`, `trg_d1_portal_org_u`) exist in both databases.
-- Production and staging table, index and trigger definitions were reconciled and verified.
+- Production and staging table and trigger definitions were reconciled at 0007. A follow-up audit found user-email index drift: staging had a case-insensitive organization index while production did not, and staging lacked production's global email uniqueness. Migration 0008 safely adds the missing global and organization-scoped unique indexes in both environments.
 - Production records were preserved. At release verification, production had 1 organization, 1 owner user, 0 customers, 0 invoices, 0 payments and 0 customer portal accounts.
 - The production Worker customer-portal release is version 22 at 100% traffic.
 
@@ -22,6 +22,10 @@ The SQL artifacts for migrations 0001-0005 are not present in the current reposi
 
 The local Node/SQLite backend is a separate offline development runtime, not a D1 replica. See [the database architecture reconciliation](../../docs/DATABASE-ARCHITECTURE-RECONCILIATION.md) before planning data movement. Do not import/export live production data through ad-hoc SQL or treat the schemas as interchangeable.
 
+## Migration 0008
+
+`migrations/0008_user_email_index_parity.sql` is additive and idempotent. It creates a global unique email index and a case-insensitive per-organization unique email index. Before applying it, verify there are no duplicate exact emails globally and no duplicate case-insensitive emails within an organization. It does not rebuild the users table or rewrite user records. Apply to staging first, verify, then back up production and apply to production.
+
 ## Migration 0007
 
 `migrations/0007_customer_portal_tenant_guards.sql` is additive and idempotent. It creates the customer portal account table, enforces that the account's customer belongs to the same organization on insert/update, and records migration 7. It does not drop or rewrite existing customer, invoice, payment or user records.
@@ -29,8 +33,8 @@ The local Node/SQLite backend is a separate offline development runtime, not a D
 ## Schema artifacts
 
 - `worker/schema-production-v6.sql`: schema-only production baseline before migration 0007.
-- `worker/schema.sql`: canonical full schema snapshot at migration 0007.
-- `worker/scripts/validate-d1-schema.py`: validates v6-to-v7 migration parity and rejects cross-tenant portal-account writes.
+- `worker/schema.sql`: canonical full schema snapshot at migration 0008.
+- `worker/scripts/validate-d1-schema.py`: validates v6-to-v8 migration parity, tenant guards and user email uniqueness.
 
 Use schema snapshots only for empty databases. Existing databases must be upgraded with incremental migrations.
 
