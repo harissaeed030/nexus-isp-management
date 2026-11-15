@@ -29,7 +29,8 @@ export const PERMISSIONS = [
   { key: "operations.read", group: "ISP Operations", label: "View coverage, applications, collections and stock" },
   { key: "operations.manage", group: "ISP Operations", label: "Manage coverage, applications, partners, field work and stock" },
   { key: "collections.read", group: "Collections", label: "View field collections and payment promises" },
-  { key: "collections.manage", group: "Collections", label: "Record collections and manage payment promises" }
+  { key: "collections.manage", group: "Collections", label: "Record collections and manage payment promises" },
+  { key: "ai.chat", group: "AI Assistant", label: "Use the NEXUS AI assistant" }
 ];
 export const permissionKeys = new Set(PERMISSIONS.map(item => item.key));
 export const ROLE_PERMISSIONS = {
@@ -62,6 +63,7 @@ export function permissionFor(path,method) {
   const verb=String(method||"GET").toUpperCase();
   const matches=base=>path===base||path.startsWith(base+"/");
   if(path==="/api/v1/dashboard")return verb==="GET"?"dashboard.read":null;
+  if(path==="/api/v1/ai/chat")return verb==="POST"?"ai.chat":null;
   if(matches("/api/v1/exports")){
     if(verb!=="GET")return null;
     if(path==="/api/v1/exports/customers.csv")return "customers.read";
