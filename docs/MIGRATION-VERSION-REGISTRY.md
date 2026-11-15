@@ -13,6 +13,7 @@ The SQLite migration history for the local/backend runtime uses the complete des
 | 007 | `007_isp_business_modules.sql` | Task 10 business operations, inventory and ledger |
 | 008 | `008_financial_management.sql` | Invoice sequences, credit notes, reversals and unallocated receipts |
 | 009 | `009_session_hardening.sql` | Session lifecycle metadata |
+| 010 | `010_payment_promises.sql` | Customer payment commitment dates and status tracking |
 
 ## Conflict resolution
 
@@ -21,7 +22,7 @@ Two independent feature branches reused numeric prefixes:
 - Task 10 introduced `005_isp_business_modules.sql`, while the core line already uses version 005 for TR-069.
 - Financial management introduced `002_financial_management.sql`, while the core line already uses version 002 for customer/subscription management.
 
-Those migrations are retained, but assigned the next unused versions 007 and 008. Session hardening is assigned 009. Existing 001–006 migration IDs and SQL files are not renamed or rewritten.
+Those migrations are retained, but assigned the next unused versions 007 and 008. Session hardening is assigned 009. Payment promises are assigned 010. Existing 001–006 migration IDs and SQL files are not renamed or rewritten.
 
 ## Safety rules
 
