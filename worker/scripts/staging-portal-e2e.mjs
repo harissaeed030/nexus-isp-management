@@ -95,12 +95,13 @@ try {
   });
   assert.equal(portalSetup.success, true);
 
+  assert.ok(customerA.customer_code, "Customer registration must return an account number");
   const portalLogin = await request("/api/portal/auth/login", {
     method: "POST",
     expected: 200,
-    body: { workspace: tenantA.slug, email: customerA.email, password: portalPassword },
+    body: { identity: customerA.customer_code, password: portalPassword },
   });
-  assert.ok(portalLogin.token, "Customer portal login must return a token");
+  assert.ok(portalLogin.token, "Account-number portal login must return a token");
 
   const me = await request("/api/portal/me", { token: portalLogin.token });
   assert.equal(me.customer?.id, customerA.id);
@@ -124,6 +125,26 @@ try {
 
   await request("/api/portal/auth/logout", { method: "POST", token: portalLogin.token });
   await request("/api/portal/me", { token: portalLogin.token, expected: 401 });
+
+  const workspaceLogin = await request("/api/portal/auth/login", {
+    method: "POST",
+    expected: 200,
+    body: { identity: tenantA.slug + "/" + customerA.customer_code, password: portalPassword },
+  });
+  assert.ok(workspaceLogin.token, "Workspace/account-number portal login must return a token");
+  const workspaceMe = await request("/api/portal/me", { token: workspaceLogin.token });
+  assert.equal(workspaceMe.customer?.id, customerA.id);
+  await request("/api/portal/auth/logout", { method: "POST", token: workspaceLogin.token });
+
+  const legacyEmailLogin = await request("/api/v1/customer-portal/login", {
+    method: "POST",
+    expected: 200,
+    body: { identity: customerA.email, password: portalPassword },
+  });
+  assert.ok(legacyEmailLogin.token, "Legacy customer-portal URL with email identity must remain compatible");
+  const emailMe = await request("/api/portal/me", { token: legacyEmailLogin.token });
+  assert.equal(emailMe.customer?.id, customerA.id);
+  await request("/api/portal/auth/logout", { method: "POST", token: legacyEmailLogin.token });
 
   console.log("Staging portal E2E passed: tenant isolation, portal provisioning, login, profile, dashboard, tickets and logout.");
 } finally {
