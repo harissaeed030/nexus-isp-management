@@ -78,7 +78,7 @@ export function permissionFor(path,method) {
       return ({GET:"routers.read",POST:"routers.manage",PATCH:"routers.manage",DELETE:"routers.manage"})[verb] || null;
     }
     if(verb === "GET") return "routers.read";
-    if(path.endsWith("/credentials") && verb === "POST") return "routers.manage";
+    if(path.endsWith("/sync") && verb === "GET") return "routers.provision";
     if(["POST","PATCH"].includes(verb)) return "routers.provision";
     return null;
   }
