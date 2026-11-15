@@ -54,7 +54,7 @@ export function startMonthlyBillingScheduler({ db, enabled = false, logger = con
     const afterSchedule = Number(local.day) > 1 || (local.day === "01" && (Number(local.hour) > 5 || (Number(local.hour) === 5 && Number(local.minute) >= 15)));
     if (!afterSchedule || lastAttemptedPeriod === period) return;
     running = true;
-    lastAttemptedPeriod = period;
+    let completed = true;
     try {
       const tenants = db.prepare("SELECT id FROM tenants WHERE status='active' ORDER BY created_at").all();
       for (const tenant of tenants) {
@@ -62,9 +62,11 @@ export function startMonthlyBillingScheduler({ db, enabled = false, logger = con
           const result = generateTenantInvoices(db, tenant.id, period);
           logger.info?.("NEXUS scheduled billing", { tenantId: tenant.id, period, ...result });
         } catch (error) {
+          completed = false;
           logger.error?.("NEXUS scheduled billing failed", { tenantId: tenant.id, period, error: String(error.message || error) });
         }
       }
+      if (completed) lastAttemptedPeriod = period;
     } finally {
       running = false;
     }
