@@ -51,7 +51,7 @@ There are two local files with a `003_...` filename prefix. The runtime uses des
 
 ### Cloudflare D1
 
-Production and staging now record D1 migration 0008; the latest live recheck found an index drift that is addressed by the reviewed migration 0009. The repository only contains D1 migration SQL for 0006 and 0007; historical migrations 0001-0005 are already applied but their SQL artifacts are not in this repository. Do not fabricate those historical files or rerun them.
+Production and staging both record D1 migration 0009. The repository contains incremental D1 migration SQL for 0006-0009; historical migrations 0001-0005 are already applied but their SQL artifacts are not in this repository. Do not fabricate those historical files or rerun them.
 
 - `worker/schema.sql` is a full schema snapshot for a **new empty D1 database only**.
 - Existing D1 databases must receive reviewed incremental migrations only.
@@ -63,7 +63,7 @@ A live read-only comparison found that production and staging had drifted in `us
 
 ## Live production/staging D1 verification (2026-11-15)
 
-Migration 0008 is recorded in both D1 databases. A fresh read-only check on 2026-11-15 confirmed no duplicate exact or case-insensitive emails in either environment; staging has both expected indexes, but production's explicit global index was absent. Migration 0009 was applied to both databases after fresh exports and live verification confirmed the expected index definitions. The production and staging databases each contain 99 non-system schema objects after index alignment. All normalized object definitions match except the users table definition. Production retains a legacy, stricter table shape (password_hash NOT NULL, default role staff, no generated ID default); staging uses the canonical shape (password_hash nullable, default role member, generated ID default). Current Worker user-creation paths explicitly provide ID, password hash and role, so they do not rely on these defaults. A table rebuild was intentionally not attempted because it could affect foreign-key dependants and existing identities. This difference must remain explicit until a separately tested, backup-backed migration is approved. See docs/D1-LIVE-SCHEMA-AUDIT-2026-11-15.md.
+Migrations 0008 and 0009 are recorded in both D1 databases. A fresh read-only check found no duplicate exact or case-insensitive emails. A follow-up live check detected that the explicit global index was still absent in production; migration 0009 was applied to both databases after fresh exports. Live verification confirmed the global email unique index, case-insensitive organization email unique index, and organization lookup index in both. The production and staging databases each contain 99 non-system schema objects after index alignment. All normalized object definitions match except the users table definition. Production retains a legacy, stricter table shape (password_hash NOT NULL, default role staff, no generated ID default); staging uses the canonical shape (password_hash nullable, default role member, generated ID default). Current Worker user-creation paths explicitly provide ID, password hash and role, so they do not rely on these defaults. A table rebuild was intentionally not attempted because it could affect foreign-key dependants and existing identities. This difference must remain explicit until a separately tested, backup-backed migration is approved. See docs/D1-LIVE-SCHEMA-AUDIT-2026-11-15.md.
 
 ## What “reconciled” means now
 
