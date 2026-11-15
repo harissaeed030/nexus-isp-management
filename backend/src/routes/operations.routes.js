@@ -128,8 +128,10 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
       if(db.prepare("SELECT id FROM billing_runs WHERE tenant_id=? AND billing_period=?").get(tenant,period))throw new Error("BILLING_PERIOD_EXISTS");
       const subs=db.prepare("SELECT s.id,s.customer_id,p.monthly_price_pkr,c.status customer_status FROM subscriptions s JOIN packages p ON p.id=s.package_id JOIN customers c ON c.id=s.customer_id WHERE s.tenant_id=? AND s.status='active' AND p.status='active' AND c.status='active'").all(tenant);
       const insert=db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES(?,?,?,?,?,?)");
+      const nextNumber=db.prepare("INSERT INTO invoice_sequences(tenant_id,billing_period,last_number) VALUES(?,?,1) ON CONFLICT(tenant_id,billing_period) DO UPDATE SET last_number=last_number+1 RETURNING last_number");
       for(const s of subs){
-        const invoiceNo="NXS-"+period.replace("-","")+"-"+s.id.replace(/-/g,"").slice(0,10).toUpperCase();
+        const sequence=nextNumber.get(tenant,period);
+        const invoiceNo="INV-"+period.replace("-","")+"-"+String(sequence.last_number).padStart(6,"0");
         insert.run(id(),tenant,s.customer_id,invoiceNo,s.monthly_price_pkr,dueDate);created++;
       }
       db.prepare("INSERT INTO billing_runs(id,tenant_id,billing_period,invoices_created,created_by) VALUES(?,?,?,?,?)").run(id(),tenant,period,created,req.user.id);
