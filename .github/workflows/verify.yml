@@ -4,7 +4,7 @@ on:
   push:
     branches: [build/nexus-isp-core]
   pull_request:
-    branches: [build/nexus-isp-core]
+    branches: [main, build/nexus-isp-core]
 
 jobs:
   verify:
