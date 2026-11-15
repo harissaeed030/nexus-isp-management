@@ -67,6 +67,8 @@ export function startMonthlyBillingScheduler({ db, enabled = false, logger = con
         }
       }
       if (completed) lastAttemptedPeriod = period;
+    } catch (error) {
+      logger.error?.("NEXUS monthly billing scheduler tick failed", { period, error: String(error.message || error) });
     } finally {
       running = false;
     }
