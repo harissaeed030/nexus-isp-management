@@ -6,6 +6,7 @@ on:
       - task/01-database-hardening
   pull_request:
     branches:
+      - main
       - build/nexus-isp-core
 
 jobs:
