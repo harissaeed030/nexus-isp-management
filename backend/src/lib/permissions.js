@@ -73,7 +73,15 @@ export function permissionFor(path,method) {
   if(path==="/api/v1/billing/generate")return verb==="POST"?"billing.generate":null;
   if(path==="/api/v1/billing/runs")return verb==="GET"?"billing.read":null;
   if(matches("/api/v1/tickets"))return verb==="GET"?"tickets.read":["POST","PATCH"].includes(verb)?"tickets.manage":null;
-  if(matches("/api/v1/routers"))return verb==="GET"?"routers.read":["POST","PATCH","DELETE"].includes(verb)?"routers.manage":verb==="POST"||verb==="PATCH"?"routers.provision":null;
+  if(matches("/api/v1/routers")) {
+    if(path === "/api/v1/routers") {
+      return ({GET:"routers.read",POST:"routers.manage",PATCH:"routers.manage",DELETE:"routers.manage"})[verb] || null;
+    }
+    if(verb === "GET") return "routers.read";
+    if(path.endsWith("/credentials") && verb === "POST") return "routers.manage";
+    if(["POST","PATCH"].includes(verb)) return "routers.provision";
+    return null;
+  }
   if(matches("/api/v1/acs")||matches("/api/v1/tr069"))return verb==="GET"?"olts.read":["POST","PATCH","DELETE"].includes(verb)?"olts.manage":null;
   if(matches("/api/v1/olts")||matches("/api/v1/onus")||matches("/api/v1/pons")||matches("/api/v1/olt-alarms"))return verb==="GET"?"olts.read":["POST","PATCH","DELETE"].includes(verb)?"olts.manage":null;
   if(matches("/api/v1/portal-admin"))return ["POST"].includes(verb)?"customers.update":null;
