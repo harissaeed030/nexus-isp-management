@@ -1,61 +1,81 @@
-# NEXUS ISP Management — Technical Audit and Repair Update
+# NEXUS ISP Management — Technical Audit and Repair Status
 
 **Date:** 2026-11-15  
 **Target branch:** `build/nexus-isp-core`  
-**Target branch head at audit start:** `278352624227f64200022c447332ef5cb7daea4f`  
-**Repair branch:** `fix/restore-mikrotik-routes`  
-**Verified repair code/test commit:** `4981854aa68fb4fcb4b4682fe07bfac804d674e7`  
-**Pull request:** [#39 — restore MikroTik API routes and RBAC permissions](https://github.com/harissaeed030/nexus-isp-management/pull/39)
+**Original broken head:** `278352624227f64200022c447332ef5cb7daea4f`  
+**Merged repair PR:** [#39](https://github.com/harissaeed030/nexus-isp-management/pull/39)  
+**Merge commit:** `72eb185cb9a7c5f03f74babf839df00e5446f234`
 
 ## Executive summary
 
-The original target branch head had a critical backend startup failure: `backend/src/app.js` imported and called `registerMikroTikRoutes`, but `backend/src/routes/mikrotik.routes.js` no longer exported that function. The same commit had removed the RouterOS action handlers.
+The missing `registerMikroTikRoutes` export and RouterOS route handlers were restored in PR #39, which was merged into `build/nexus-isp-core`. The repair restores tenant-scoped PPPoE/router actions, encrypts stored router API credentials using AES-256-GCM, and separates inventory permissions from live provisioning permissions.
 
-The repair is implemented on a separate branch and submitted as PR #39. The PR restores the missing route registrar and tenant-scoped RouterOS/PPPoE actions, retains the existing router inventory CRUD in the operations module, adds encrypted credential storage/rotation, corrects router permission mapping, and adds regression assertions.
+The PR repair head passed the three GitHub Actions workflows listed below. After merge, branch push workflows were started. Additional post-merge hardening fixes were then committed:
+- Wait for the TLS `secureConnect` event (not merely TCP `connect`) before sending RouterOS API credentials over API-SSL.
+- Fail production startup when `ROUTER_CREDENTIAL_KEY` is missing or is not exactly 32 bytes represented as 64 hexadecimal characters.
 
-**CI on the repair head is green.** The PR is open and mergeable; the target branch has not yet been changed by merging this PR.
+These post-merge commits require their own completed CI runs before the latest branch head can be called green.
 
-## Changes in PR #39
+## Changes merged in PR #39
 
-- Restored `registerMikroTikRoutes` so application imports and startup registration are valid.
-- Restored tenant-scoped router logs, connection test, PPPoE active-session/secrets/profile reads, secret create/update/suspend/restore, customer-to-PPPoE mapping, and synchronization routes.
-- Avoided duplicate `/api/v1/routers` inventory handlers; inventory CRUD remains in `operations.routes.js`.
-- Added encrypted credential persistence and rotation using AES-256-GCM. Router API credentials are not returned in inventory responses.
-- Kept API-SSL port 8729 as the default and reject unencrypted port 8728 in production.
-- Corrected permission routing so inventory actions use `routers.manage`, read-only device queries use `routers.read`, and provisioning/synchronization actions use `routers.provision`.
-- Added tests for credential encryption/tamper detection and router permission boundaries; smoke coverage asserts credentials are encrypted at rest.
+- Restored `registerMikroTikRoutes` and tenant-scoped RouterOS/PPPoE route handlers.
+- Restored router logs, connection test, active PPPoE sessions, secrets/profiles, create/update/suspend/restore, customer mapping, and sync routes.
+- Kept router inventory CRUD in `operations.routes.js`; no duplicate inventory route registration.
+- Added AES-256-GCM encryption for router credentials at rest; credentials are excluded from API response projections.
+- Made API-SSL port 8729 the default and reject unencrypted API port 8728 in production.
+- Split permissions between router inventory management, read-only operations, and live provisioning/sync.
+- Added regression tests for encryption/tamper detection, permission mapping, staff role boundaries, and credential encryption in the smoke test.
+- Updated this audit to reflect the current branch and release gates.
 
-## CI evidence for repair head
+## CI evidence on the PR repair head
 
-All three workflows completed successfully on `4981854aa68fb4fcb4b4682fe07bfac804d674e7`:
+All three workflows passed on code/test commit `4981854aa68fb4fcb4b4682fe07bfac804d674e7`:
 
 | Workflow | Run | Result |
 |---|---:|---|
-| Nexus backend verification | [43665890678](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827452) | **Success** |
-| Nexus backend checks | [43665890705](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827494) | **Success** |
-| Database hardening tests | [43665890782](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665827466) | **Success** |
+| Nexus backend verification | [43665890678](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665890678) | Success |
+| Nexus backend checks | [43665890705](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665890705) | Success |
+| Database hardening tests | [43665890782](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43665890782) | Success |
 
-The successful verification workflows ran `npm run verify` (which runs `npm run check` and `npm test`). The backend-checks workflow also completed the dashboard JavaScript syntax check. The database-hardening workflow ran the same verification script.
+The workflows ran `npm run verify`; the backend checks workflow also ran the dashboard JavaScript syntax check. These are GitHub-hosted CI results, not local command execution.
 
-**Execution boundary:** These are GitHub-hosted CI results. Local commands were not run in this session.
+## Post-merge hardening
 
-## Remaining verification and release gates
+- RouterOS API-SSL connection setup now waits for the TLS handshake's `secureConnect` event before attempting authentication.
+- Production environment validation now requires `ROUTER_CREDENTIAL_KEY` to be a 64-character hexadecimal value (32-byte key). The secret is never committed to source control.
+- The post-merge hardening commits are `940ad37d292765551ab2e4c737d48258d790272e` and `ed31add8a8d448012315db613506c98fe07e7cb4`.
+- GitHub Actions on these latest post-merge commits must complete successfully before marking the current head fully verified.
 
-1. **Merge review:** PR #39 remains open. Review and merge it into `build/nexus-isp-core` before treating the target branch as repaired.
-2. **Live MikroTik:** The RouterOS adapter and API routes are source/CI verified, but no real MikroTik endpoint was connected. Verify API-SSL reachability, credentials, PPPoE reads, provisioning, suspension/restoration, and sync against a non-production router.
-3. **Credential operations:** Set `ROUTER_CREDENTIAL_KEY` to a stable 32-byte hex secret in the deployment secret store. Back it up securely; losing it makes stored router credentials undecryptable. Do not place it in source control or frontend configuration.
-4. **OLT/ONU:** The HSGQ-G04R adapter does not establish live vendor communication or perform live configuration. Verify the actual vendor API/CLI and safe read-only operations before claiming live OLT/ONU status or provisioning.
-5. **GenieACS/TR-069:** Adapter tests do not replace testing against a real ACS and supported ONU. Validate inform, device identity, parameter reads, and any writes separately.
-6. **Data recovery:** Automated SQLite backup/restore tests pass, but a production-topology backup and restore rehearsal has not been performed.
-7. **Production architecture/security:** Confirm the intended deployment topology, HTTPS edge, secret management, database persistence, tenant isolation, and independent security review. CI does not establish production readiness.
+## Required deployment configuration
 
-## Database and scope safety
+Before deploying the API in production:
+1. Generate a cryptographically random 32-byte key and encode it as 64 hexadecimal characters.
+2. Set it as `ROUTER_CREDENTIAL_KEY` in the deployment's secret manager/environment. Never put it in Git, frontend code, or logs.
+3. Store a secure offline recovery copy. Losing the key makes existing encrypted router credentials unrecoverable.
+4. Restart the service and confirm production environment validation passes.
+5. Add router credentials through the API using the encrypted credential fields; use API-SSL port 8729.
 
-- PR #39 does not add or alter database migrations.
+No production secret was created or installed in this repository session. The actual key must be generated and stored in the intended deployment secret manager by an authorized operator.
+
+## External integration and recovery release gates
+
+These checks cannot be honestly marked complete from source code or CI alone:
+
+1. **MikroTik:** Connect a non-production RouterOS device over API-SSL; verify identity/resource reads, PPPoE session and profile reads, secret create/update, suspend/restore, and synchronization. No router was connected in this session.
+2. **OLT/ONU:** The HSGQ-G04R adapter does not provide verified live vendor communication/configuration. Obtain the exact supported vendor interface and validate safe read-only operations before claiming optical levels, alarms, or provisioning.
+3. **GenieACS/TR-069:** Test against a real ACS and supported ONU: inform, device identity, parameter reads, and explicitly approved writes. No ACS/device session was run.
+4. **Backup/restore:** Perform a backup and restore rehearsal against a copy of the intended production database and confirm integrity, foreign keys, and application startup. Automated test coverage is not a production restore drill.
+5. **Production architecture/security:** Confirm persistent database storage, HTTPS termination, firewall/network access, secrets, tenant isolation, session handling, independent security review, and mobile/browser acceptance on the intended deployment.
+6. **Payments and recurring billing:** Verify real payment workflows and any scheduled billing requirements against the actual deployment and provider; CI simulation is not a live payment test.
+
+## Scope and safety
+
+- PR #39 is merged into `build/nexus-isp-core`.
 - No customer database, production deployment, Cloudflare resource, or external network device was changed.
-- No live device operation was attempted.
-- Existing migration and database-hardening test suites passed in GitHub CI.
+- No live MikroTik, OLT/ONU, or GenieACS operation was attempted.
+- No production credentials or encryption secrets were added to source control.
+- No production migration was applied.
 
 ## Release decision
 
-**Production remains NO-GO at this stage.** The branch-level startup/test blocker is repaired in PR #39 and all listed CI workflows pass on the repair head. However, the PR must be merged and the real deployment, backup/restore, security, MikroTik, OLT/ONU, and GenieACS checks must be completed before production approval.
+**Production remains NO-GO until the latest post-merge CI is green and the required production configuration, live-device, backup/restore, and security checks have documented evidence.** The original backend startup/import blocker is fixed and merged; that does not by itself establish full production readiness.
