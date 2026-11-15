@@ -79,7 +79,7 @@ Do not delete `backend/data/nexus.sqlite` to fix a login problem; that file cont
 
 All endpoints except health, root, initial setup and login require `Authorization: Bearer <token>`.
 
-- `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/login` accepts `email`, `password`, and optional `tenantSlug`; the slug is required only when the same email/password matches accounts in more than one workspace. `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`.
 - `GET /api/v1/dashboard`
 - `GET|POST /api/v1/customers` (search/filter: `q`, `status`, `connectionStatus`, `coverageArea`; pagination: `page`, `pageSize`), `GET|PATCH|DELETE /api/v1/customers/:id`
 - `GET /api/v1/customers/:id/profile`, `GET /api/v1/customers/:id/history`
@@ -88,7 +88,12 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - `GET|POST /api/v1/invoices`
 - `GET|POST /api/v1/payments`
 - `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
-- Customer portal: `/portal` (customer login, package, invoices, dues, payments and complaints)\n- `POST /api/v1/customer-portal/login`, `GET /api/v1/customer-portal/me`, `GET /api/v1/customer-portal/invoices`, `GET /api/v1/customer-portal/payments`, `GET|POST /api/v1/customer-portal/complaints`, `POST /api/v1/customer-portal/logout`\n- Staff customer portal provisioning: `POST /api/v1/portal-admin/customers/:customerId/account`, `POST /api/v1/portal-admin/customers/:customerId/reset-password`\n- Notification console: `/notifications`; templates, queued messages, provider send/retry and delivery history under `/api/v1/notifications/*`\n- WhatsApp Cloud API uses Meta-approved template names and language codes for template sends (optional provider template name on each local template); without a provider template name, the API sends a free-form text message subject to Meta's 24-hour customer-care window. WhatsApp Cloud API secrets are server-only environment variables: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Configure the Meta webhook callback to `/api/v1/notifications/whatsapp/webhook`; the endpoint verifies the provider signature before accepting delivery updates.\n- `GET /api/v1/audit-logs`
+- Customer portal: `/portal` (customer login, package, invoices, dues, payments and complaints)
+- `POST /api/v1/customer-portal/login`, `GET /api/v1/customer-portal/me`, `GET /api/v1/customer-portal/invoices`, `GET /api/v1/customer-portal/payments`, `GET|POST /api/v1/customer-portal/complaints`, `POST /api/v1/customer-portal/logout`
+- Staff customer portal provisioning: `POST /api/v1/portal-admin/customers/:customerId/account`, `POST /api/v1/portal-admin/customers/:customerId/reset-password`
+- Notification console: `/notifications`; templates, queued messages, provider send/retry and delivery history under `/api/v1/notifications/*`
+- WhatsApp Cloud API uses Meta-approved template names and language codes for template sends (optional provider template name on each local template); without a provider template name, the API sends a free-form text message subject to Meta's 24-hour customer-care window. WhatsApp Cloud API secrets are server-only environment variables: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Configure the Meta webhook callback to `/api/v1/notifications/whatsapp/webhook`; the endpoint verifies the provider signature before accepting delivery updates.
+- `GET /api/v1/audit-logs`
 - `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
 - `GET|POST /api/v1/olts`, `PATCH|DELETE /api/v1/olts/:id`, `GET /api/v1/olts/:id/capabilities`
 - `GET /api/v1/olts/:id/pons`, `PATCH /api/v1/pons/:id`
