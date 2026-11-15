@@ -131,3 +131,12 @@ The user requested that remaining implementation work proceed without running ad
 - Updated README and `.env.example` to document the new features and opt-in setting.
 
 The new implementation was committed without running tests or CI, as requested. The current branch head therefore has no fresh CI result. Do not interpret these commits as tested or production-approved. The scheduler is code-complete but intentionally inactive unless enabled. Live MikroTik, HSGQ OLT, Huawei ONU / GenieACS integrations still require vendor interfaces and device access; no hardware test or production change was performed.
+
+
+## Additional implementation — NEXUS AI Assistant
+
+- Added a mobile-friendly floating AI assistant panel to the local dashboard.
+- Added a server-side Gemini proxy with server-only API key configuration, per-user request throttling, bounded alternating chat history, response timeout handling, and a dedicated `ai.chat` permission.
+- The assistant is guidance-only: it receives no customer records, balances, credentials, router/OLT data and cannot perform operational changes.
+- Configure `GEMINI_API_KEY` in the backend environment to activate it. Without a key, the endpoint responds with a safe 503 message; other NEXUS features remain available.
+- No tests or CI were run for these additional source changes, per the user's instruction.
