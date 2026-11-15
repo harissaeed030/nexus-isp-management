@@ -1,6 +1,6 @@
 -- Canonical Cloudflare D1 schema snapshot from verified staging (schema migration 0007).
 -- Use only to initialize a new, empty D1 database. Never run this snapshot over an existing database.
--- Existing databases must be upgraded with the incremental files in cloudflare/d1/migrations/.
+-- Existing databases must use incremental migrations in cloudflare/d1/migrations/.
 -- Cloudflare-managed _cf_KV is intentionally excluded.
 PRAGMA foreign_keys = ON;
 
@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
   label           TEXT,
   last_used_at    TEXT,
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  revoked_at    --- TRUNCATED --- 381 chars;
+  revoked_at      TEXT,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS audit_log (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -23,7 +25,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS customer_portal_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,email TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),token_version INTEGER NOT NULL DE --- TRUNCATED --- 634 chars;
+CREATE TABLE IF NOT EXISTS customer_portal_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,email TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),token_version INTEGER NOT NULL DEFAULT 0,last_login TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,email),UNIQUE(organization_id,customer_id),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE);
 
 CREATE TABLE IF NOT EXISTS customers (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -33,7 +35,13 @@ CREATE TABLE IF NOT EXISTS customers (
   email           TEXT,
   phone           TEXT,
   address         TEXT,
-  city            TEXT --- TRUNCATED --- 735 chars;
+  city            TEXT,
+  status          TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended','terminated')),
+  customer_code   TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')), balance REAL DEFAULT 0, notes TEXT, installation_address TEXT, installation_date TEXT, id_type TEXT, id_number TEXT,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS invoices (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -42,7 +50,19 @@ CREATE TABLE IF NOT EXISTS invoices (
   subscription_id TEXT,
   invoice_number  TEXT NOT NULL,
   amount          REAL NOT NULL,
-  tax             REAL NOT NULL DEFAULT --- TRUNCATED --- 931 chars;
+  tax             REAL NOT NULL DEFAULT 0,
+  total           REAL NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','paid','overdue','cancelled')),
+  issue_date      TEXT NOT NULL,
+  due_date        TEXT NOT NULL,
+  notes           TEXT,
+  paid_at         TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')), billing_period TEXT,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (customer_id)     REFERENCES customers(id)    ON DELETE CASCADE,
+  FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL
+);
 
 CREATE TABLE IF NOT EXISTS login_attempts (
         id TEXT PRIMARY KEY,
@@ -59,7 +79,12 @@ CREATE TABLE IF NOT EXISTS network_devices (
         host TEXT,
         port INTEGER,
         username TEXT,
-        sta --- TRUNCATED --- 672 chars;
+        status TEXT NOT NULL DEFAULT 'inactive' CHECK(status IN ('active','inactive','maintenance')),
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')), model TEXT, management_protocol TEXT, pon_ports INTEGER,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+      );
 
 CREATE TABLE IF NOT EXISTS notifications (
       id              TEXT PRIMARY KEY,
@@ -69,9 +94,12 @@ CREATE TABLE IF NOT EXISTS notifications (
       message         TEXT,
       type            TEXT DEFAULT 'info',
       is_read         INTEGER DEFAULT 0,
-      cre --- TRUNCATED --- 493 chars;
+      created_at      TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
 
-CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT 'unknown',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TE --- TRUNCATED --- 406 chars;
+CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT 'unknown',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,serial_number));
 
 CREATE TABLE IF NOT EXISTS organizations (
   id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -79,7 +107,8 @@ CREATE TABLE IF NOT EXISTS organizations (
   slug       TEXT NOT NULL UNIQUE,
   plan       TEXT NOT NULL DEFAULT 'free',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT ( --- TRUNCATED --- 389 chars;
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+, email TEXT, phone TEXT, address TEXT, currency TEXT DEFAULT 'USD', logo TEXT);
 
 CREATE TABLE IF NOT EXISTS packages (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -88,7 +117,13 @@ CREATE TABLE IF NOT EXISTS packages (
   description     TEXT,
   speed_mbps      INTEGER NOT NULL,
   price           REAL NOT NULL,
-  billing_cycle   TEXT NOT NULL DEFAU --- TRUNCATED --- 667 chars;
+  billing_cycle   TEXT NOT NULL DEFAULT 'monthly' CHECK(billing_cycle IN ('monthly','quarterly','yearly')),
+  data_limit_gb   INTEGER,
+  is_active       INTEGER NOT NULL DEFAULT 1,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')), speed_down TEXT, speed_up TEXT,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS password_resets (
   id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -97,7 +132,8 @@ CREATE TABLE IF NOT EXISTS password_resets (
   expires_at TEXT NOT NULL,
   used       INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREI --- TRUNCATED --- 349 chars;
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS payments (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -105,7 +141,16 @@ CREATE TABLE IF NOT EXISTS payments (
   invoice_id      TEXT NOT NULL,
   customer_id     TEXT NOT NULL,
   amount          REAL NOT NULL,
-  payment_method  TEXT CHECK(payment_method IN ('cash','bank_tran --- TRUNCATED --- 850 chars;
+  payment_method  TEXT CHECK(payment_method IN ('cash','bank_transfer','card','mobile_money','other')),
+  transaction_ref TEXT,
+  status          TEXT NOT NULL DEFAULT 'completed' CHECK(status IN ('pending','completed','failed','refunded')),
+  paid_at         TEXT NOT NULL DEFAULT (datetime('now')),
+  notes           TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (invoice_id)      REFERENCES invoices(id)    ON DELETE CASCADE,
+  FOREIGN KEY (customer_id)     REFERENCES customers(id)    ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS pppoe_accounts (
       id              TEXT PRIMARY KEY,
@@ -115,9 +160,14 @@ CREATE TABLE IF NOT EXISTS pppoe_accounts (
       password        TEXT NOT NULL,
       ip_address      TEXT,
       status          TEXT DEFAULT 'active',
-  --- TRUNCATED --- 605 chars;
+      created_at      TEXT DEFAULT (datetime('now')),
+      updated_at      TEXT DEFAULT (datetime('now')),
+      UNIQUE (organization_id, username),
+      FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    );
 
-CREATE TABLE IF NOT EXISTS refunds(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,payment_id TEXT NOT NULL,invoice_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),method TEXT NOT NULL DEFAULT 'cash',reference TEXT,reason TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(statu --- TRUNCATED --- 722 chars;
+CREATE TABLE IF NOT EXISTS refunds(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,payment_id TEXT NOT NULL,invoice_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),method TEXT NOT NULL DEFAULT 'cash',reference TEXT,reason TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','completed','failed')),created_by TEXT NOT NULL,completed_by TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),completed_at TEXT, idempotency_key TEXT,FOREIGN KEY(payment_id) REFERENCES payments(id) ON DELETE CASCADE,FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE);
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id         INTEGER PRIMARY KEY,
@@ -141,14 +191,24 @@ CREATE TABLE IF NOT EXISTS settings (
       value           TEXT,
       created_at      TEXT DEFAULT (datetime('now')),
       updated_at      TEXT DEFAULT (datetime('now')),
-      UNIQUE (orga --- TRUNCATED --- 399 chars;
+      UNIQUE (organization_id, key),
+      FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+    );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   organization_id TEXT NOT NULL,
   customer_id     TEXT NOT NULL,
   package_id      TEXT NOT NULL,
-  status          TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended','cancel --- TRUNCATED --- 752 chars;
+  status          TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended','cancelled','expired')),
+  start_date      TEXT NOT NULL,
+  end_date        TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')), auto_renew INTEGER DEFAULT 0,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (customer_id)     REFERENCES customers(id)  ON DELETE CASCADE,
+  FOREIGN KEY (package_id)      REFERENCES packages(id)   ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS support_tickets (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -156,7 +216,15 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   customer_id     TEXT,
   subject         TEXT NOT NULL,
   description     TEXT,
-  priority        TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','m --- TRUNCATED --- 829 chars;
+  priority        TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high','urgent')),
+  status          TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+  assigned_to     TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')), resolution TEXT,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (customer_id)     REFERENCES customers(id)     ON DELETE SET NULL,
+  FOREIGN KEY (assigned_to)     REFERENCES users(id)         ON DELETE SET NULL
+);
 
 CREATE TABLE IF NOT EXISTS ticket_messages (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -164,7 +232,10 @@ CREATE TABLE IF NOT EXISTS ticket_messages (
   user_id         TEXT,
   message         TEXT NOT NULL,
   is_staff        INTEGER NOT NULL DEFAULT 0,
-  created_at      TEXT NOT NULL DEFAULT (datetime('no --- TRUNCATED --- 452 chars;
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id)  REFERENCES users(id)            ON DELETE SET NULL
+);
 
 CREATE TABLE IF NOT EXISTS user_permissions(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,permission TEXT NOT NULL,allowed INTEGER NOT NULL CHECK(allowed IN(0,1)),updated_by TEXT,updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,user_id,permission));
 
@@ -174,7 +245,10 @@ CREATE TABLE IF NOT EXISTS users (
   email           TEXT NOT NULL UNIQUE,
   password_hash   TEXT,
   role            TEXT NOT NULL DEFAULT 'member',
-  created_at      TEXT NOT NULL DEFAULT (datetime('n --- TRUNCATED --- 584 chars;
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')), name TEXT, phone TEXT, status TEXT DEFAULT 'active', avatar TEXT, password_salt TEXT, last_login TEXT, token_version INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
 
 CREATE INDEX IF NOT EXISTS idx_api_keys_organization ON api_keys(organization_id);
 
@@ -281,21 +355,26 @@ CREATE TRIGGER IF NOT EXISTS trg_d1_audit_org_i BEFORE INSERT ON audit_log WHEN 
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_audit_org_u BEFORE UPDATE OF organization_id,user_id ON audit_log WHEN NEW.organization_id IS NOT NULL AND NEW.user_id IS NOT NULL BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'audit acto --- TRUNCATED --- 332 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'audit actor organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_invoice_org_i BEFORE INSERT ON invoices BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'invoice customer organization mismatch') END;
- SELECT CASE WHEN NEW.subscription_id IS NOT NU --- TRUNCATED --- 526 chars;
+ SELECT CASE WHEN NEW.subscription_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM subscriptions WHERE id=NEW.subscription_id AND organization_id=NEW.organization_id AND customer_id=NEW.customer_id) THEN RAISE(ABORT,'invoice subscription organization/customer mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_invoice_org_u BEFORE UPDATE OF organization_id,customer_id,subscription_id ON invoices BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'invoice customer organization mismatch') END;
- --- TRUNCATED --- 573 chars;
+ SELECT CASE WHEN NEW.subscription_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM subscriptions WHERE id=NEW.subscription_id AND organization_id=NEW.organization_id AND customer_id=NEW.customer_id) THEN RAISE(ABORT,'invoice subscription organization/customer mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_message_org_i BEFORE INSERT ON ticket_messages WHEN NEW.user_id IS NOT NULL BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM support_tickets t JOIN users u ON u.id=NEW.user_id WHERE t.id=NEW.ticket_id AND t.organization_id=u.organization_id) THEN RAISE(ABORT,'ticket message u --- TRUNCATED --- 334 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM support_tickets t JOIN users u ON u.id=NEW.user_id WHERE t.id=NEW.ticket_id AND t.organization_id=u.organization_id) THEN RAISE(ABORT,'ticket message user organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_message_org_u BEFORE UPDATE OF ticket_id,user_id ON ticket_messages WHEN NEW.user_id IS NOT NULL BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM support_tickets t JOIN users u ON u.id=NEW.user_id WHERE t.id=NEW.ticket_id AND t.organization_id=u.organization_id) THEN RAISE(AB --- TRUNCATED --- 355 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM support_tickets t JOIN users u ON u.id=NEW.user_id WHERE t.id=NEW.ticket_id AND t.organization_id=u.organization_id) THEN RAISE(ABORT,'ticket message user organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_notification_org_i BEFORE INSERT ON notifications WHEN NEW.user_id IS NOT NULL BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'notification user organization mismatch') END;
@@ -307,24 +386,31 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_onu_org_i BEFORE INSERT ON onu_devices BEGIN
  SELECT CASE WHEN NEW.customer_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ONU customer organization mismatch') END;
- SELECT CASE WHEN NE --- TRUNCATED --- 497 chars;
+ SELECT CASE WHEN NEW.olt_device_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.olt_device_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ONU OLT organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_onu_org_u BEFORE UPDATE OF organization_id,customer_id,olt_device_id ON onu_devices BEGIN
- SELECT CASE WHEN NEW.customer_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ONU customer organ --- TRUNCATED --- 542 chars;
+ SELECT CASE WHEN NEW.customer_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ONU customer organization mismatch') END;
+ SELECT CASE WHEN NEW.olt_device_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.olt_device_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ONU OLT organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_payment_org_i BEFORE INSERT ON payments BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM invoices i JOIN customers c ON c.id=NEW.customer_id WHERE i.id=NEW.invoice_id AND i.organization_id=NEW.organization_id AND i.customer_id=NEW.customer_id AND c.organization_id=NEW.organiz --- TRUNCATED --- 383 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM invoices i JOIN customers c ON c.id=NEW.customer_id WHERE i.id=NEW.invoice_id AND i.organization_id=NEW.organization_id AND i.customer_id=NEW.customer_id AND c.organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment invoice/customer organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_payment_org_u BEFORE UPDATE OF organization_id,invoice_id,customer_id ON payments BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM invoices i JOIN customers c ON c.id=NEW.customer_id WHERE i.id=NEW.invoice_id AND i.organization_id=NEW.organization_id AND i.customer_id=NEW.cus --- TRUNCATED --- 425 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM invoices i JOIN customers c ON c.id=NEW.customer_id WHERE i.id=NEW.invoice_id AND i.organization_id=NEW.organization_id AND i.customer_id=NEW.customer_id AND c.organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment invoice/customer organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_permission_org_i BEFORE INSERT ON user_permissions BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'permission user organization mismatch') END;
- SELECT CASE WHEN NEW.updated_by IS NOT NULL  --- TRUNCATED --- 465 chars;
+ SELECT CASE WHEN NEW.updated_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'permission actor organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_permission_org_u BEFORE UPDATE OF organization_id,user_id,updated_by ON user_permissions BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'permission user organization mismatch') END;
- SELECT --- TRUNCATED --- 503 chars;
+ SELECT CASE WHEN NEW.updated_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'permission actor organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_portal_org_i BEFORE INSERT ON customer_portal_accounts BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'portal account customer organization mismatch') END; END;
 
@@ -339,24 +425,36 @@ CREATE TRIGGER IF NOT EXISTS trg_d1_pppoe_org_u BEFORE UPDATE OF organization_id
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_refund_org_i BEFORE INSERT ON refunds BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM payments p JOIN invoices i ON i.id=NEW.invoice_id JOIN customers c ON c.id=NEW.customer_id WHERE p.id=NEW.payment_id AND p.organization_id=NEW.organization_id AND i.organization_id=NEW.organ --- TRUNCATED --- 924 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM payments p JOIN invoices i ON i.id=NEW.invoice_id JOIN customers c ON c.id=NEW.customer_id WHERE p.id=NEW.payment_id AND p.organization_id=NEW.organization_id AND i.organization_id=NEW.organization_id AND c.organization_id=NEW.organization_id AND p.invoice_id=NEW.invoice_id AND p.customer_id=NEW.customer_id AND i.customer_id=NEW.customer_id) THEN RAISE(ABORT,'refund payment/invoice/customer organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'refund creator organization mismatch') END;
+ SELECT CASE WHEN NEW.completed_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.completed_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'refund completer organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_refund_org_u BEFORE UPDATE OF organization_id,payment_id,invoice_id,customer_id,created_by,completed_by ON refunds BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM payments p JOIN invoices i ON i.id=NEW.invoice_id JOIN customers c ON c.id=NEW.customer_id WHERE p.id=NEW.payme --- TRUNCATED --- 1,001 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM payments p JOIN invoices i ON i.id=NEW.invoice_id JOIN customers c ON c.id=NEW.customer_id WHERE p.id=NEW.payment_id AND p.organization_id=NEW.organization_id AND i.organization_id=NEW.organization_id AND c.organization_id=NEW.organization_id AND p.invoice_id=NEW.invoice_id AND p.customer_id=NEW.customer_id AND i.customer_id=NEW.customer_id) THEN RAISE(ABORT,'refund payment/invoice/customer organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'refund creator organization mismatch') END;
+ SELECT CASE WHEN NEW.completed_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.completed_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'refund completer organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_sub_org_i BEFORE INSERT ON subscriptions BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'subscription customer organization mismatch') END;
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FRO --- TRUNCATED --- 445 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM packages WHERE id=NEW.package_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'subscription package organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_sub_org_u BEFORE UPDATE OF organization_id,customer_id,package_id ON subscriptions BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'subscription customer organization mismatch') END; --- TRUNCATED --- 487 chars;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'subscription customer organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM packages WHERE id=NEW.package_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'subscription package organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_ticket_org_i BEFORE INSERT ON support_tickets BEGIN
  SELECT CASE WHEN NEW.customer_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ticket customer organization mismatch') END;
- SELECT CA --- TRUNCATED --- 501 chars;
+ SELECT CASE WHEN NEW.assigned_to IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.assigned_to AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ticket assignee organization mismatch') END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_ticket_org_u BEFORE UPDATE OF organization_id,customer_id,assigned_to ON support_tickets BEGIN
- SELECT CASE WHEN NEW.customer_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ticket custom --- TRUNCATED --- 544 chars;
+ SELECT CASE WHEN NEW.customer_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ticket customer organization mismatch') END;
+ SELECT CASE WHEN NEW.assigned_to IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.assigned_to AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'ticket assignee organization mismatch') END;
+END;
 
 INSERT OR IGNORE INTO schema_migrations(id,name,applied_at) VALUES
 (1,'0001_saas_foundation','2026-11-10 12:44:49'),
