@@ -1,6 +1,7 @@
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 function uuid(){return crypto.randomUUID()}
+function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
 function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
@@ -15,7 +16,7 @@ function b64u(b){return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').repla
 function b64uDec(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const b=atob(s);const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
 function getSec(env){if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');return env.JWT_SECRET}
 async function getAuth(r,env){const a=r.headers.get('Authorization');if(!a||!a.startsWith('Bearer '))return null;return await verifyJWT(a.slice(7),getSec(env))}
-async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT INTO audit_log(id,organization_id,user_id,action,detail,ip_address)VALUES(?,?,?,?,?,?)').bind(uuid(),oid,uid,act,det||null,ip||null).run()}catch(e){console.error('NEXUS_AUDIT_WRITE_FAILED',{action:act,organizationId:oid,error:e?.message||String(e)})}}
+async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT INTO audit_log(id,organization_id,user_id,action,detail,ip_address)VALUES(?,?,?,?,?,?)').bind(uuid(),oid,uid,act,det||null,ip||null).run()}catch(e){console.error('NEXUS_AUDIT_WRITE_FAILED',{action:act,errorType:safeErrorType(e)})}}
 function vEmail(e){return/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e||'')}
 function vReq(o,f){return f.filter(x=>!o[x]&&o[x]!==0)}
 function s(v){return typeof v==='string'?v.trim():v}
@@ -206,7 +207,7 @@ async function runMigrations(env){
 }
 
 let _migrated=false;
-export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS scheduled billing failed',e?.message||e)))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
+export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
 if(m==='OPTIONS')return withCors(new Response(null,{status:204}),request,env);
 if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
@@ -598,8 +599,8 @@ async function runScheduledBilling(controller,env){
    }
    outcomes.push({organizationId:org.id,...result});
   }catch(e){
-   console.error('NEXUS scheduled billing failed for organization',org.id,e?.message||e);
-   outcomes.push({organizationId:org.id,error:String(e?.message||'Billing failed').slice(0,160)});
+   console.error('NEXUS_SCHEDULED_BILLING_ORG_FAILED',{errorType:safeErrorType(e)});
+   outcomes.push({organizationId:org.id,errorType:safeErrorType(e)});
   }
  }
  return outcomes
