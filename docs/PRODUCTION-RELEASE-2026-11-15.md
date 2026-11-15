@@ -17,8 +17,8 @@ The production Worker customer-portal release is deployed and live smoke verific
 | Production Worker deployment ID | `b4a6723b-6ba8-4e5a-b8a1-f2c8855b57b4` |
 | Traffic allocation | 100% to version 25 |
 | Previous Worker version | `ddba4576-e9ec-4db8-a93a-dc80c5a35b1e` (version 24) |
-| Production Pages deployment | `9050c002-80de-4a24-9f3d-12c7ef1da7c5` |
-| Pages commit | `d9a05ff97ce4d3fde27a4457ffac5f30a0be90d6` |
+| Production Pages deployment | `c0b3a43d-2f35-4108-9fc9-b611c6de55bc` |
+| Pages commit | `bd582bb95ce703020c542b976353dbd69ab690d5` |
 
 Staging Worker version 18 (`d79d6f84-62eb-4339-8dbd-927a4aa109a1`) is deployed at 100% traffic. Production Worker version 25 and staging version 18 both redact organization identifiers and raw exception text from application logs. Existing D1 bindings and `ALLOWED_ORIGINS`, `JWT_SECRET`, and `TURNSTILE_SECRET_KEY` secret bindings were preserved. Secret values were not read into source or copied into GitHub.
 
