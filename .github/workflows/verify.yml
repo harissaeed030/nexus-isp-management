@@ -33,7 +33,7 @@ jobs:
           node --check worker/src/index.js
           node --check worker/src/production-worker.js
           node worker/scripts/verify-production-worker.mjs
-      - name: Validate D1 schema and migrations 0007–0008
+      - name: Validate D1 schema and migrations 0007–0009
         run: python3 worker/scripts/validate-d1-schema.py
 
   live-smoke:
