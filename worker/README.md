@@ -31,7 +31,7 @@ The RouterOS and HSGQ adapters must be treated according to their documented cap
 
 ## Schema
 
-- `schema.sql` is a canonical schema snapshot from staging at migration 0007. Use it only for a new, empty D1 database.
+- `schema.sql` is a canonical schema snapshot at migration 0009. Use it only for a new, empty D1 database.
 - Existing production/staging databases must use incremental migrations under `cloudflare/d1/migrations/`.
 - Do not run the full schema snapshot over an existing database.
 - See `cloudflare/d1/README.md` for migration history and release notes.
