@@ -98,7 +98,7 @@ fresh_tables = {
 }
 required_fresh_tables = {
     "organizations", "users", "customers", "packages", "subscriptions",
-    "invoices", "payments", "support_tickets", "audit_logs", "schema_migrations",
+    "invoices", "payments", "support_tickets", "audit_log", "schema_migrations",
 }
 assert required_fresh_tables <= fresh_tables, (
     "Fresh schema is missing tables: " + repr(sorted(required_fresh_tables - fresh_tables))
