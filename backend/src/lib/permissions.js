@@ -25,16 +25,21 @@ export const PERMISSIONS = [
   { key: "olts.manage", group: "Network", label: "Manage OLT and ONU records" },
   { key: "acs.manage", group: "Network", label: "Manage ACS connections and TR-069 actions" },
   { key: "audit.read", group: "Administration", label: "View activity log" },
-  { key: "notifications.manage", group: "Communication", label: "Manage notification templates and delivery" }
+  { key: "notifications.manage", group: "Communication", label: "Manage notification templates and delivery" },
+  { key: "operations.read", group: "ISP Operations", label: "View coverage, applications, collections and stock" },
+  { key: "operations.manage", group: "ISP Operations", label: "Manage coverage, applications, partners, field work and stock" },
+  { key: "collections.read", group: "Collections", label: "View field collections and payment promises" },
+  { key: "collections.manage", group: "Collections", label: "Record collections and manage payment promises" },
+  { key: "ai.chat", group: "AI Assistant", label: "Use the NEXUS AI assistant" }
 ];
 export const permissionKeys = new Set(PERMISSIONS.map(item => item.key));
 export const ROLE_PERMISSIONS = {
   owner: ["*"],
   admin: ["*"],
-  billing: ["dashboard.read","customers.read","packages.read","subscriptions.read","billing.read","invoices.create","payments.create","billing.adjust","refunds.manage","billing.reconcile","billing.generate","reports.read","notifications.manage"],
-  noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage","routers.provision","olts.read","olts.manage"],
-  support: ["dashboard.read","customers.read","packages.read","subscriptions.read","tickets.read","tickets.manage"],
-  technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read","olts.read"],
+  billing: ["dashboard.read","customers.read","packages.read","subscriptions.read","billing.read","invoices.create","payments.create","billing.adjust","refunds.manage","billing.reconcile","billing.generate","reports.read","notifications.manage","operations.read","collections.read","collections.manage"],
+  noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage","routers.provision","olts.read","olts.manage","operations.read","operations.manage","collections.read"],
+  support: ["dashboard.read","customers.read","packages.read","subscriptions.read","tickets.read","tickets.manage","operations.read"],
+  technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read","olts.read","operations.read"],
   staff: ["dashboard.read"]
 };
 export function roleHasPermission(role, permission) {
@@ -58,6 +63,16 @@ export function permissionFor(path,method) {
   const verb=String(method||"GET").toUpperCase();
   const matches=base=>path===base||path.startsWith(base+"/");
   if(path==="/api/v1/dashboard")return verb==="GET"?"dashboard.read":null;
+  if(path==="/api/v1/ai/chat")return verb==="POST"?"ai.chat":null;
+  if(matches("/api/v1/exports")){
+    if(verb!=="GET")return null;
+    if(path==="/api/v1/exports/customers.csv")return "customers.read";
+    if(path==="/api/v1/exports/invoices.csv"||path==="/api/v1/exports/payments.csv")return "billing.read";
+    if(path==="/api/v1/exports/tickets.csv")return "tickets.read";
+    return null;
+  }
+  if(matches("/api/v1/operations/collections")||matches("/api/v1/operations/payment-promises"))return verb==="GET"?"collections.read":["POST","PATCH"].includes(verb)?"collections.manage":null;
+  if(matches("/api/v1/operations"))return verb==="GET"?"operations.read":["POST","PATCH"].includes(verb)?"operations.manage":null;
   if(matches("/api/v1/customers"))return ({GET:"customers.read",POST:"customers.create",PATCH:"customers.update",DELETE:"customers.delete"})[verb]||null;
   if(matches("/api/v1/packages"))return verb==="GET"?"packages.read":["POST","PATCH"].includes(verb)?"packages.manage":null;
   if(matches("/api/v1/subscriptions"))return verb==="GET"?"subscriptions.read":["POST","PATCH"].includes(verb)?"subscriptions.manage":null;
