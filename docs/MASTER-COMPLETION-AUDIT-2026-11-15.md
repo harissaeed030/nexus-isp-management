@@ -16,6 +16,19 @@ Audit date: 2026-11-15
 - Open release/security issues include #29 (independent security review), #28 (security review request), and #22 (release blockers).
 - The GitHub combined commit-status endpoint returned no status entries for the audited main SHA. The PR-triggered workflow-run lookup also returned no runs for that SHA. This is **not** evidence of passing CI; check the Actions UI and exact workflow runs for each candidate commit.
 
+### Follow-up check-run verification
+
+After the initial audit commit, the GitHub check-runs API was queried for the exact candidate SHAs below. These results update the evidence above but do not change the production NO-GO decision:
+
+| Candidate | Exact SHA (short) | Observed checks | Result / boundary |
+|---|---|---|---|
+| Audit PR #58 | `40f1eb8` | 6 checks: backend verify jobs, Worker syntax, tenant-isolation/customer-portal E2E, endpoint verification, Cloudflare Pages preview | All 6 completed successfully. This is the audit branch, not an integrated release commit. |
+| Security PR #57 | `5433c2c` | 7 checks: backend verify jobs, Worker syntax, tenant-isolation/customer-portal E2E, endpoint verification, Cloudflare Pages preview | All 7 completed successfully. These checks do **not** replace the required real Worker CPU benchmark or independent security review. |
+| D1 reconciliation PR #38 | `d8e8ed8` | 4 checks: backend verify jobs, syntax, Cloudflare Pages preview | All 4 completed successfully. The PR targets `build/nexus-isp-core`, not `main`; its documented D1 changes are not thereby approved for production. |
+| Staging E2E PR #32 | `e9eb303` | 4 checks: staging portal E2E, SQLite migration check, Worker syntax, Cloudflare Pages preview | All 4 completed successfully on the PR branch. This is evidence for that staging candidate only, not proof of a disposable D1 restore or production readiness. |
+
+The Cloudflare Pages checks above are branch-preview deployments. They are not production Worker deployments. No PR was merged as part of this follow-up.
+
 ## Verified architecture and implementation evidence
 
 - `backend/package.json` identifies a Node.js 22.13+ local SQLite backend, version 0.2.0, with `check`, `test`, and `verify` scripts.
