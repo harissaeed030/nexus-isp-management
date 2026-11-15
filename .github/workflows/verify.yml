@@ -44,6 +44,7 @@ jobs:
       - name: Check production and staging Workers and Pages
         env:
           PRODUCTION_API: https://nexus-saas-api.harissaeed030.workers.dev
+          PRODUCTION_CANDIDATE_API: https://754901bc-nexus-saas-api.harissaeed030.workers.dev
           STAGING_API: https://nexus-saas-api-staging.harissaeed030.workers.dev
           FRONTEND_URL: https://nexus-isp-management.pages.dev
         run: |
@@ -53,6 +54,7 @@ jobs:
           const origin = process.env.FRONTEND_URL;
           const targets = [
             ["production", process.env.PRODUCTION_API],
+            ["production-candidate", process.env.PRODUCTION_CANDIDATE_API],
             ["staging", process.env.STAGING_API],
           ];
 
@@ -100,6 +102,14 @@ jobs:
               );
             }
 
+            if (environment !== "production") {
+              const portalGuard = await fetch(base + "/api/portal/me", {
+                headers: { Accept: "application/json" },
+                signal: AbortSignal.timeout(15000),
+              });
+              assert.equal(portalGuard.status, 401, environment + " customer portal auth guard");
+            }
+
             console.log(environment + ": health, D1, CORS, auth guard and security headers passed");
           }
 
@@ -109,6 +119,11 @@ jobs:
           const html = await page.text();
           assert.match(html, /NEXUS/i, "Pages frontend content");
           console.log("Pages production: HTTP 200 and NEXUS HTML verified");
+
+          const portalPage = await fetch(origin + "/portal/", { signal: AbortSignal.timeout(15000) });
+          assert.equal(portalPage.status, 200, "Customer portal page status");
+          assert.match(await portalPage.text(), /NEXUS|Customer Portal/i, "Customer portal HTML");
+          console.log("Pages customer portal: HTTP 200 and portal HTML verified");
           NODE
 
   staging-portal-e2e:
