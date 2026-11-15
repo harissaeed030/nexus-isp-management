@@ -59,4 +59,16 @@
 - [ ] Android browser acceptance and operational usability review.
 - [ ] Production deployment and controlled migration.
 
-**Status rule:** A code module marked complete means its implementation and dashboard/API wiring exist. Automated CI passing does not mean live hardware compatibility, operational acceptance, independent security review or production certification has passed. Those release gates remain explicitly pending.
+## Vancom onboarding inputs and next dependencies
+- [x] Record the user-confirmed MikroTik RB750Gr3 / RouterOS 7 model and PPPoE environment.
+- [x] Record that Huawei ONUs are reported as connected to an ACS.
+- [x] Add a Vancom-specific MikroTik API-SSL and GenieACS NBI onboarding guide.
+- [x] Add a blank package catalog CSV template; actual tariff rows await the ISP's full package list.
+- [ ] Confirm the exact MikroTik RouterOS patch version, management host, API-SSL certificate trust and restricted API account.
+- [ ] Confirm the ACS product and its reachable GenieACS NBI URL / authentication type (an ONU Inform URL is not necessarily the NBI URL).
+- [ ] Receive the full Vancom package names, download/upload speeds and monthly PKR prices.
+- [ ] HSGQ-G04R official Open API or SNMP MIB/OID documentation.
+
+See [Vancom Network Onboarding](VANCOM-NETWORK-ONBOARDING.md) and [package import template](vancom-package-import-template.csv).
+
+**Status rule:** A code module marked complete means its implementation and dashboard/API wiring exist. Automated CI passing does not mean live hardware compatibility, operational acceptance, independent security review or production certification has passed. Those release gates remain explicitly pending. No tests or live device operations were run for the Vancom onboarding documentation update.
