@@ -6,7 +6,7 @@ const {safeRouterError}=await import("../src/services/mikrotik-api.js");
 const {MockMikroTikApi}=await import("../src/services/mock-mikrotik-api.js");
 const {permissionFor,roleHasPermission}=await import("../src/lib/permissions.js");
 test("router credentials encrypt and decrypt with authenticated encryption",()=>{const a=credentialCrypto.encrypt("secret-router-password");assert.notEqual(a,"secret-router-password");assert.equal(credentialCrypto.decrypt(a),"secret-router-password");});
-test("router encryption rejects modified ciphertext",()=>{const a=credentialCrypto.encrypt("secret");assert.throws(()=>credentialCrypto.decrypt(a.slice(0,-1)+"A"));});
+test("router encryption rejects modified authentication tag",()=>{const [iv,tag,data]=credentialCrypto.encrypt("secret").split(".");const changedTag=(tag[0]==="A"?"B":"A")+tag.slice(1);assert.throws(()=>credentialCrypto.decrypt([iv,changedTag,data].join(".")));});
 test("router errors redact password-like values",()=>{assert.match(safeRouterError(new Error("login password=hunter2 rejected")),/password=\[REDACTED\]/);});
 test("mock adapter is deterministic and explicitly separate from live source",async()=>{const mock=new MockMikroTikApi({"/ppp/active/print":[{name:"demo"}]});await mock.connect();assert.deepEqual(await mock.command("/ppp/active/print"),[{name:"demo"}]);assert.equal((await mock.test()).source,"mock");assert.equal(mock.calls.length,1);mock.close();});
 
