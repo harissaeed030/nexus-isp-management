@@ -466,4 +466,5 @@ INSERT OR IGNORE INTO schema_migrations(id,name,applied_at) VALUES
 (5,'0005_sync_staging_schema','2026-11-13 23:41:19'),
 (6,'0006_d1_tenant_integrity_guards','2026-11-15 01:17:52'),
 (7,'0007_customer_portal_tenant_guards','2026-11-15 01:18:15'),
-(8,'0008_user_email_index_parity','2026-11-15 15:35:00');
+(8,'0008_user_email_index_parity','2026-11-15 15:35:00'),
+(9,'0009_repair_global_user_email_index','2026-11-15 15:40:00');
