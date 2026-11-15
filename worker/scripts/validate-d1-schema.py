@@ -136,6 +136,48 @@ except sqlite3.IntegrityError:
     pass
 else:
     raise AssertionError("Fresh schema did not enforce case-insensitive organization email uniqueness")
+# The staging-derived canonical snapshot intentionally keeps password_hash nullable
+# and role defaulted to member. Production is stricter (password_hash NOT NULL,
+# role default staff). Both are compatible with the Worker because registration
+# and staff creation always provide password_hash and role explicitly. Validate
+# that production contract without rebuilding either live users table.
+fresh_user_info = {
+    row[1]: row for row in fresh.execute("PRAGMA table_info(users)")
+}
+assert fresh_user_info["password_hash"][3] == 0, "Canonical staging snapshot drifted unexpectedly"
+assert fresh_user_info["role"][4] == "'member'", "Canonical staging role default drifted unexpectedly"
+
+strict = sqlite3.connect(":memory:")
+strict.execute("PRAGMA foreign_keys=ON")
+strict.executescript("""
+CREATE TABLE organizations(id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE);
+CREATE TABLE users (
+ id TEXT PRIMARY KEY,
+ organization_id TEXT NOT NULL,
+ email TEXT NOT NULL UNIQUE,
+ password_hash TEXT NOT NULL,
+ role TEXT NOT NULL DEFAULT 'staff',
+ created_at TEXT NOT NULL DEFAULT(datetime('now')),
+ updated_at TEXT NOT NULL DEFAULT(datetime('now')),
+ name TEXT, phone TEXT, status TEXT DEFAULT 'active', avatar TEXT,
+ password_salt TEXT, last_login TEXT, token_version INTEGER NOT NULL DEFAULT 0,
+ FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX idx_users_org_email_ci ON users(organization_id, lower(email));
+""")
+strict.execute("INSERT INTO organizations(id,name,slug) VALUES('strict-org','Strict Org','strict-org')")
+strict.execute(
+    "INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role) VALUES(?,?,?,?,?,?,?)",
+    ("strict-user", "strict-org", "owner@example.invalid", "hash", "salt", "Owner", "owner"),
+)
+strict.execute(
+    "INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role) VALUES(?,?,?,?,?,?,?)",
+    ("strict-staff", "strict-org", "staff@example.invalid", "hash", "salt", "Staff", "staff"),
+)
+strict_fk_violations = strict.execute("PRAGMA foreign_key_check").fetchall()
+assert not strict_fk_violations, "Strict production-compatible users schema has FK violations"
+strict.close()
+
 fresh.close()
 
 print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0009, required indexes and foreign keys.")
