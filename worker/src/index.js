@@ -3,6 +3,7 @@ const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta na
 function uuid(){return crypto.randomUUID()}
 function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
+const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
 async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
 async function verifyPw(pw,h,salt){if(!h)return false;if(!salt)return pw===h;const{hash}=await hashPw(pw,salt);return hash===h}
@@ -29,7 +30,7 @@ function corsHeaders(request,env){
  if(origin&&(allowed.includes(origin)||trustedPagesOrigin)){h.set('Access-Control-Allow-Origin',origin);h.set('Vary','Origin')}
  return h
 }
-function withCors(response,request,env){for(const [k,v] of corsHeaders(request,env))response.headers.set(k,v);return response}
+function withCors(response,request,env){for(const [k,v] of corsHeaders(request,env))response.headers.set(k,v);for(const[k,v]of Object.entries(SEC_HDRS))response.headers.set(k,v);return response}
 const PERMISSIONS=[
  {key:'dashboard.read',group:'Dashboard',label:'View dashboard'},
  {key:'customers.read',group:'Customers',label:'View customers'},
@@ -206,13 +207,13 @@ async function runMigrations(env){
 
 let _migrated=false;
 export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS scheduled billing failed',e?.message||e)))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
-if(m==='OPTIONS')return new Response(null,{status:204,headers:corsHeaders(request,env)});
+if(m==='OPTIONS')return withCors(new Response(null,{status:204}),request,env);
 if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
 if(path.startsWith('/api/'))return withCors(await handleApi(request,env,url,path,m),request,env);
 return new Response(FRONTEND_HTML,{headers:{'Content-Type':'text/html;charset=utf-8'}})}};
 
-async function handleApi(request,env,url,path,m){const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
+async function handleApi(request,env,url,path,m){if(path.startsWith('/api/customer-portal/')){path='/api/portal'+path.slice('/api/customer-portal'.length);if(path==='/api/portal/login')path='/api/portal/auth/login';if(path==='/api/portal/logout')path='/api/portal/auth/logout';if(path==='/api/portal/complaints')path='/api/portal/tickets';}const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
 if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
@@ -326,13 +327,40 @@ return json({error:'Not Found',path},404)}catch(e){return json({error:'Server Er
 
 async function portalLogin(r,env,ip){
  const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
- const slug=typeof b.workspace==='string'?b.workspace.trim().toLowerCase():typeof b.slug==='string'?b.slug.trim().toLowerCase():'',email=typeof b.email==='string'?b.email.trim().toLowerCase():'';
- if(!slug||!vEmail(email)||typeof b.password!=='string'||!b.password)return json({error:'Workspace, email and password are required'},400);
- if(await loginRateLimited(env,ip,email))return json({error:'Too many login attempts. Try again in 15 minutes.'},429);
- const org=await env.DB.prepare('SELECT id,name,slug,currency FROM organizations WHERE slug=?').bind(slug).first();
- const account=org?await env.DB.prepare("SELECT a.*,c.first_name,c.last_name,c.customer_code,c.status customer_status FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id AND c.organization_id=a.organization_id WHERE a.organization_id=? AND a.email=? AND a.status='active'").bind(org.id,email).first():null;
- if(!account||!await verifyPw(b.password,account.password_hash,account.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid portal credentials'},401)}
- await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,email).run();
+ let workspace=typeof b.workspace==='string'?b.workspace.trim().toLowerCase():typeof b.slug==='string'?b.slug.trim().toLowerCase():'';
+ let email=typeof b.email==='string'?b.email.trim().toLowerCase():'';
+ let accountNumber='';
+ const identity=typeof b.identity==='string'?b.identity.trim():'';
+ if(identity){
+  const slash=identity.indexOf('/');
+  if(slash>0){workspace=identity.slice(0,slash).trim().toLowerCase();accountNumber=identity.slice(slash+1).trim().toUpperCase();email='';}
+  else if(identity.includes('@')){email=identity.toLowerCase();accountNumber='';}
+  else{accountNumber=identity.toUpperCase();email='';}
+ }
+ if((!email&&!accountNumber)||typeof b.password!=='string'||!b.password)return json({error:'Account identity and password are required'},400);
+ if(email&&!vEmail(email))return json({error:'Enter a valid email address'},400);
+ if(accountNumber&&!/^[A-Z0-9._-]{2,80}$/.test(accountNumber))return json({error:'Enter a valid account number'},400);
+ const rateKey=(identity||email||accountNumber).trim().toLowerCase();
+ if(await loginRateLimited(env,ip,rateKey))return json({error:'Too many login attempts. Try again in 15 minutes.'},429);
+ let org=null,account=null;
+ const accountSelect="SELECT a.*,c.first_name,c.last_name,c.customer_code,c.status customer_status FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id AND c.organization_id=a.organization_id WHERE a.organization_id=? AND a.status='active' AND ";
+ if(workspace){
+  org=await env.DB.prepare('SELECT id,name,slug,currency FROM organizations WHERE slug=?').bind(workspace).first();
+  if(org){
+   account=email
+    ?await env.DB.prepare(accountSelect+'a.email=?').bind(org.id,email).first()
+    :await env.DB.prepare(accountSelect+'c.customer_code=?').bind(org.id,accountNumber).first();
+  }
+ }else{
+  const column=email?'a.email':'c.customer_code',value=email||accountNumber;
+  const matches=await env.DB.prepare("SELECT a.*,c.first_name,c.last_name,c.customer_code,c.status customer_status,o.name org_name,o.slug org_slug,o.currency org_currency FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id AND c.organization_id=a.organization_id JOIN organizations o ON o.id=a.organization_id WHERE a.status='active' AND "+column+"=? LIMIT 2").bind(value).all();
+  const rows=matches.results||[];
+  if(rows.length===1){account=rows[0];org={id:account.organization_id,name:account.org_name,slug:account.org_slug,currency:account.org_currency};}
+ }
+ if(!account||account.customer_status!=='active'||!await verifyPw(b.password,account.password_hash,account.password_salt)){
+  await recordLoginFailure(env,ip,rateKey);return json({error:'Invalid portal credentials'},401);
+ }
+ await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
  await env.DB.prepare("UPDATE customer_portal_accounts SET last_login=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(account.id,org.id).run();
  const token=await signJWT({principalType:'customer',portalAccountId:account.id,customerId:account.customer_id,orgId:org.id,tokenVersion:Number(account.token_version||0),exp:Date.now()+604800000},getSec(env));
  await audit(env,org.id,null,'customer_portal_login','Customer portal login',ip);
@@ -475,8 +503,8 @@ async function authReg(r,env,ip){
  const slug=b.slug.toLowerCase().replace(/[^a-z0-9-]/g,'').replace(/-+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);if(!slug)return json({error:'Invalid organization slug'},400);
  if(await env.DB.prepare('SELECT id FROM organizations WHERE slug=?').bind(slug).first())return json({error:'Slug taken'},409);
  const email=b.email.toLowerCase();
- // Email addresses are unique within an ISP workspace, not globally across the SaaS.
- // The database's organization-scoped unique constraint remains the source of truth.
+ // The current D1 users.email column has a global UNIQUE constraint.
+ // Keep registration behavior aligned with the deployed schema until a safe users-table migration is approved.
  const oid=uuid(),uid=uuid(),{hash,salt}=await hashPw(b.password);
  try{await env.DB.batch([env.DB.prepare('INSERT INTO organizations(id,name,slug,plan,email,phone)VALUES(?,?,?,?,?,?)').bind(oid,b.companyName,slug,'free',email,b.phone||null),env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(uid,oid,email,hash,salt,b.name,'owner',b.phone||null)]);}catch(e){const message=String(e?.message||'');if(/unique|constraint/i.test(message))return json({error:'Email or organization slug is already registered'},409);throw e;}
  await audit(env,oid,uid,'register','Company:'+b.companyName,ip);
