@@ -348,7 +348,7 @@ function mountAiAssistant(){
  root.querySelector("#nxAiLaunch").onclick=toggle;root.querySelector("#nxAiClose").onclick=toggle;
  const submit=async()=>{
   const value=input.value.trim();if(!value||send.disabled)return;
-  input.value="";history.push({role:"user",content:value});if(history.length>12)history.shift();add("user",value);
+  input.value="";history.push({role:"user",content:value});if(history.length>12)history.splice(0,2);add("user",value);
   send.disabled=true;send.textContent="...";
   const pending=add("model","Soch raha hoon...");
   try{const result=await call("/api/v1/ai/chat",{method:"POST",body:JSON.stringify({messages:history})});pending.remove();history.push({role:"model",content:result.answer});if(history.length>12)history.shift();add("model",result.answer);}
