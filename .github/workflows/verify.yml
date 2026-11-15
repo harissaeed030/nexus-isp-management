@@ -103,3 +103,17 @@ jobs:
           assert.match(html, /NEXUS/i, "Pages frontend content");
           console.log("Pages production: HTTP 200 and NEXUS HTML verified");
           NODE
+
+  staging-portal-e2e:
+    name: Tenant isolation and customer portal E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Exercise staging tenant and customer portal flows
+        env:
+          NEXUS_STAGING_API: https://nexus-saas-api-staging.harissaeed030.workers.dev
+        run: node worker/scripts/staging-portal-e2e.mjs
