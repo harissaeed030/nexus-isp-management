@@ -9,12 +9,12 @@ async function verifyPw(pw,h,salt){if(!h)return false;if(!salt)return pw===h;con
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
 async function signJWT(p,sec){const e=new TextEncoder();const h=b64u(e.encode(JSON.stringify({alg:'HS256',typ:'JWT'})));const p64=b64u(e.encode(JSON.stringify(p)));const d=h+'.'+p64;const k=await crypto.subtle.importKey('raw',e.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=await crypto.subtle.sign('HMAC',k,e.encode(d));return d+'.'+b64u(new Uint8Array(sig))}
-async function verifyJWT(t,sec){try{const ps=t.split('.');if(ps.length!==3)return null;const d=ps[0]+'.'+ps[1];const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(sec),{name:'HMAC',hash:'SHA-256'},false,['verify']);if(!await crypto.subtle.verify('HMAC',k,b64uDec(ps[2]),new TextEncoder().encode(d)))return null;const pl=JSON.parse(new TextDecoder().decode(b64uDec(ps[1])));if(pl.exp&&Date.now()>pl.exp)return null;return pl}catch{return null}}
+async function verifyJWT(t,sec){try{const ps=t.split('.');if(ps.length!==3)return null;const d=ps[0]+'.'+ps[1];const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(sec),{name:'HMAC',hash:'SHA-256'},false,['verify']);if(!await crypto.subtle.verify('HMAC',k,b64uDec(ps[2]),new TextEncoder().encode(d)))return null;const pl=JSON.parse(new TextDecoder().decode(b64uDec(ps[1])));if(!Number.isSafeInteger(pl.exp)||pl.exp<=Date.now())return null;return pl}catch{return null}}
 function b64u(b){return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function b64uDec(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const b=atob(s);const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
 function getSec(env){if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');return env.JWT_SECRET}
 async function getAuth(r,env){const a=r.headers.get('Authorization');if(!a||!a.startsWith('Bearer '))return null;return await verifyJWT(a.slice(7),getSec(env))}
-async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT INTO audit_log(id,organization_id,user_id,action,detail,ip_address)VALUES(?,?,?,?,?,?)').bind(uuid(),oid,uid,act,det||null,ip||null).run()}catch{}}
+async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT INTO audit_log(id,organization_id,user_id,action,detail,ip_address)VALUES(?,?,?,?,?,?)').bind(uuid(),oid,uid,act,det||null,ip||null).run()}catch(e){console.error('NEXUS_AUDIT_WRITE_FAILED',{action:act,organizationId:oid,error:e?.message||String(e)})}}
 function vEmail(e){return/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e||'')}
 function vReq(o,f){return f.filter(x=>!o[x]&&o[x]!==0)}
 function s(v){return typeof v==='string'?v.trim():v}
@@ -24,7 +24,7 @@ function pg(url,d=20){const page=Math.max(1,parseInt(url.searchParams.get('page'
 function corsHeaders(request,env){
  const origin=request.headers.get('Origin'),allowed=(env.ALLOWED_ORIGINS||'').split(',').map(v=>v.trim()).filter(Boolean),h=new Headers(CORS);
  h.set('Access-Control-Max-Age','86400');
- if(origin&&(allowed.length?allowed.includes(origin):true)){h.set('Access-Control-Allow-Origin',origin);h.set('Vary','Origin')}
+ if(origin&&allowed.includes(origin)){h.set('Access-Control-Allow-Origin',origin);h.set('Vary','Origin')}
  return h
 }
 function withCors(response,request,env){for(const [k,v] of corsHeaders(request,env))response.headers.set(k,v);return response}
@@ -171,7 +171,7 @@ async function authReg(r,env,ip){
  try{
   await env.DB.batch([
    env.DB.prepare('INSERT INTO organizations(id,name,slug,plan,email,phone)VALUES(?,?,?,?,?,?)').bind(oid,b.companyName,slug,'free',email,b.phone||null),
-   env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(uid,oid,email,hash,salt,b.name,'admin',b.phone||null)
+   env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(uid,oid,email,hash,salt,b.name,'owner',b.phone||null)
   ]);
  }catch(e){
   const message=String(e?.message||'');
@@ -179,8 +179,8 @@ async function authReg(r,env,ip){
   throw e;
  }
  await audit(env,oid,uid,'register','Company:'+b.companyName,ip);
- const tk=await signJWT({userId:uid,orgId:oid,role:'admin',email,name:b.name,exp:Date.now()+604800000},getSec(env));
- return json({success:true,token:tk,user:{id:uid,email,name:b.name,role:'admin',orgId:oid}},201)
+ const tk=await signJWT({userId:uid,orgId:oid,role:'owner',email,name:b.name,exp:Date.now()+604800000},getSec(env));
+ return json({success:true,token:tk,user:{id:uid,email,name:b.name,role:'owner',orgId:oid}},201)
 }
 
 async function authLogin(r,env,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.email||!b.password)return json({error:'Email and password required'},400);
