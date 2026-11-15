@@ -128,8 +128,10 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
       if(db.prepare("SELECT id FROM billing_runs WHERE tenant_id=? AND billing_period=?").get(tenant,period))throw new Error("BILLING_PERIOD_EXISTS");
       const subs=db.prepare("SELECT s.id,s.customer_id,p.monthly_price_pkr,c.status customer_status FROM subscriptions s JOIN packages p ON p.id=s.package_id JOIN customers c ON c.id=s.customer_id WHERE s.tenant_id=? AND s.status='active' AND p.status='active' AND c.status='active'").all(tenant);
       const insert=db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES(?,?,?,?,?,?)");
+      const nextNumber=db.prepare("INSERT INTO invoice_sequences(tenant_id,billing_period,last_number) VALUES(?,?,1) ON CONFLICT(tenant_id,billing_period) DO UPDATE SET last_number=last_number+1 RETURNING last_number");
       for(const s of subs){
-        const invoiceNo="NXS-"+period.replace("-","")+"-"+s.id.replace(/-/g,"").slice(0,10).toUpperCase();
+        const sequence=nextNumber.get(tenant,period);
+        const invoiceNo="INV-"+period.replace("-","")+"-"+String(sequence.last_number).padStart(6,"0");
         insert.run(id(),tenant,s.customer_id,invoiceNo,s.monthly_price_pkr,dueDate);created++;
       }
       db.prepare("INSERT INTO billing_runs(id,tenant_id,billing_period,invoices_created,created_by) VALUES(?,?,?,?,?)").run(id(),tenant,period,created,req.user.id);
@@ -148,9 +150,14 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
 
   app.get("/api/v1/reports/summary",auth,reportsRead,(req,res)=>{
     const tenant=req.user.tenant_id;
-    const revenue=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) total FROM payments WHERE tenant_id=?").get(tenant).total;
-    const outstanding=db.prepare("SELECT COALESCE(SUM(i.amount_pkr-COALESCE(p.paid,0)),0) total FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount_pkr) paid FROM payments WHERE tenant_id=? GROUP BY invoice_id) p ON p.invoice_id=i.id WHERE i.tenant_id=? AND i.status IN ('unpaid','partial')").get(tenant,tenant).total;
-    const monthly=db.prepare("SELECT substr(received_at,1,7) month,SUM(amount_pkr) revenue FROM payments WHERE tenant_id=? GROUP BY substr(received_at,1,7) ORDER BY month DESC LIMIT 12").all(tenant);
+    const revenue=db.prepare("SELECT COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE tenant_id=?),0)-COALESCE((SELECT SUM(amount_pkr) FROM payment_reversals WHERE tenant_id=?),0) total").get(tenant,tenant).total;
+    const outstanding=db.prepare("SELECT COALESCE(SUM(CASE WHEN i.amount_pkr-COALESCE(p.paid,0)+COALESCE(r.reversed,0)-COALESCE(c.credits,0)>0 THEN i.amount_pkr-COALESCE(p.paid,0)+COALESCE(r.reversed,0)-COALESCE(c.credits,0) ELSE 0 END),0) total FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount_pkr) paid FROM payments WHERE tenant_id=? GROUP BY invoice_id) p ON p.invoice_id=i.id LEFT JOIN (SELECT p.invoice_id,SUM(r.amount_pkr) reversed FROM payment_reversals r JOIN payments p ON p.id=r.payment_id WHERE r.tenant_id=? GROUP BY p.invoice_id) r ON r.invoice_id=i.id LEFT JOIN (SELECT invoice_id,SUM(amount_pkr) credits FROM credit_notes WHERE tenant_id=? GROUP BY invoice_id) c ON c.invoice_id=i.id WHERE i.tenant_id=?").get(tenant,tenant,tenant,tenant).total;
+    const monthlyPaid=db.prepare("SELECT substr(received_at,1,7) month,SUM(amount_pkr) amount FROM payments WHERE tenant_id=? GROUP BY substr(received_at,1,7)").all(tenant);
+    const monthlyReversed=db.prepare("SELECT substr(r.created_at,1,7) month,SUM(r.amount_pkr) amount FROM payment_reversals r WHERE r.tenant_id=? GROUP BY substr(r.created_at,1,7)").all(tenant);
+    const monthlyMap=new Map();
+    for(const row of monthlyPaid)monthlyMap.set(row.month,Number(row.amount));
+    for(const row of monthlyReversed)monthlyMap.set(row.month,(monthlyMap.get(row.month)||0)-Number(row.amount));
+    const monthly=[...monthlyMap].sort((a,b)=>b[0].localeCompare(a[0])).slice(0,12).map(([month,revenue])=>({month,revenue}));
     const invoiceCounts=db.prepare("SELECT status,COUNT(*) count FROM invoices WHERE tenant_id=? GROUP BY status").all(tenant);
     res.json({success:true,data:{revenuePkr:revenue,outstandingPkr:outstanding,monthlyRevenue:monthly,invoiceCounts}});
   });
