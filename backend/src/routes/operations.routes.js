@@ -148,9 +148,14 @@ export function registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash
 
   app.get("/api/v1/reports/summary",auth,reportsRead,(req,res)=>{
     const tenant=req.user.tenant_id;
-    const revenue=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) total FROM payments WHERE tenant_id=?").get(tenant).total;
-    const outstanding=db.prepare("SELECT COALESCE(SUM(i.amount_pkr-COALESCE(p.paid,0)),0) total FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount_pkr) paid FROM payments WHERE tenant_id=? GROUP BY invoice_id) p ON p.invoice_id=i.id WHERE i.tenant_id=? AND i.status IN ('unpaid','partial')").get(tenant,tenant).total;
-    const monthly=db.prepare("SELECT substr(received_at,1,7) month,SUM(amount_pkr) revenue FROM payments WHERE tenant_id=? GROUP BY substr(received_at,1,7) ORDER BY month DESC LIMIT 12").all(tenant);
+    const revenue=db.prepare("SELECT COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE tenant_id=?),0)-COALESCE((SELECT SUM(amount_pkr) FROM payment_reversals WHERE tenant_id=?),0) total").get(tenant,tenant).total;
+    const outstanding=db.prepare("SELECT COALESCE(SUM(CASE WHEN i.amount_pkr-COALESCE(p.paid,0)+COALESCE(r.reversed,0)-COALESCE(c.credits,0)>0 THEN i.amount_pkr-COALESCE(p.paid,0)+COALESCE(r.reversed,0)-COALESCE(c.credits,0) ELSE 0 END),0) total FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount_pkr) paid FROM payments WHERE tenant_id=? GROUP BY invoice_id) p ON p.invoice_id=i.id LEFT JOIN (SELECT p.invoice_id,SUM(r.amount_pkr) reversed FROM payment_reversals r JOIN payments p ON p.id=r.payment_id WHERE r.tenant_id=? GROUP BY p.invoice_id) r ON r.invoice_id=i.id LEFT JOIN (SELECT invoice_id,SUM(amount_pkr) credits FROM credit_notes WHERE tenant_id=? GROUP BY invoice_id) c ON c.invoice_id=i.id WHERE i.tenant_id=?").get(tenant,tenant,tenant,tenant).total;
+    const monthlyPaid=db.prepare("SELECT substr(received_at,1,7) month,SUM(amount_pkr) amount FROM payments WHERE tenant_id=? GROUP BY substr(received_at,1,7)").all(tenant);
+    const monthlyReversed=db.prepare("SELECT substr(r.created_at,1,7) month,SUM(r.amount_pkr) amount FROM payment_reversals r WHERE r.tenant_id=? GROUP BY substr(r.created_at,1,7)").all(tenant);
+    const monthlyMap=new Map();
+    for(const row of monthlyPaid)monthlyMap.set(row.month,Number(row.amount));
+    for(const row of monthlyReversed)monthlyMap.set(row.month,(monthlyMap.get(row.month)||0)-Number(row.amount));
+    const monthly=[...monthlyMap].sort((a,b)=>b[0].localeCompare(a[0])).slice(0,12).map(([month,revenue])=>({month,revenue}));
     const invoiceCounts=db.prepare("SELECT status,COUNT(*) count FROM invoices WHERE tenant_id=? GROUP BY status").all(tenant);
     res.json({success:true,data:{revenuePkr:revenue,outstandingPkr:outstanding,monthlyRevenue:monthly,invoiceCounts}});
   });
