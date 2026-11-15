@@ -40,8 +40,19 @@ These are GitHub-hosted PR checks on the tested head. They are not evidence of l
 
 - `build/nexus-isp-core` is the local Node.js/SQLite development line.
 - `main` contains the separately released Cloudflare Worker/D1 customer-portal path.
-- The two lines have diverged (206 commits ahead and 9 behind in the comparison performed for this audit). Do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker.
+- The two lines have diverged (208 commits ahead and 11 behind at the latest check; current development head `5b418f6b5ff93e45337768efaf0ac14bc6e8db29`). Do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker. Do not merge them blindly or deploy this branch's minimal `worker/` health-check foundation over the released production Worker.
 - The older draft tenant-login PR #48 is not required for this integration: the merged local API already supports tenant-aware login selection via `tenantSlug` and safely rejects ambiguous identities.
+
+## Latest branch-head CI — 2026-11-15
+
+The current `build/nexus-isp-core` head is `5b418f6b5ff93e45337768efaf0ac14bc6e8db29`. Both latest branch-head workflows completed successfully:
+
+| Workflow | Run | Result |
+|---|---:|---|
+| Nexus backend verification | [43681795469](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43681795469) | Success |
+| Nexus backend checks | [43681795561](https://github.com/harissaeed030/nexus-isp-management/actions/runs/43681795561) | Success |
+
+This confirms the latest development branch head passed the configured GitHub backend checks. It does not clear the live-device, independent security review, production secret configuration, or backup/restore release gates below.
 
 ## Changes merged in PR #39
 
