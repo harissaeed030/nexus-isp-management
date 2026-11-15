@@ -49,14 +49,14 @@ A table rebuild was not attempted. Rebuilding users can affect foreign-key depen
 
 | Table | Production | Staging |
 |---|---:|---:|
-| organizations | 1 | 3 |
-| users | 1 | 3 |
-| customers | 0 | 4 |
+| organizations | 1 | 5 |
+| users | 1 | 5 |
+| customers | 0 | 5 |
 | invoices | 0 | 2 |
 | payments | 0 | 0 |
 | customer portal accounts | 0 | 4 |
 
-Staging contains synthetic QA data. Production customer tables are empty at the time of this audit.
+Staging contains synthetic QA data. Two synthetic tenants from the first E2E attempt (run 43730835265) remain because their cleanup requests coincided with the long-running D1 export and returned HTTP 500. The later E2E run passed and cleaned its own tenants. These two remaining tenants are staging-only test fixtures, not customer data. Production customer tables are empty at the time of this audit.
 
 ## Runtime checks
 
