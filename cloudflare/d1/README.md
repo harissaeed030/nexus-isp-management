@@ -17,7 +17,7 @@ Both production and staging are now at D1 schema migration 0008.
 - Production records were preserved. At release verification, production had 1 organization, 1 owner user, 0 customers, 0 invoices, 0 payments and 0 customer portal accounts.
 - The production Worker is deployed at version 24 (100% traffic).
 
-The SQL artifacts for migrations 0001-0005 are not present in the current repository history. Their applied names and timestamps are recorded in each database's `schema_migrations` table. Do not invent replacement historical migrations or rerun them. `worker/schema.sql` is the canonical full snapshot for creating a fresh database at schema version 0007.
+The SQL artifacts for migrations 0001-0005 are not present in the current repository history. Their applied names and timestamps are recorded in each database's `schema_migrations` table. Do not invent replacement historical migrations or rerun them. `worker/schema.sql` is the canonical full snapshot for creating a fresh database at schema version 0008.
 
 ## Runtime boundary
 
