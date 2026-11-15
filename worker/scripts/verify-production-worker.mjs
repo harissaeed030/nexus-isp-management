@@ -28,6 +28,18 @@ assert.ok(!portalFrontend.includes("/api/v1/customer-portal"), "Customer portal 
 assert.ok(production.includes("const SEC_HDRS"), "Production security headers missing");
 assert.ok(production.includes("function withCors"), "Production CORS wrapper missing");
 assert.ok(!production.includes("/api/e2e/tenant"), "Staging-only destructive cleanup route must not ship to production");
+for (const [label, source] of [["staging", staging], ["production", production]]) {
+  assert.ok(source.includes("function safeErrorType(error)"), label + " Worker must classify errors with an allowlist");
+  assert.ok(source.includes("NEXUS_AUDIT_WRITE_FAILED"), label + " audit failure event missing");
+  assert.ok(source.includes("{action:act,errorType:safeErrorType(e)}"), label + " audit logs must omit raw exception text and organization IDs");
+  assert.ok(source.includes("NEXUS_SCHEDULED_BILLING_FAILED"), label + " scheduled billing failure event missing");
+  assert.ok(source.includes("NEXUS_SCHEDULED_BILLING_ORG_FAILED"), label + " per-organization billing failure event missing");
+  assert.ok(!source.includes("organizationId:oid,error:"), label + " audit log exposes organization ID or raw error");
+  assert.ok(!source.includes("org.id,e?.message"), label + " scheduled billing log exposes organization ID or raw error");
+  assert.ok(!source.includes("e?.message||String(e)"), label + " Worker logs raw exception text");
+  assert.ok(!source.includes("e?.message||e)"), label + " Worker logs raw exception text");
+}
+
 assert.ok(staging.includes("/api/e2e/tenant"), "Staging cleanup route must remain available for staging E2E");
 assert.match(productionConfig, /name = "nexus-saas-api"/);
 assert.match(productionConfig, /database_id = "ce88098b-bff4-4d06-a0df-7bf29622a085"/);
