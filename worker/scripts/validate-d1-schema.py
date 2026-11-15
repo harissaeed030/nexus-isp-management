@@ -9,7 +9,7 @@ migration = (root / "cloudflare" / "d1" / "migrations" / "0007_customer_portal_t
 
 def normalize_sql(value):
     compact = " ".join((value or "").split()).lower()
-    return re.sub(r"\\s*([(),])\\s*", r"\\1", compact)
+    return re.sub(r"\s*([(),])\s*", r"\1", compact)
 
 def objects(db):
     return {
