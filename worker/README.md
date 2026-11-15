@@ -46,3 +46,8 @@ npx wrangler deploy --config wrangler.production.toml
 ```
 
 The first command targets staging; the second targets production. Before any production deployment, verify the production D1 backup, migration state, inherited bindings and staging E2E checks. Never use a staging config against production data.
+
+
+## Staging security deployment — 2026-11-15
+
+Staging Worker version `d79d6f84-62eb-4339-8dbd-927a4aa109a1` was uploaded and deployed at 100% traffic after the logging-redaction source checks passed. The upload preserved the existing `DB` D1 binding and the `ALLOWED_ORIGINS`, `JWT_SECRET`, and `TURNSTILE_SECRET_KEY` secret bindings. Production Worker deployment is kept separate and must follow staging live-smoke verification.
