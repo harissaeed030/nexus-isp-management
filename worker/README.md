@@ -51,3 +51,5 @@ The first command targets staging; the second targets production. Before any pro
 ## Staging security deployment — 2026-11-15
 
 Staging Worker version `d79d6f84-62eb-4339-8dbd-927a4aa109a1` was uploaded and deployed at 100% traffic after the logging-redaction source checks passed. The upload preserved the existing `DB` D1 binding and the `ALLOWED_ORIGINS`, `JWT_SECRET`, and `TURNSTILE_SECRET_KEY` secret bindings. Production Worker deployment is kept separate and must follow staging live-smoke verification.
+
+Production Worker version `7f85ed27-e3bc-47bd-9ebc-24a6a0e04dfb` was deployed at 100% traffic after staging version `d79d6f84-62eb-4339-8dbd-927a4aa109a1` passed live endpoint smoke verification and tenant-isolation E2E. The production upload preserved its existing `DB` D1 binding and `ALLOWED_ORIGINS`, `JWT_SECRET`, and `TURNSTILE_SECRET_KEY` secret bindings. The change only redacts organization identifiers and raw exception text from application error logs; it does not alter API routes or database records.
