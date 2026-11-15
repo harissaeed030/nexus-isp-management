@@ -62,7 +62,7 @@ app.get("/api/v1/invoices",auth,(q,r)=>r.json({success:true,data:db.prepare("SEL
 app.post("/api/v1/invoices",auth,(q,r)=>{
   const b=q.body||{},a=Number(b.amountPkr),dueDate=b.dueDate??null;
   if(!required(b.customerId)||!Number.isInteger(a)||a<0)return fail(r,400,"Customer and valid amount required.");
-  if(dueDate!==null&&(typeof dueDate!=="string"||!/^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$/.test(dueDate)||Number.isNaN(Date.parse(dueDate))||new Date(dueDate+"T00:00:00Z").toISOString().slice(0,10)!==dueDate))return fail(r,400,"Due date must be a real calendar date in YYYY-MM-DD format.");
+  if(dueDate!==null&&(typeof dueDate!=="string"||!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(dueDate)||Number.isNaN(Date.parse(dueDate))||new Date(dueDate+"T00:00:00Z").toISOString().slice(0,10)!==dueDate))return fail(r,400,"Due date must be a real calendar date in YYYY-MM-DD format.");
   if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,q.user.tenant_id))return fail(r,404,"Customer not found.");
   const iid=id(),period=required(b.billingPeriod)?b.billingPeriod:new Date().toISOString().slice(0,7);
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(period))return fail(r,400,"Billing period must use YYYY-MM format.");
