@@ -36,7 +36,7 @@ export const ROLE_PERMISSIONS = {
   billing: ["dashboard.read","customers.read","packages.read","subscriptions.read","billing.read","invoices.create","payments.create","billing.adjust","refunds.manage","billing.reconcile","billing.generate","reports.read","notifications.manage","operations.read","operations.manage"],
   noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage","routers.provision","olts.read","olts.manage","operations.read"],
   support: ["dashboard.read","customers.read","packages.read","subscriptions.read","tickets.read","tickets.manage","operations.read"],
-  technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read","olts.read"],
+  technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read","olts.read","operations.read"],
   staff: ["dashboard.read"]
 };
 export function roleHasPermission(role, permission) {
