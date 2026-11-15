@@ -5,6 +5,7 @@ const base = (process.env.NEXUS_STAGING_URL || 'https://nexus-saas-api-staging.h
 const suffix = randomUUID().replaceAll('-', '').slice(0, 18);
 const tenantSlug = `nexus-stage-${suffix}`;
 const ownerEmail = `owner-${suffix}@nexus.invalid`;
+const secondOwnerEmail = `owner-second-${suffix}@nexus.invalid`;
 const portalEmail = `portal-${suffix}@nexus.invalid`;
 const password = 'Nexus-Staging-Only-2026!';
 const checks = [];
@@ -62,31 +63,29 @@ try {
   const secondTenantRegistration = await request('POST', '/api/auth/register', {
     companyName: `NEXUS staging second tenant ${suffix}`,
     slug: secondTenantSlug,
-    email: ownerEmail,
+    email: secondOwnerEmail,
     password,
     name: 'Second Staging Owner'
   });
-  const secondOwner = ok('same owner email may register a separate ISP tenant', secondTenantRegistration, 201);
+  const secondOwner = ok('second ISP tenant registers with its own globally unique owner email', secondTenantRegistration, 201);
   secondOwnerToken = secondOwner.token;
   assert.ok(secondOwnerToken, 'second tenant registration must return an owner token');
   assert.notEqual(secondOwner.user.orgId, owner.user.orgId);
 
-  const ambiguousLogin = await request('POST', '/api/auth/login', { email: ownerEmail, password });
-  ok('ambiguous staff email login requires workspace slug', ambiguousLogin, 400);
   const tenantLogin = await request('POST', '/api/auth/login', {
     email: ownerEmail, password, workspace: tenantSlug
   });
   const tenantLoginData = ok('staff login scoped to the first workspace', tenantLogin, 200);
   assert.equal(tenantLoginData.user.orgId, owner.user.orgId);
   const secondTenantLogin = await request('POST', '/api/auth/login', {
-    email: ownerEmail, password, workspace: secondTenantSlug
+    email: secondOwnerEmail, password, workspace: secondTenantSlug
   });
-  const secondTenantLoginData = ok('same staff email authenticates only in the second workspace', secondTenantLogin, 200);
+  const secondTenantLoginData = ok('second owner authenticates only in the second workspace', secondTenantLogin, 200);
   assert.equal(secondTenantLoginData.user.orgId, secondOwner.user.orgId);
   const wrongWorkspaceLogin = await request('POST', '/api/auth/login', {
-    email: ownerEmail, password, workspace: 'not-this-tenant'
+    email: ownerEmail, password, workspace: secondTenantSlug
   });
-  ok('staff login rejects a mismatched workspace', wrongWorkspaceLogin, 401);
+  ok('staff login rejects an email from another workspace', wrongWorkspaceLogin, 401);
 
   const me = await request('GET', '/api/auth/me', undefined, ownerToken);
   ok('owner authentication and tenant identity', me, 200);
