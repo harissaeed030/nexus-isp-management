@@ -2,14 +2,14 @@
 
 ## Outcome
 
-Migration 0008 is applied to production and staging. Index parity is complete. The two databases are not yet byte-for-byte schema-identical because their legacy users table definitions differ. No production table rebuild was attempted.
+Migrations 0008 and 0009 are applied to production and staging. Migration 0009 repaired the explicit global user-email unique index that was found missing in production during a follow-up live read. The expected global, organization-scoped case-insensitive, and organization lookup indexes were verified live in both environments. The two databases are not yet byte-for-byte schema-identical because their legacy users table definitions differ. No production table rebuild was attempted.
 
 ## Environments and backups
 
 | Environment | D1 database | Migration ledger | Pre-change export |
 |---|---|---:|---|
-| Production | nexus-saas-db | 8 | Completed; bookmark 00000098-00000000-00005124-c54409adce6ceb3d0f8df19215df65df |
-| Staging | nexus-saas-staging-db | 8 | Completed; bookmark 0000005e-0000000c-00005124-3bfa769fc30258ed74eb2814df7718a8 |
+| Production | nexus-saas-db | 9 | Before migration 0008: 00000098-00000000-00005124-c54409adce6ceb3d0f8df19215df65df; before migration 0009: 00000099-00000000-00005124-92593d88a25ddcdb7c0601a037b70004 |
+| Staging | nexus-saas-staging-db | 9 | Before migration 0008: 0000005e-0000000c-00005124-3bfa769fc30258ed74eb2814df7718a8; before migration 0009: 0000005f-0000004a-00005124-4ad50938687c5ea3b1975579db530105 |
 
 The export download URLs are temporary and were not committed to Git.
 
@@ -23,6 +23,10 @@ Before applying the indexes, both databases were checked for duplicate exact ema
 - schema_migrations row 8: 0008_user_email_index_parity
 
 Staging negative tests confirmed that a duplicate exact email and a same-organization case-insensitive duplicate are rejected by the database.
+
+## Migration 0009 follow-up
+
+A subsequent read-only live check found that the explicit global unique index `idx_users_email_global` was still absent in production even though migration 0008 was recorded. A no-duplicate preflight was completed in both databases. Additive migration `0009_repair_global_user_email_index.sql` was then applied to staging and production after fresh exports. Both databases now record migration 9. Live verification confirmed `idx_users_email_global`, `idx_users_org_email_ci`, and `idx_users_organization` in both environments. Migration 0009 does not rebuild `users` or modify user rows.
 
 ## Live schema comparison
 
@@ -68,6 +72,6 @@ Staging contains synthetic QA data. Two synthetic tenants from the first E2E att
 
 ## Remaining work
 
-1. Decide whether to preserve the stricter production users schema or standardize both databases with a separately reviewed rebuild.
+1. Decide whether to preserve the stricter production users schema or standardize both databases with a separately reviewed rebuild. Index parity is complete at migration 0009; only the `users` table definition remains different.
 2. If standardizing, implement a backup-backed migration with foreign-key dependency checks, a staging rehearsal, and post-migration identity/login tests.
 3. Complete real MikroTik, HSGQ OLT, Huawei ONU, and TR-069 hardware tests; these require access to the user's physical network equipment.
