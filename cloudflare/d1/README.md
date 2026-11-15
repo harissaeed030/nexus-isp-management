@@ -7,17 +7,17 @@
 
 ## Current state after the 2026-11-15 release
 
-Both production and staging are now at D1 schema migration 0008.
+Staging is at D1 schema migration 0008. Production records migration 0008, but a fresh read-only verification on 2026-11-15 found the explicit `idx_users_email_global` index absent; migration 0009 is the reviewed repair.
 
 - Production migration 0007 was applied after a full D1 export.
 - `customer_portal_accounts` exists in both databases.
 - Both tenant-integrity triggers (`trg_d1_portal_org_i`, `trg_d1_portal_org_u`) exist in both databases.
-- Migration 0008 was applied to staging and production after duplicate preflight and fresh D1 exports. Both now have the global email unique index, case-insensitive organization email unique index, and organization lookup index.
+- Migration 0008 is recorded in both databases. Staging has the global email unique index, case-insensitive organization email unique index, and organization lookup index. Production has the organization-scoped case-insensitive index, but the explicit global index was absent on the latest live recheck. A duplicate-email preflight returned no conflicts in either database.
 - A live object comparison found 99 schema objects in each database. All indexes, triggers, and tables except the users table have matching normalized definitions. The users table has a legacy production definition with stricter NOT NULL password hash, staff default role, and no generated ID default; staging has the canonical member default, nullable password hash, and generated ID default. This remaining table-shape difference is documented in docs/D1-LIVE-SCHEMA-AUDIT-2026-11-15.md; no risky production table rebuild was attempted.
 - Production records were preserved. At release verification, production had 1 organization, 1 owner user, 0 customers, 0 invoices, 0 payments and 0 customer portal accounts.
 - The production Worker is deployed at version 24 (100% traffic).
 
-The SQL artifacts for migrations 0001-0005 are not present in the current repository history. Their applied names and timestamps are recorded in each database's `schema_migrations` table. Do not invent replacement historical migrations or rerun them. `worker/schema.sql` is the canonical full snapshot for creating a fresh database at schema version 0008.
+The SQL artifacts for migrations 0001-0005 are not present in the current repository history. Their applied names and timestamps are recorded in each database's `schema_migrations` table. Do not invent replacement historical migrations or rerun them. `worker/schema.sql` is the canonical full snapshot for creating a fresh database at schema version 0009.
 
 ## Runtime boundary
 
@@ -27,6 +27,10 @@ The local Node/SQLite backend is a separate offline development runtime, not a D
 
 migrations/0008_user_email_index_parity.sql is additive and idempotent. It creates the organization lookup index, a global unique email index and a case-insensitive per-organization unique email index. It does not rebuild the users table or rewrite user records. It was applied to staging first and then production after duplicate preflight and fresh D1 exports. Both databases now record migration 8.
 
+## Migration 0009
+
+`migrations/0009_repair_global_user_email_index.sql` re-creates the missing explicit global unique index on `users(email)` and records version 9. It is additive and idempotent. Apply to staging first, verify, then take a fresh production export and apply to production. The live preflight found no duplicate exact or case-insensitive emails; do not skip backup or post-migration index verification.
+
 ## Migration 0007
 
 `migrations/0007_customer_portal_tenant_guards.sql` is additive and idempotent. It creates the customer portal account table, enforces that the account's customer belongs to the same organization on insert/update, and records migration 7. It does not drop or rewrite existing customer, invoice, payment or user records.
@@ -34,8 +38,8 @@ migrations/0008_user_email_index_parity.sql is additive and idempotent. It creat
 ## Schema artifacts
 
 - `worker/schema-production-v6.sql`: schema-only production baseline before migration 0007.
-- worker/schema.sql: canonical full schema snapshot at migration 0008.
-- worker/scripts/validate-d1-schema.py: validates the checked-in production-v6 snapshot through migration 0008, tenant guards and user email uniqueness. It is not a live database schema diff; consult the live audit report for actual production/staging comparison.
+- worker/schema.sql: canonical full schema snapshot at migration 0009.
+- worker/scripts/validate-d1-schema.py: validates the checked-in production-v6 snapshot through migration 0009, tenant guards and user email uniqueness. It is not a live database schema diff; consult the live audit report for actual production/staging comparison.
 
 Use schema snapshots only for empty databases. Existing databases must be upgraded with incremental migrations.
 

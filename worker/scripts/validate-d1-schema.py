@@ -7,6 +7,7 @@ baseline = (root / "worker" / "schema-production-v6.sql").read_text()
 current = (root / "worker" / "schema.sql").read_text()
 migration_7 = (root / "cloudflare" / "d1" / "migrations" / "0007_customer_portal_tenant_guards.sql").read_text()
 migration_8 = (root / "cloudflare" / "d1" / "migrations" / "0008_user_email_index_parity.sql").read_text()
+migration_9 = (root / "cloudflare" / "d1" / "migrations" / "0009_repair_global_user_email_index.sql").read_text()
 
 def normalize_sql(value):
     compact = " ".join((value or "").split()).lower()
@@ -30,6 +31,10 @@ assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=7").fetch
 before.executescript(migration_8)
 before.executescript(migration_8)
 assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=8").fetchone()[0] == 1
+before.executescript(migration_9)
+before.executescript(migration_9)
+assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=9").fetchone()[0] == 1
+assert before.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_users_email_global'").fetchone() is not None
 
 expected = sqlite3.connect(":memory:")
 expected.executescript(current)
@@ -79,4 +84,4 @@ except sqlite3.IntegrityError:
 else:
     raise AssertionError("Case-insensitive per-organization user email uniqueness was not enforced")
 
-print("D1 schema validation passed: v6 -> idempotent v7/v8 migrations, object parity, tenant guards and email uniqueness.")
+print("D1 schema validation passed: v6 -> idempotent v7/v8/v9 migrations, object parity, tenant guards and email uniqueness.")
