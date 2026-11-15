@@ -708,7 +708,7 @@ async function createStaff(r,env,oid,uid,role,ip){
  const allowed=['admin','billing','support','technician','staff'],assigned=b.role||'staff';
  if(!allowed.includes(assigned))return json({error:'Invalid role'},400);
  if(assigned==='admin'&&role!=='owner')return json({error:'Only the owner can create administrators'},403);
- if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(b.email.toLowerCase()).first())return json({error:'Email exists'},409);
+ if(await env.DB.prepare('SELECT id FROM users WHERE organization_id=? AND lower(email)=lower(?)').bind(oid,b.email.trim()).first())return json({error:'Email exists'},409);
  const id=uuid(),{hash,salt}=await hashPw(b.password);
  await env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.email.toLowerCase(),hash,salt,s(b.name),assigned,b.phone||null).run();
  await audit(env,oid,uid,'create_staff','Staff:'+b.name,ip);
