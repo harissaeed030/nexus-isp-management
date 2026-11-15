@@ -7,6 +7,12 @@ function msg(t){if(toast){toast.textContent=t;toast.classList.add("show");setTim
 async function call(path,opt={}){let h={"Content-Type":"application/json",...(opt.headers||{})};if(token)h.Authorization="Bearer "+token;let r;try{r=await fetch(api.replace(/\/$/,"")+path,{...opt,headers:h})}catch{throw Error("API connect nahi hua. Backend aur API address check karein.")}let d=await r.json().catch(()=>({error:"Invalid server response"}));if(!r.ok||d.success===false)throw Error(d.error||"Request failed");return d}
 
 async function downloadCsv(type,from="",to=""){
+ const params=new URLSearchParams();if(from)params.set("from",from);if(to)params.set("to",to);const query=params.toString();
+ const base=api.replace(/\/$/,"");
+ const response=await fetch(base+"/api/v1/exports/"+type+".csv"+(query?"?"+query:""),{headers:{Authorization:"Bearer "+token}});
+ if(!response.ok){const error=await response.json().catch(()=>({}));throw Error(error.error||"CSV export failed.")}
+ const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="nexus-"+type+".csv";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
  const params=new URLSearchParams();if(from)params.set("from",from);if(to)params.set("to",to);
  const response=await fetch(api.replace(/\\/$/,"")+"/api/v1/exports/"+type+".csv"+(params.size?"?"+params.toString():""),{headers:{Authorization:"Bearer "+token}});
  if(!response.ok){const error=await response.json().catch(()=>({}));throw Error(error.error||"CSV export failed.")}
