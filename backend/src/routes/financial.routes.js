@@ -1,4 +1,5 @@
 import { withTransaction } from "../lib/transactions.js";
+import { createPdf, formatPkr } from "../lib/pdf.js";
 
 const methods = new Set(["cash", "bank", "jazzcash", "easypaisa", "other"]);
 const money = value => Number.isSafeInteger(value) && value > 0;
@@ -40,6 +41,63 @@ export function registerFinancialRoutes(app, { db, auth, id, audit, fail }) {
       return { ...event, amountPkr: amount, balancePkr: balance };
     });
     res.json({ success: true, data: { customer, entries: ledger, balancePkr: balance } });
+  });
+
+  app.get("/api/v1/invoices/:id/pdf", auth, (req,res) => {
+    const tenant=req.user.tenant_id;
+    const invoice=db.prepare("SELECT i.*,c.full_name customer_name,c.account_number,c.phone customer_phone,c.service_address,t.name tenant_name FROM invoices i JOIN customers c ON c.id=i.customer_id AND c.tenant_id=i.tenant_id JOIN tenants t ON t.id=i.tenant_id WHERE i.id=? AND i.tenant_id=?").get(req.params.id,tenant);
+    if(!invoice)return fail(res,404,"Invoice not found.");
+    const totals=invoiceTotals(db,tenant,invoice);
+    const pdf=createPdf([
+      {text:invoice.tenant_name,size:20,gap:32},
+      {text:"INVOICE",size:16,gap:30},
+      {text:"Invoice number: "+invoice.invoice_number},
+      {text:"Customer: "+invoice.customer_name},
+      {text:"Account: "+invoice.account_number},
+      {text:"Phone: "+(invoice.customer_phone||"-")},
+      {text:"Service address: "+(invoice.service_address||"-"),gap:28},
+      {text:"Issue date: "+(invoice.created_at||"-")},
+      {text:"Due date: "+(invoice.due_date||"-")},
+      {text:"Invoice total: PKR "+formatPkr(invoice.amount_pkr)},
+      {text:"Payments received (net): PKR "+formatPkr(totals.netPaid)},
+      {text:"Credit notes: PKR "+formatPkr(totals.credits)},
+      {text:"AMOUNT DUE: PKR "+formatPkr(totals.outstanding),size:15,gap:30},
+      {text:"Status: "+invoice.status},
+      {text:"Generated: "+new Date().toISOString()},
+      {text:"Thank you for choosing "+invoice.tenant_name+"."}
+    ]);
+    const filename="invoice-"+String(invoice.invoice_number).replace(/[^A-Za-z0-9_-]/g,"_")+".pdf";
+    res.set("Content-Type","application/pdf");
+    res.set("Content-Disposition",'attachment; filename="'+filename+'"');
+    res.set("Cache-Control","no-store");
+    res.status(200).send(pdf);
+  });
+
+  app.get("/api/v1/payments/:id/receipt.pdf", auth, (req,res) => {
+    const tenant=req.user.tenant_id;
+    const payment=db.prepare("SELECT p.*,i.invoice_number,i.amount_pkr invoice_amount,i.id invoice_id,c.full_name customer_name,c.account_number,t.name tenant_name FROM payments p JOIN invoices i ON i.id=p.invoice_id AND i.tenant_id=p.tenant_id JOIN customers c ON c.id=i.customer_id AND c.tenant_id=i.tenant_id JOIN tenants t ON t.id=p.tenant_id WHERE p.id=? AND p.tenant_id=?").get(req.params.id,tenant);
+    if(!payment)return fail(res,404,"Payment not found.");
+    const invoice={id:payment.invoice_id,amount_pkr:payment.invoice_amount};
+    const totals=invoiceTotals(db,tenant,invoice);
+    const pdf=createPdf([
+      {text:payment.tenant_name,size:20,gap:32},
+      {text:"PAYMENT RECEIPT",size:16,gap:30},
+      {text:"Receipt number: "+payment.id},
+      {text:"Invoice number: "+payment.invoice_number},
+      {text:"Customer: "+payment.customer_name},
+      {text:"Account: "+payment.account_number},
+      {text:"Payment date: "+payment.received_at},
+      {text:"Payment method: "+payment.method},
+      {text:"Reference: "+(payment.reference||"-"),gap:28},
+      {text:"AMOUNT RECEIVED: PKR "+formatPkr(payment.amount_pkr),size:15,gap:30},
+      {text:"Current invoice balance: PKR "+formatPkr(totals.outstanding)},
+      {text:"Generated: "+new Date().toISOString()},
+      {text:"Thank you for your payment."}
+    ]);
+    res.set("Content-Type","application/pdf");
+    res.set("Content-Disposition",'attachment; filename="receipt-'+String(payment.id).replace(/[^A-Za-z0-9_-]/g,"_")+'.pdf"');
+    res.set("Cache-Control","no-store");
+    res.status(200).send(pdf);
   });
 
   app.get("/api/v1/financial/aging", auth, (req, res) => {
