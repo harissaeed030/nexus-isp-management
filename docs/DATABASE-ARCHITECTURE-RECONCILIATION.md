@@ -61,6 +61,10 @@ Production and staging were recorded at D1 migration 0007 in the 2026-11-15 rele
 
 A live read-only comparison found that production and staging had drifted in `users` email constraints: production had a global unique email constraint, while staging had a case-insensitive per-organization unique index; production was missing that organization-scoped index. A staging preflight found no duplicate exact emails or case-insensitive collisions. The additive migration `0008_user_email_index_parity.sql` adds explicit global and per-organization unique indexes to both databases without rebuilding the users table. It must be applied to staging first, then production after a fresh D1 export and successful staging checks. Until both migration ledgers record version 8 and live schema verification passes, production release remains NO-GO.
 
+## Live production/staging D1 verification (2026-11-15)
+
+Migration 0008 is applied in both D1 databases. Fresh exports were completed before writes, duplicate-email preflight returned no conflicts, and duplicate exact/case-insensitive inserts were rejected in staging. The production and staging databases each contain 99 non-system schema objects after index alignment. All normalized object definitions match except the users table definition. Production retains a legacy, stricter table shape (password_hash NOT NULL, default role staff, no generated ID default); staging uses the canonical shape (password_hash nullable, default role member, generated ID default). Current Worker user-creation paths explicitly provide ID, password hash and role, so they do not rely on these defaults. A table rebuild was intentionally not attempted because it could affect foreign-key dependants and existing identities. This difference must remain explicit until a separately tested, backup-backed migration is approved. See docs/D1-LIVE-SCHEMA-AUDIT-2026-11-15.md.
+
 ## What “reconciled” means now
 
 - Each runtime has an explicit database owner and deployment path.
