@@ -67,7 +67,7 @@ The staging E2E suite created two synthetic tenants and removed both in its clea
 3. **TR-069/ACS:** GenieACS adapter tests do not prove live Huawei ONU inform/configuration. ACS URL, credentials, reachable test ONU and device inform logs are required.
 4. **Full admin-module E2E:** packages, subscriptions, invoice generation, payments/refunds, staff permissions, reports and exports still need a complete staging scenario covering each endpoint and UI action.
 5. **Backend architecture reconciliation:** the repository contains a local Node/SQLite backend and a production Cloudflare Worker/D1 backend. Their responsibilities and deployment path still need to be unified/documented.
-6. **Development branch integration:** `build/nexus-isp-core` was observed to be 164 commits ahead and 4 commits behind `main`. It was not force-merged; its differences need review and reconciliation before declaring the entire development branch integrated.
+6. **Development branch integration:** `build/nexus-isp-core` was observed to be 164 commits ahead and 8 commits behind `main` (comparison against release main commit `d85df9a5`). It was not force-merged; its differences need review and reconciliation before declaring the entire development branch integrated.
 7. **Production customer acceptance:** production currently has no customer, invoice or payment records. The portal flow was exercised with synthetic staging tenants, not real customer accounts.
 
 Do not describe the entire SaaS as error-free or all modules as complete until these remaining integration and acceptance tests pass.
