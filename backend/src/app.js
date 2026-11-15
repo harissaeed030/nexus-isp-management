@@ -1,35 +1,94 @@
 import express from "express";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { randomUUID,randomBytes,createHash,scryptSync,timingSafeEqual } from "node:crypto";
+import { db } from "./config/database.js";
 import { env } from "./config/env.js";
-import healthRoutes from "./routes/health.routes.js";
-import { notFoundHandler } from "./middleware/not-found.js";
-import { errorHandler } from "./middleware/error-handler.js";
-
-const app = express();
-
-app.disable("x-powered-by");
-app.use(helmet());
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || env.corsOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error("Origin is not allowed by CORS."));
+import { registerOperationsRoutes } from "./routes/operations.routes.js";
+import { registerCustomerRoutes } from "./routes/customer-subscription.routes.js";
+import { registerMikroTikRoutes } from "./routes/mikrotik.routes.js";
+import { registerOltRoutes } from "./routes/olt.routes.js";
+import { registerTr069Routes } from "./routes/tr069.routes.js";
+import { registerPortalRoutes } from "./routes/portal-notification.routes.js";
+import { registerFinancialRoutes } from "./routes/financial.routes.js";
+import { hasPermission, permissionFor } from "./lib/permissions.js";
+import { withTransaction } from "./lib/transactions.js";
+const app=express();app.disable("x-powered-by");app.use(helmet());
+const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
+app.use("/assets",express.static(resolve(projectRoot,"assets"),{fallthrough:false,maxAge:"1h"}));
+app.use(cors({origin(origin,cb){if(!origin||env.corsOrigins.includes(origin))return cb(null,true);cb(new Error("Origin is not allowed by CORS."));}}));
+app.use(express.json({limit:"100kb",verify:(req,_res,buffer)=>{req.rawBody=Buffer.from(buffer);}}));app.use(rateLimit({windowMs:15*60*1000,limit:300,standardHeaders:"draft-7",legacyHeaders:false}));
+const id=()=>randomUUID(),hashToken=v=>createHash("sha256").update(v).digest("hex"),required=v=>typeof v==="string"&&v.trim().length>0;
+const passwordHash=p=>{const salt=randomBytes(16).toString("hex");return salt+":"+scryptSync(p,salt,64).toString("hex");};
+const verifyPassword=(p,s)=>{try{const [salt,key]=s.split(":");const a=scryptSync(p,salt,64),b=Buffer.from(key,"hex");return a.length===b.length&&timingSafeEqual(a,b);}catch{return false;}};
+const cleanUser=u=>({id:u.id,tenantId:u.tenant_id,email:u.email,fullName:u.full_name,role:u.role});
+const fail=(res,status,error)=>res.status(status).json({success:false,error});
+function auth(req,res,next){
+  const raw=(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
+  if(!raw)return fail(res,401,"Authentication required.");
+  const u=db.prepare("SELECT u.*,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active'").get(hashToken(raw),new Date().toISOString());
+  if(!u)return fail(res,401,"Session expired or invalid.");
+  const selfRoute=req.path==="/api/v1/auth/me"||req.path==="/api/v1/auth/logout";
+  const staffAdminRoute=req.path==="/api/v1/staff"||req.path.startsWith("/api/v1/staff/");
+  if(!selfRoute&&!staffAdminRoute){
+    const permission=permissionFor(req.path,req.method);
+    if(!permission||!hasPermission(db,u,permission))return fail(res,403,"Your staff role does not have permission for this action.");
   }
-}));
-app.use(express.json({ limit: "100kb" }));
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 300,
-  standardHeaders: "draft-7",
-  legacyHeaders: false
-}));
-
-app.get("/", (_req, res) => {
-  res.json({ service: "Nexus API", docs: "See README.md for setup instructions." });
+  req.user=u;next();
+}
+function audit(u,action,type,rid){db.prepare("INSERT INTO audit_logs(id,tenant_id,actor_user_id,action,resource_type,resource_id) VALUES(?,?,?,?,?,?)").run(id(),u.tenant_id,u.id,action,type,rid||null);}
+app.get("/",(_q,r)=>r.sendFile(resolve(projectRoot,"index.html")));
+app.get("/portal",(_q,r)=>r.sendFile(resolve(projectRoot,"portal/index.html")));
+app.get("/notifications",(_q,r)=>r.sendFile(resolve(projectRoot,"notifications/index.html")));
+app.get("/api/v1/health",(_q,r)=>r.json({success:true,status:"running",database:"connected",timestamp:new Date().toISOString()}));
+app.post("/api/v1/setup",(req,res)=>{const b=req.body||{};if(!required(b.companyName)||!required(b.fullName)||!required(b.email)||!required(b.password)||b.password.length<10)return fail(res,400,"Company, name, email and password (minimum 10 characters) are required.");let created;try{created=withTransaction(db,()=>{if(db.prepare("SELECT COUNT(*) n FROM users").get().n>0)throw new Error("SETUP_ALREADY_COMPLETE");const tid=id(),uid=id(),slug=b.companyName.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-")+"-"+tid.slice(0,6);db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run(tid,b.companyName.trim(),slug);db.prepare("INSERT INTO users(id,tenant_id,email,password_hash,full_name,role) VALUES(?,?,?,?,?,'owner')").run(uid,tid,b.email.trim().toLowerCase(),passwordHash(b.password),b.fullName.trim());const token=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hashToken(token),uid,new Date(Date.now()+604800000).toISOString());audit({id:uid,tenant_id:tid},"initial_setup","tenant",tid);return {tid,uid,token};});}catch(e){if(e.message==="SETUP_ALREADY_COMPLETE")return fail(res,409,"Initial setup is already complete. Sign in instead.");throw e;}const {tid,uid,token}=created;res.status(201).json({success:true,token,user:cleanUser(db.prepare("SELECT * FROM users WHERE id=?").get(uid)),tenant:{id:tid,name:b.companyName.trim()}});});
+app.post("/api/v1/auth/login",(req,res)=>{const b=req.body||{};if(!required(b.email)||!required(b.password))return fail(res,400,"Email and password are required.");const u=db.prepare("SELECT * FROM users WHERE email=? COLLATE NOCASE AND status='active' ORDER BY created_at LIMIT 1").get(b.email.trim());if(!u||!verifyPassword(b.password,u.password_hash))return fail(res,401,"Invalid email or password.");const token=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hashToken(token),u.id,new Date(Date.now()+604800000).toISOString());res.json({success:true,token,user:cleanUser(u)});});
+app.get("/api/v1/auth/me",auth,(req,res)=>res.json({success:true,user:cleanUser(req.user),tenant:{id:req.user.tenant_id,name:db.prepare("SELECT name FROM tenants WHERE id=?").get(req.user.tenant_id).name}}));
+app.post("/api/v1/auth/logout",auth,(req,res)=>{db.prepare("DELETE FROM sessions WHERE token_hash=?").run(req.user.token_hash);res.json({success:true});});
+app.get("/api/v1/dashboard",auth,(req,res)=>{const t=req.user.tenant_id,c=sql=>db.prepare(sql).get(t).n;res.json({success:true,stats:{customers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=?"),activeCustomers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=? AND status='active'"),packages:c("SELECT COUNT(*) n FROM packages WHERE tenant_id=? AND status='active'"),unpaidInvoices:c("SELECT COUNT(*) n FROM invoices WHERE tenant_id=? AND status IN ('unpaid','partial')"),openTickets:c("SELECT COUNT(*) n FROM support_tickets WHERE tenant_id=? AND status IN ('open','in_progress')"),revenuePkr:db.prepare("SELECT COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE tenant_id=?),0)-COALESCE((SELECT SUM(amount_pkr) FROM payment_reversals WHERE tenant_id=?),0) n").get(t,t).n}});});
+registerCustomerRoutes(app,{db,auth,id,audit,fail});
+registerMikroTikRoutes(app,{db,auth,id,audit,fail});
+registerOltRoutes(app,{db,auth,id,audit,fail});
+registerTr069Routes(app,{db,auth,id,audit,fail});
+registerPortalRoutes(app,{db,auth,id,audit,fail,env});
+registerFinancialRoutes(app,{db,auth,id,audit,fail});
+app.get("/api/v1/packages",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT * FROM packages WHERE tenant_id=? ORDER BY created_at DESC").all(q.user.tenant_id)}));
+app.post("/api/v1/packages",auth,(q,r)=>{const b=q.body||{},d=Number(b.speedDownMbps),u=Number(b.speedUpMbps),p=Number(b.monthlyPricePkr);if(!required(b.name)||!Number.isInteger(d)||d<1||!Number.isInteger(u)||u<1||!Number.isInteger(p)||p<0)return fail(r,400,"Valid package name, speeds and price are required.");const pid=id();db.prepare("INSERT INTO packages(id,tenant_id,name,speed_down_mbps,speed_up_mbps,monthly_price_pkr) VALUES(?,?,?,?,?,?)").run(pid,q.user.tenant_id,b.name.trim(),d,u,p);audit(q.user,"create","package",pid);r.status(201).json({success:true,data:db.prepare("SELECT * FROM packages WHERE id=?").get(pid)});});
+app.patch("/api/v1/packages/:id",auth,(q,r)=>{const x=db.prepare("SELECT * FROM packages WHERE id=? AND tenant_id=?").get(q.params.id,q.user.tenant_id);if(!x)return fail(r,404,"Package not found.");const b=q.body||{},v={name:b.name??x.name,d:Number(b.speedDownMbps??x.speed_down_mbps),u:Number(b.speedUpMbps??x.speed_up_mbps),p:Number(b.monthlyPricePkr??x.monthly_price_pkr),s:b.status??x.status};if(!required(v.name)||!Number.isInteger(v.d)||v.d<1||!Number.isInteger(v.u)||v.u<1||!Number.isInteger(v.p)||v.p<0||!["active","archived"].includes(v.s))return fail(r,400,"Invalid package details.");db.prepare("UPDATE packages SET name=?,speed_down_mbps=?,speed_up_mbps=?,monthly_price_pkr=?,status=? WHERE id=? AND tenant_id=?").run(v.name,v.d,v.u,v.p,v.s,x.id,q.user.tenant_id);audit(q.user,"update","package",x.id);r.json({success:true,data:db.prepare("SELECT * FROM packages WHERE id=?").get(x.id)});});
+app.get("/api/v1/invoices",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT i.*,c.full_name customer_name FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.tenant_id=? ORDER BY i.created_at DESC").all(q.user.tenant_id)}));
+app.post("/api/v1/invoices",auth,(q,r)=>{
+  const b=q.body||{},a=Number(b.amountPkr);
+  if(!required(b.customerId)||!Number.isInteger(a)||a<0)return fail(r,400,"Customer and valid amount required.");
+  if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,q.user.tenant_id))return fail(r,404,"Customer not found.");
+  const iid=id(),period=required(b.billingPeriod)?b.billingPeriod:new Date().toISOString().slice(0,7);
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(period))return fail(r,400,"Billing period must use YYYY-MM format.");
+  try{
+    const invoice=withTransaction(db,()=>{
+      let no;
+      if(required(b.invoiceNumber))no=b.invoiceNumber.trim();
+      else{
+        const sequence=db.prepare("INSERT INTO invoice_sequences(tenant_id,billing_period,last_number) VALUES(?,?,1) ON CONFLICT(tenant_id,billing_period) DO UPDATE SET last_number=last_number+1 RETURNING last_number").get(q.user.tenant_id,period);
+        no="INV-"+period.replace("-","")+"-"+String(sequence.last_number).padStart(6,"0");
+      }
+      db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr,due_date) VALUES(?,?,?,?,?,?)").run(iid,q.user.tenant_id,b.customerId,no,a,b.dueDate||null);
+      audit(q.user,"create","invoice",iid);
+      return db.prepare("SELECT * FROM invoices WHERE id=?").get(iid);
+    });
+    r.status(201).json({success:true,data:invoice});
+  }catch(e){
+    if(String(e.message).includes("UNIQUE"))return fail(r,409,"Invoice number already exists.");
+    throw e;
+  }
 });
-app.use("/api/v1/health", healthRoutes);
-app.use(notFoundHandler);
-app.use(errorHandler);
-
+app.get("/api/v1/payments",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT p.*,i.invoice_number,c.full_name customer_name FROM payments p JOIN invoices i ON i.id=p.invoice_id JOIN customers c ON c.id=i.customer_id WHERE p.tenant_id=? ORDER BY p.received_at DESC").all(q.user.tenant_id)}));
+app.post("/api/v1/payments",auth,(q,r)=>{const b=q.body||{},a=Number(b.amountPkr),methods=["cash","bank","jazzcash","easypaisa","other"],inv=db.prepare("SELECT * FROM invoices WHERE id=? AND tenant_id=?").get(b.invoiceId,q.user.tenant_id);if(!inv)return fail(r,404,"Invoice not found.");if(!Number.isInteger(a)||a<1||!methods.includes(b.method))return fail(r,400,"Valid payment amount and method required.");let payment;try{payment=withTransaction(db,()=>{const current=db.prepare("SELECT * FROM invoices WHERE id=? AND tenant_id=?").get(b.invoiceId,q.user.tenant_id);if(!current)throw new Error("INVOICE_NOT_FOUND");const paid=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) n FROM payments WHERE invoice_id=? AND tenant_id=?").get(current.id,q.user.tenant_id).n;const reversed=db.prepare("SELECT COALESCE(SUM(r.amount_pkr),0) n FROM payment_reversals r JOIN payments p ON p.id=r.payment_id WHERE r.tenant_id=? AND p.invoice_id=?").get(q.user.tenant_id,current.id).n;const credits=db.prepare("SELECT COALESCE(SUM(amount_pkr),0) n FROM credit_notes WHERE tenant_id=? AND invoice_id=?").get(q.user.tenant_id,current.id).n;const netPaid=paid-reversed,adjustedTotal=current.amount_pkr-credits;if(netPaid+a>adjustedTotal)throw new Error("PAYMENT_EXCEEDS_BALANCE");const pid=id();db.prepare("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method,reference) VALUES(?,?,?,?,?,?)").run(pid,q.user.tenant_id,current.id,a,b.method,b.reference||null);db.prepare("UPDATE invoices SET status=? WHERE id=? AND tenant_id=?").run(netPaid+a>=adjustedTotal?"paid":"partial",current.id,q.user.tenant_id);audit(q.user,"create","payment",pid);return db.prepare("SELECT * FROM payments WHERE id=?").get(pid);});}catch(e){if(e.message==="INVOICE_NOT_FOUND")return fail(r,404,"Invoice not found.");if(e.message==="PAYMENT_EXCEEDS_BALANCE")return fail(r,400,"Payment exceeds remaining balance.");throw e;}r.status(201).json({success:true,data:payment});});
+app.get("/api/v1/tickets",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT t.*,c.full_name customer_name FROM support_tickets t JOIN customers c ON c.id=t.customer_id WHERE t.tenant_id=? ORDER BY t.created_at DESC").all(q.user.tenant_id)}));
+app.post("/api/v1/tickets",auth,(q,r)=>{const b=q.body||{};if(!required(b.customerId)||!required(b.subject))return fail(r,400,"Customer and subject required.");if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(b.customerId,q.user.tenant_id))return fail(r,404,"Customer not found.");const tid=id(),p=["low","normal","high","urgent"].includes(b.priority)?b.priority:"normal";db.prepare("INSERT INTO support_tickets(id,tenant_id,customer_id,subject,description,priority) VALUES(?,?,?,?,?,?)").run(tid,q.user.tenant_id,b.customerId,b.subject.trim(),b.description||null,p);audit(q.user,"create","ticket",tid);r.status(201).json({success:true,data:db.prepare("SELECT * FROM support_tickets WHERE id=?").get(tid)});});
+app.patch("/api/v1/tickets/:id",auth,(q,r)=>{const t=db.prepare("SELECT * FROM support_tickets WHERE id=? AND tenant_id=?").get(q.params.id,q.user.tenant_id);if(!t)return fail(r,404,"Ticket not found.");const s=q.body?.status;if(!["open","in_progress","resolved","closed"].includes(s))return fail(r,400,"Invalid ticket status.");db.prepare("UPDATE support_tickets SET status=? WHERE id=? AND tenant_id=?").run(s,t.id,q.user.tenant_id);audit(q.user,"update","ticket",t.id);r.json({success:true,data:db.prepare("SELECT * FROM support_tickets WHERE id=?").get(t.id)});});
+app.get("/api/v1/audit-logs",auth,(q,r)=>r.json({success:true,data:db.prepare("SELECT * FROM audit_logs WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200").all(q.user.tenant_id)}));
+registerOperationsRoutes(app,{db,auth,id,audit,fail,passwordHash,cleanUser});
+app.use((req,res)=>fail(res,404,"Route not found."));app.use((err,_q,res,_n)=>{console.error(err);res.status(500).json({success:false,error:"Internal server error."});});
 export default app;

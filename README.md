@@ -1,63 +1,126 @@
 # Nexus — ISP Management Platform
 
-**Professional multi-ISP operations platform** for FTTH providers.
+**Mobile-first ISP operations software for FTTH providers.**
 
-Nexus is being developed as a modular platform for managing subscribers, internet packages, billing, payments, support tickets, network equipment and multiple ISP tenants from one secure system.
+Nexus is being built as a multi-tenant platform for subscriber records, internet packages, billing, payments, support tickets and network operations.
 
-> Current status: **Foundation / Phase 1**. The repository currently contains the product blueprint and a responsive frontend prototype. It is not yet production-ready and does not connect to live MikroTik, OLT, ONU or ACS equipment.
+## Current development status
 
-## Product goals
-- Multi-tenant architecture: each ISP's data is isolated.
-- Customer and subscription lifecycle management.
-- Packages, invoices, payments and payment history.
-- MikroTik integration through a secure server-side adapter (RouterOS API).
-- OLT/ONU inventory and device status; vendor-specific integrations added incrementally.
-- TR-069 / GenieACS integration through an ACS adapter.
-- Complaints, support tickets, field operations and audit logs.
-- Mobile-first admin experience.
+The `build/nexus-isp-core` branch contains the first local API foundation:
+- Local SQLite database using Node.js built-in `node:sqlite` (Node 22.13+).
+- Initial owner setup, password hashing, bearer sessions and tenant-scoped API queries.
+- Customer registration and CRUD with tenant-scoped account-number sequencing, service address, coverage area, installation date, account/connection status, searchable filters and pagination.
+- Customer profile views with subscription, invoice, payment, complaint, connection and subscription history.
+- Subscription assignment, package changes, start/expiry dates, renewal, suspension/resume/cancellation history and automatic expiry transition when subscription lists or customer profiles are read.
+- Package management, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
+- Staff account management with role defaults and per-user module permission overrides, router inventory, idempotent monthly invoice generation and financial summary reports.
+- Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
+- SQLite database is created automatically under `backend/data/`.
 
-## Technology direction
-- Frontend: responsive HTML/CSS/JavaScript prototype; later React/TypeScript if needed.
-- API: Node.js + TypeScript + Express.
-- Database: MongoDB Atlas (managed cloud database).
-- Authentication: secure sessions/JWT, role-based access control and tenant scoping.
-- Deployment: start with free-tier-compatible services; production hosting and limits must be reviewed before launch.
+This is an early development build, **not production-ready**. The dashboard now uses the local API for core records, but scheduled hands-free recurring billing, invoice PDF/receipts, CSV exports, backup/restore, additional integration tests and a production security review remain unfinished. Router records are inventory only: no RouterOS credentials are stored and no MikroTik commands are sent. OLT/ONU and GenieACS/TR-069 are not connected to real equipment. Do not use it as the only system of record for live customers until backups and testing are in place.
 
-## Repository structure
+## Local setup (Android Termux or desktop)
+
+Requirements: Node.js 22.13 or newer.
+
+```sh
+cd backend
+npm install
+cp .env.example .env
+npm run check
+npm start
 ```
-.
-├── index.html
-├── assets/
-│   ├── css/styles.css
-│   └── js/app.js
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── ROADMAP.md
-├── .env.example
-└── .gitignore
+
+Open the dashboard in your phone browser: `http://127.0.0.1:4000/`.
+
+API health check: `http://127.0.0.1:4000/api/v1/health`.
+
+The SQLite file is created automatically at `backend/data/nexus.sqlite`. Keep this file private and backed up. Do not commit it. Customer portal and notification migration `003_customer_portal_notifications.sql` is applied automatically on startup.
+
+### Database migrations, backup and restore
+
+The database initializer maintains a `schema_migrations` ledger. Existing 0.2.0 databases are upgraded automatically on next startup by additive migrations in `backend/migrations/001_database_hardening.sql` and `backend/migrations/002_customer_subscription_management.sql`; they preserve existing rows and add tenant-consistency triggers, customer account sequencing, connection/subscription history and query indexes. Do not manually delete the SQLite file to apply a migration.
+
+Run commands from the `backend/` directory:
+
+```sh
+npm run db:backup
+npm run db:backup -- ./backups/before-upgrade.sqlite
+npm run db:restore -- ./backups/before-upgrade.sqlite
+npm run verify
 ```
+
+Backups use SQLite's online-consistent `VACUUM INTO` operation, are written with owner-only file permissions where supported, and are checked with `PRAGMA integrity_check` and `PRAGMA foreign_key_check`. Restore refuses invalid backups, retains a validated pre-restore safety backup, and validates the restored file before replacing the live database. **Stop the Nexus server before restore**; restart it afterward so pending migrations can run. Keep backup files private and outside Git.
+
+## First owner setup
+
+Send a POST request to `/api/v1/setup` with JSON:
+```json
+{
+  "companyName": "Your ISP Name",
+  "fullName": "Owner Name",
+  "email": "owner@example.com",
+  "password": "use-a-long-private-password"
+}
+```
+The first setup creates the tenant and owner. The API returns a bearer token. Keep it private. Setup is locked after the first user exists.
+
+### Recovering a local owner password
+
+If the owner login stops working, run this from the `backend` directory. It only resets a uniquely matching owner account in the configured SQLite database, asks for the new password without echoing it, and revokes existing sessions:
+
+```sh
+npm run auth:reset -- owner@example.com
+```
+
+Do not delete `backend/data/nexus.sqlite` to fix a login problem; that file contains the ISP's local data.
+
+## API overview
+
+All endpoints except health, root, initial setup and login require `Authorization: Bearer <token>`.
+
+- `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`
+- `GET /api/v1/dashboard`
+- `GET|POST /api/v1/customers` (search/filter: `q`, `status`, `connectionStatus`, `coverageArea`; pagination: `page`, `pageSize`), `GET|PATCH|DELETE /api/v1/customers/:id`
+- `GET /api/v1/customers/:id/profile`, `GET /api/v1/customers/:id/history`
+- `GET|POST /api/v1/packages`, `PATCH /api/v1/packages/:id`
+- `GET|POST /api/v1/subscriptions`, `PATCH /api/v1/subscriptions/:id`, `POST /api/v1/subscriptions/:id/renew`
+- `GET|POST /api/v1/invoices`
+- `GET|POST /api/v1/payments`
+- `GET|POST /api/v1/tickets`, `PATCH /api/v1/tickets/:id`
+- Customer portal: `/portal` (customer login, package, invoices, dues, payments and complaints)\n- `POST /api/v1/customer-portal/login`, `GET /api/v1/customer-portal/me`, `GET /api/v1/customer-portal/invoices`, `GET /api/v1/customer-portal/payments`, `GET|POST /api/v1/customer-portal/complaints`, `POST /api/v1/customer-portal/logout`\n- Staff customer portal provisioning: `POST /api/v1/portal-admin/customers/:customerId/account`, `POST /api/v1/portal-admin/customers/:customerId/reset-password`\n- Notification console: `/notifications`; templates, queued messages, provider send/retry and delivery history under `/api/v1/notifications/*`\n- WhatsApp Cloud API uses Meta-approved template names and language codes for template sends (optional provider template name on each local template); without a provider template name, the API sends a free-form text message subject to Meta's 24-hour customer-care window. WhatsApp Cloud API secrets are server-only environment variables: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Configure the Meta webhook callback to `/api/v1/notifications/whatsapp/webhook`; the endpoint verifies the provider signature before accepting delivery updates.\n- `GET /api/v1/audit-logs`
+- `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
+- `GET|POST /api/v1/olts`, `PATCH|DELETE /api/v1/olts/:id`, `GET /api/v1/olts/:id/capabilities`
+- `GET /api/v1/olts/:id/pons`, `PATCH /api/v1/pons/:id`
+- `GET|POST /api/v1/onus`, `PATCH|DELETE /api/v1/onus/:id`, `POST /api/v1/onus/:id/service-mapping`, `GET /api/v1/onus/:id/history`
+- `GET|POST /api/v1/olt-alarms`, `PATCH /api/v1/olt-alarms/:id/clear`
+- `GET /api/v1/olts/:id/monitoring` (inventory/capability response; live telemetry pending verified HSGQ interface documentation)
+- `GET|PUT /api/v1/staff/:id/permissions` (owner/admin only)
+
+Money values are integer Pakistani rupees (PKR). Payments cannot exceed the outstanding invoice balance.
+
+Staff roles have safe defaults (owner, admin, billing, NOC, support, technician and limited staff). Owners and administrators can grant or revoke individual module permissions for non-owner staff accounts. Permission changes are checked by the API on every request; dashboard checkboxes are not a security boundary.
 
 ## Security rules
-- Never commit API keys, passwords, database URLs, router credentials or customer data.
-- Keep secrets in environment variables / hosting secret manager.
-- Never expose MikroTik, OLT or ACS credentials in browser JavaScript.
-- Enforce tenant isolation and authorization in the API, not only in the UI.
-- Use HTTPS, input validation, audit logging, backups and least-privilege accounts.
 
-## Development status
-- [x] Product foundation and architecture
-- [x] Responsive dashboard prototype
-- [ ] Backend API and database models
-- [ ] Authentication, roles and tenant isolation
-- [ ] Customer, package and subscription modules
-- [ ] Billing and payment ledger
-- [ ] MikroTik adapter
-- [ ] OLT/ONU inventory and vendor adapters
-- [ ] GenieACS / TR-069 adapter
-- [ ] Automated tests, monitoring and deployment hardening
+- Never commit passwords, tokens, database files, router credentials or customer records.
+- Do not expose network-device credentials in browser JavaScript.
+- Keep tenant scoping enforced in API queries.
+- Use HTTPS, proper role permissions, backups and security review before production use.
 
-## Preview
-Open `index.html` in a browser or enable GitHub Pages for a static preview. The current dashboard uses sample data only.
+## Roadmap
+
+1. Local SQLite API and data model.
+2. Connect dashboard UI to authentication and CRUD modules.
+3. Complete subscriptions, invoices, payment receipts and reports.
+4. Add staff roles, permissions, tests and backup/restore.
+5. Add MikroTik adapter and equipment inventory.
+6. Add vendor-specific OLT/ONU and GenieACS/TR-069 adapters.
+7. Review deployment architecture and production migration.
+
+## HSGQ-G04R hardware integration
+See [docs/HSGQ-G04R-INTEGRATION.md](docs/HSGQ-G04R-INTEGRATION.md) for verified management methods, adapter limitations, credential encryption and the vendor documentation required before enabling live telemetry.
 
 ## License
+
 All rights reserved until a license is added. Do not assume this project is open source for reuse or resale.

@@ -1,0 +1,25 @@
+name: Nexus backend checks
+
+on:
+  push:
+    branches:
+      - build/nexus-isp-core
+  pull_request:
+    branches:
+      - main
+      - build/nexus-isp-core
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+        working-directory: backend
+      - run: npm run verify
+        working-directory: backend
+      - run: node --check ../assets/js/app.js
+        working-directory: backend

@@ -1,0 +1,10 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+process.env.OLT_CREDENTIAL_KEY="22".repeat(32);
+const {oltCredentialCrypto}=await import("../src/routes/olt.routes.js");
+const {HsgqG04rAdapter,OltAdapterUnavailableError,registerOltAdapter,getOltAdapter}=await import("../src/services/olt-adapters.js");
+test("OLT management credentials use authenticated encryption",()=>{const encrypted=oltCredentialCrypto.encrypt("private-olt-password");assert.notEqual(encrypted,"private-olt-password");assert.equal(oltCredentialCrypto.decrypt(encrypted),"private-olt-password");});
+test("OLT credential ciphertext tampering is rejected",()=>{const encrypted=oltCredentialCrypto.encrypt("secret");assert.throws(()=>oltCredentialCrypto.decrypt(encrypted.slice(0,-1)+"A"));});
+test("HSGQ adapter declares published protocol families without claiming live support",()=>{const a=new HsgqG04rAdapter(),c=a.capabilities();assert.deepEqual(c.protocols,["CLI","WEB","SNMP/NMS","HSGQ Cloud"]);assert.equal(c.apiSpecificationVerified,false);assert.equal(c.liveStatus,false);assert.equal(c.configurationWrites,false);});
+test("HSGQ adapter refuses unverified reads and all writes",async()=>{const a=new HsgqG04rAdapter();await assert.rejects(()=>a.readOnuStatus(),OltAdapterUnavailableError);await assert.rejects(()=>a.readOpticalLevels(),OltAdapterUnavailableError);await assert.rejects(()=>a.configure(),OltAdapterUnavailableError);});
+test("vendor adapter registry is extensible",()=>{registerOltAdapter("TEST","MODEL",()=>({capabilities:()=>({test:true})}));assert.deepEqual(getOltAdapter("TEST","MODEL").capabilities(),{test:true});});

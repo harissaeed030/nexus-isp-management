@@ -12,8 +12,10 @@
 - Tenant, user, role and audit models.
 
 ## Phase 3 — ISP operations
-- Customer CRUD and service locations.
-- Package catalog and subscriptions.
+- [x] Customer CRUD, generated account numbers, service locations and coverage areas.
+- [x] Customer search, filters, pagination and profile history.
+- [x] Package assignment, plan changes, subscription dates, renewals and suspension history.
+- [ ] Package catalog refinements and remaining ISP operations.
 - Invoice generation and payment ledger.
 - Complaint/ticket workflow.
 
