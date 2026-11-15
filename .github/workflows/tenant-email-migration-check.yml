@@ -1,0 +1,26 @@
+name: NEXUS tenant email migration check
+
+on:
+  push:
+    branches:
+      - fix/tenant-scoped-owner-email-2026-11-14
+  pull_request:
+    paths:
+      - 'worker/manual-migrations/**'
+      - 'worker/scripts/test-users-email-migration.sh'
+      - '.github/workflows/tenant-email-migration-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify SQLite is available
+        run: sqlite3 --version
+      - name: Test user email migration with dependent foreign keys
+        run: bash worker/scripts/test-users-email-migration.sh
