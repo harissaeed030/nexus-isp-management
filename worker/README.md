@@ -16,7 +16,7 @@ It reports Worker status and whether the configured D1 binding can execute a sim
 
 ## Important production boundary
 
-The repository's `main` branch contains the separately released Cloudflare customer-portal Worker path. The production release record is documented in [Production release 2026-11-15](../docs/PRODUCTION-RELEASE-2026-11-15.md). Do not deploy this branch's minimal `worker/` directory over the production Worker: it is not a replacement for the released Worker source.
+The repository's `main` branch contains the separately released Cloudflare customer-portal Worker path. The production release record is documented in the [Production release 2026-11-15 on main](https://github.com/harissaeed030/nexus-isp-management/blob/main/docs/PRODUCTION-RELEASE-2026-11-15.md). Do not deploy this branch's minimal `worker/` directory over the production Worker: it is not a replacement for the released Worker source.
 
 The SQLite migrations under `backend/migrations/` are not D1 migrations. Never apply them to a Cloudflare D1 database. Use additive D1 migrations and the documented release procedure for the Cloudflare runtime.
 
