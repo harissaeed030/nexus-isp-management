@@ -2,9 +2,13 @@ name: Nexus backend verification
 
 on:
   push:
-    branches: [build/nexus-isp-core]
+    branches: [main, build/nexus-isp-core]
   pull_request:
     branches: [main, build/nexus-isp-core]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   verify:
@@ -24,3 +28,78 @@ jobs:
       - name: Verify backend and dashboard
         working-directory: backend
         run: npm run verify
+
+  live-smoke:
+    name: Verify production and staging endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check production and staging Workers and Pages
+        env:
+          PRODUCTION_API: https://nexus-saas-api.harissaeed030.workers.dev
+          STAGING_API: https://nexus-saas-api-staging.harissaeed030.workers.dev
+          FRONTEND_URL: https://nexus-isp-management.pages.dev
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+
+          const origin = process.env.FRONTEND_URL;
+          const targets = [
+            ["production", process.env.PRODUCTION_API],
+            ["staging", process.env.STAGING_API],
+          ];
+
+          for (const [environment, base] of targets) {
+            const healthResponse = await fetch(base + "/api/health", {
+              headers: { Accept: "application/json" },
+              signal: AbortSignal.timeout(15000),
+            });
+            assert.equal(healthResponse.status, 200, environment + " health status");
+            const health = await healthResponse.json();
+            assert.equal(health.status, "healthy", environment + " Worker health");
+            assert.equal(health.database, "ok", environment + " D1 connectivity");
+
+            const preflight = await fetch(base + "/api/dashboard/stats", {
+              method: "OPTIONS",
+              headers: {
+                Origin: origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+              },
+              signal: AbortSignal.timeout(15000),
+            });
+            assert.equal(preflight.status, 204, environment + " CORS preflight");
+            assert.equal(
+              preflight.headers.get("access-control-allow-origin"),
+              origin,
+              environment + " CORS origin",
+            );
+
+            const protectedResponse = await fetch(base + "/api/dashboard/stats", {
+              headers: { Accept: "application/json" },
+              signal: AbortSignal.timeout(15000),
+            });
+            assert.equal(protectedResponse.status, 401, environment + " unauthenticated API guard");
+
+            for (const header of [
+              "x-content-type-options",
+              "x-frame-options",
+              "referrer-policy",
+              "strict-transport-security",
+            ]) {
+              assert.ok(
+                healthResponse.headers.get(header),
+                environment + " missing security header: " + header,
+              );
+            }
+
+            console.log(environment + ": health, D1, CORS, auth guard and security headers passed");
+          }
+
+          const page = await fetch(origin, { signal: AbortSignal.timeout(15000) });
+          assert.equal(page.status, 200, "Pages production status");
+          assert.match(page.headers.get("content-type") || "", /text\/html/i);
+          const html = await page.text();
+          assert.match(html, /NEXUS/i, "Pages frontend content");
+          console.log("Pages production: HTTP 200 and NEXUS HTML verified");
+          NODE
