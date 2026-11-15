@@ -86,8 +86,8 @@ else:
 
 print("D1 schema validation passed: v6 -> idempotent v7/v8/v9 migrations, object parity, tenant guards and email uniqueness.")
 
-// Fresh-install path: the canonical snapshot is the only supported bootstrap
-// for an empty D1 database. Validate it independently from the v6 upgrade path.
+# Fresh-install path: the canonical snapshot is the only supported bootstrap
+# for an empty D1 database. Validate it independently from the v6 upgrade path.
 fresh = sqlite3.connect(":memory:")
 fresh.execute("PRAGMA foreign_keys=ON")
 fresh.executescript(current)
