@@ -18,6 +18,10 @@ Both production and staging are at schema migration 0007.
 
 The SQL artifacts for migrations 0001-0005 are not present in the current repository history. Their applied names and timestamps are recorded in each database's `schema_migrations` table. Do not invent replacement historical migrations or rerun them. `worker/schema.sql` is the canonical full snapshot for creating a fresh database at schema version 0007.
 
+## Runtime boundary
+
+The local Node/SQLite backend is a separate offline development runtime, not a D1 replica. See [the database architecture reconciliation](../../docs/DATABASE-ARCHITECTURE-RECONCILIATION.md) before planning data movement. Do not import/export live production data through ad-hoc SQL or treat the schemas as interchangeable.
+
 ## Migration 0007
 
 `migrations/0007_customer_portal_tenant_guards.sql` is additive and idempotent. It creates the customer portal account table, enforces that the account's customer belongs to the same organization on insert/update, and records migration 7. It does not drop or rewrite existing customer, invoice, payment or user records.
