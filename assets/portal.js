@@ -4,10 +4,18 @@
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[char]));
+  const apiBase = (() => {
+    const local = ["localhost", "127.0.0.1"].includes(location.hostname);
+    const saved = sessionStorage.getItem("nexus_api");
+    if (saved && (local || !/^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:|\\/)/i.test(saved))) return saved;
+    if (saved && !local) sessionStorage.removeItem("nexus_api");
+    return location.port === "4000" ? location.origin :
+      (local ? "http://127.0.0.1:4000" : "https://nexus-saas-api.harissaeed030.workers.dev");
+  })();
   let token = sessionStorage.getItem("nexus_customer_token") || "";
 
   const api = async (path, options = {}) => {
-    const response = await fetch("/api/portal" + path, {
+    const response = await fetch(apiBase + "/api/portal" + path, {
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -111,7 +119,7 @@
     $("#loginError").textContent = "";
     const form = Object.fromEntries(new FormData(event.currentTarget));
     try {
-      const response = await fetch("/api/portal/auth/login", {
+      const response = await fetch(apiBase + "/api/portal/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identity: String(form.identity || "").trim(), password: form.password }),
