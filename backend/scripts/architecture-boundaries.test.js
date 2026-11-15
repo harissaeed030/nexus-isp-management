@@ -25,7 +25,7 @@ test("SQLite and Cloudflare D1 remain separate runtimes", () => {
   assert.match(reconciliation, /organization_id/);
   assert.match(reconciliation, /audit_logs/);
   assert.match(reconciliation, /audit_log/);
-  assert.match(reconciliation, /no SQLite-to-D1 import, export, replication or bidirectional synchronization/i);
+  assert.match(reconciliation, /Cloudflare D1 is the authoritative production source of truth/i);\n  assert.match(reconciliation, /SQLite outbox → authenticated production Worker → D1/);\n  assert.match(reconciliation, /no SQLite-to-D1 import, export, replication or bidirectional synchronization/i);
   assert.match(reconciliation, /Never run.*backend\/migrations.*against D1/i);
   assert.match(architecture, /must never be applied to D1/);
   assert.ok(packageJson.scripts.test.includes("architecture-boundaries.test.js"));
