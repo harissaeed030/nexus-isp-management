@@ -16,5 +16,5 @@ test("router inventory and live provisioning use distinct permissions",()=>{
  assert.equal(permissionFor("/api/v1/routers/abc/logs","GET"),"routers.read");
  assert.equal(permissionFor("/api/v1/routers/abc/test","POST"),"routers.provision");
  assert.equal(permissionFor("/api/v1/routers/abc/pppoe/secrets","POST"),"routers.provision");
- assert.equal(permissionFor("/api/v1/routers/abc/credentials","POST"),"routers.manage");
+ assert.equal(permissionFor("/api/v1/routers/abc/sync","GET"),"routers.provision");
 });
