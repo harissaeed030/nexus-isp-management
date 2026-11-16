@@ -19,7 +19,7 @@ const applyOnce = (db, version, filename) => {
   }
 };
 
-test("migration versions 007-009 are unique, additive and restart-safe", () => {
+test("migration versions 007-010 are unique, additive and restart-safe", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys=ON");
@@ -50,9 +50,11 @@ test("migration versions 007-009 are unique, additive and restart-safe", () => {
     assert.equal(applyOnce(db, "007_isp_business_modules", "007_isp_business_modules.sql"), true);
     assert.equal(applyOnce(db, "008_financial_management", "008_financial_management.sql"), true);
     assert.equal(applyOnce(db, "009_session_hardening", "009_session_hardening.sql"), true);
+    assert.equal(applyOnce(db, "010_payment_promises", "010_payment_promises.sql"), true);
     assert.equal(applyOnce(db, "007_isp_business_modules", "007_isp_business_modules.sql"), false);
     assert.equal(applyOnce(db, "008_financial_management", "008_financial_management.sql"), false);
     assert.equal(applyOnce(db, "009_session_hardening", "009_session_hardening.sql"), false);
+    assert.equal(applyOnce(db, "010_payment_promises", "010_payment_promises.sql"), false);
 
     assert.equal(db.prepare("SELECT COUNT(*) n FROM invoices").get().n, 1);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM payments").get().n, 1);
@@ -60,10 +62,18 @@ test("migration versions 007-009 are unique, additive and restart-safe", () => {
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='coverage_areas'").get());
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='credit_notes'").get());
     assert.ok(db.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name='last_seen_at'").get());
+    assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='payment_promises'").get());
+    db.exec("INSERT INTO tenants(id,name,slug) VALUES('t2','Other','other')");
+    db.exec("INSERT INTO users(id,tenant_id,email,password_hash,full_name) VALUES('u2','t2','other@test','hash','Other Owner')");
+    assert.throws(
+      () => db.prepare("INSERT INTO payment_promises(id,tenant_id,customer_id,amount_pkr,promise_date,created_by) VALUES(?,?,?,?,?,?)").run("bad","t2","c",100,"2030-01-01","u2"),
+      /payment promise customer tenant mismatch/
+    );
+    db.prepare("INSERT INTO payment_promises(id,tenant_id,customer_id,amount_pkr,promise_date,created_by) VALUES(?,?,?,?,?,?)").run("good","t","c",100,"2030-01-01","u");
 
     const versions = db.prepare("SELECT version FROM schema_migrations ORDER BY version").all().map(row => row.version);
     assert.equal(new Set(versions).size, versions.length);
-    assert.deepEqual(versions.slice(-3), ["007_isp_business_modules", "008_financial_management", "009_session_hardening"]);
+    assert.deepEqual(versions.slice(-4), ["007_isp_business_modules", "008_financial_management", "009_session_hardening", "010_payment_promises"]);
   } finally {
     db.close();
   }
