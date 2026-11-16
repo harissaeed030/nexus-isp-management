@@ -26,7 +26,7 @@ test("sync outbox records all five business entities and changes", () => {
   const before = db.prepare("SELECT MAX(cursor) AS n FROM sync_outbox WHERE tenant_id=?").get(tenant).n;
   db.prepare("UPDATE customers SET phone=? WHERE id=? AND tenant_id=?").run("03000000000",customer,tenant);
   const change = db.prepare("SELECT entity_type,entity_id,operation FROM sync_outbox WHERE tenant_id=? AND cursor>? ORDER BY cursor DESC LIMIT 1").get(tenant,before);
-  assert.deepEqual(change,{entity_type:"customers",entity_id:customer,operation:"upsert"});
+  assert.deepEqual({ ...change },{entity_type:"customers",entity_id:customer,operation:"upsert"});
   db.prepare("DELETE FROM sync_outbox WHERE tenant_id=?").run(tenant);
 });
 
