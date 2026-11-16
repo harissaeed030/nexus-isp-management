@@ -11,9 +11,9 @@
 
 ## Important financial safeguards
 
-SQLite stores package, invoice, and payment amounts in PKR. The current D1 Vancom organization was inspected and its currency is presently `USD`. The sync Worker therefore refuses to import any financial records until the organization currency is explicitly corrected to `PKR`. Do not remove this guard or silently treat PKR amounts as USD.
+SQLite stores package, invoice, and payment amounts in PKR. The D1 Vancom organization currency was changed from `USD` to `PKR` after verifying that it had no packages, subscriptions, invoices, or payments. The Worker checks this currency before accepting records.
 
-The D1 database currently has two customer rows and no package, subscription, invoice, or payment rows. The sync mapping remains intentionally unconfigured until the local SQLite tenant ID is verified and reconciled with the existing Vancom organization. Existing customer rows must not be duplicated or overwritten without an ID/code reconciliation.
+The D1 database currently has two existing customer rows and no package, subscription, invoice, or payment rows. On the first authenticated sync, the Worker creates the source-tenant mapping automatically only if D1 contains exactly one organization and its currency is PKR. Existing customer rows are protected by ID and customer-code conflict checks.
 
 ## Configuration
 
@@ -28,4 +28,4 @@ Run the backend, then run `npm run sync:d1` from `backend/`. The command is resu
 
 ## Activation status
 
-Code is committed to the development branch. D1 migration 0011 has been applied to the production `nexus-saas-db`, and the isolated `nexus-sqlite-sync` Worker has been deployed with the correct D1 binding and observability. The Worker secret `SYNC_PUSH_TOKEN` is not yet configured, the tenant mapping is empty, and the existing Vancom organization currency is still USD. The Worker deliberately rejects PKR imports until the currency is confirmed and corrected. No business records have been synced; live sync is not active.
+Code is committed to the development branch. D1 migration 0011 has been applied to production, the isolated `nexus-sqlite-sync` Worker is deployed with its D1 binding, and the Vancom organization currency is now PKR. The Worker secret `SYNC_PUSH_TOKEN` is not configured yet. No business records have been synced; live sync becomes active after the user adds that secret and the two local `.env` values, starts the Termux API, and runs `npm run sync:d1`.
