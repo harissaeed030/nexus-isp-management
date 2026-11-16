@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - "shared/sync-contract/**"
+      - "backend/src/services/sync-outbox.js"
+      - "backend/migrations/011_sqlite_sync_outbox.sql"
+      - "backend/scripts/sync-outbox.test.js"
+      - "backend/package.json"
       - ".github/workflows/sync-contract.yml"
   push:
     branches: ["feat/sqlite-d1-sync-contract-v1"]
