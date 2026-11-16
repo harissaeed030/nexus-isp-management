@@ -1,0 +1,28 @@
+name: Cloudflare D1 API Worker
+
+on:
+  push:
+    branches: [build/nexus-isp-core]
+    paths:
+      - "worker/src/d1-api-worker.js"
+      - "worker/wrangler.api.toml"
+      - "worker/scripts/d1-api-contract.test.js"
+      - ".github/workflows/d1-api-worker.yml"
+  pull_request:
+    branches: [build/nexus-isp-core]
+    paths:
+      - "worker/src/d1-api-worker.js"
+      - "worker/wrangler.api.toml"
+      - "worker/scripts/d1-api-contract.test.js"
+      - ".github/workflows/d1-api-worker.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --check worker/src/d1-api-worker.js
+      - run: node --test worker/scripts/d1-api-contract.test.js
