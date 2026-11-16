@@ -35,6 +35,8 @@ async function applyEvent(env,orgId,sourceTenantId,event){
     if(type==="customers"){
       const full=clean(r.full_name||"").trim(), split=full.indexOf(" "), first=split<0?full:full.slice(0,split), last=split<0?"":full.slice(split+1);
       if(!first)throw new Error("Customer name is required.");
+      const customerCode=r.account_number||r.customer_code||null;
+      if(customerCode){const sameCode=await env.DB.prepare("SELECT id FROM customers WHERE organization_id=? AND customer_code=?").bind(orgId,customerCode).first();if(sameCode&&sameCode.id!==id)throw new Error("Customer code already exists in D1 under a different ID; reconcile before syncing.");}
       statement=env.DB.prepare(`INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,status,customer_code,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,email=excluded.email,phone=excluded.phone,address=excluded.address,status=excluded.status,customer_code=excluded.customer_code,updated_at=excluded.updated_at
