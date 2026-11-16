@@ -17,8 +17,7 @@ CREATE TABLE IF NOT EXISTS pppoe_accounts (
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  UNIQUE(tenant_id,username),
- UNIQUE(tenant_id,customer_id),
- FOREIGN KEY(tenant_id,router_id) REFERENCES routers(tenant_id,id)
+ UNIQUE(tenant_id,customer_id)
 );
 
 INSERT OR IGNORE INTO pppoe_accounts
