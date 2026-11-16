@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/i;
 const assertIdentifier = value => {
   if (typeof value !== "string" || !IDENTIFIER.test(value)) throw new TypeError("Unsafe SQL identifier.");
@@ -50,7 +48,7 @@ export function createTenantRepository(adapter, definitions) {
       const sort = String(direction).toUpperCase() === "ASC" ? "ASC" : "DESC";
       return adapter.all(`SELECT * FROM ${d.table} WHERE ${d.tenantColumn}=? ORDER BY ${order} ${sort} LIMIT ? OFFSET ?`, [tenantId, limit, offset]);
     },
-    async create(entity, tenantId, fields, id = randomUUID()) {
+    async create(entity, tenantId, fields, id = globalThis.crypto.randomUUID()) {
       if (!tenantId) throw new TypeError("Tenant ID is required.");
       const d = definition(entity), entries = columnsFor(d, fields);
       const keys = [d.idColumn, d.tenantColumn, ...entries.map(([key]) => key)];
