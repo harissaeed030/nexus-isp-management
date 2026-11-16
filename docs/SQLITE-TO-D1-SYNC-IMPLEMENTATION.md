@@ -19,7 +19,7 @@ The D1 database currently has two customer rows and no package, subscription, in
 
 Set these private values in `backend/.env` (never commit real values):
 
-- `SYNC_TENANT_ID`: the local tenant ID returned by the local `GET /api/v1/tenant` endpoint.
+- `SYNC_TENANT_ID`: optional when the local SQLite database has exactly one tenant (the API detects it); otherwise set the local tenant ID returned by `GET /api/v1/tenant`.
 - `SYNC_EXPORT_TOKEN`: a strong random secret used only by the local export endpoint.
 - `D1_SYNC_WORKER_URL`: the deployed isolated Worker URL ending in `/sync/push`.
 - `D1_SYNC_WORKER_TOKEN`: the same strong random secret configured as the Worker `SYNC_PUSH_TOKEN`.
