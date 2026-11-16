@@ -1,8 +1,8 @@
 # NEXUS Cloudflare Workers
 
-## D1 API Worker (development candidate)
+## D1 API Worker (staging)
 
-The complete D1 API implementation is in `src/d1-api-worker.js`. It is aligned with the deployed API implementation from the repository's production release, while this development branch keeps it isolated from the existing health and SQLite-sync Workers.
+The complete D1 API implementation is in `src/d1-api-worker.js`. The staging Worker now mirrors the currently deployed production API source; it is kept separate from the health and SQLite-sync Workers.
 
 The configuration `wrangler.api.toml` targets the existing **staging** Worker (`nexus-saas-api-staging`) and staging D1 database (`nexus-saas-staging-db`). The production Worker and production D1 database remain separate.
 
@@ -24,7 +24,7 @@ Hardware integrations remain capability-limited: inventory CRUD does not prove a
 
 ### Required configuration
 
-Before deploying the candidate, configure Worker secrets in Cloudflare (never in Git):
+The staging Worker already has these Cloudflare bindings configured (values are not stored in Git):
 
 - Required: `JWT_SECRET` (long random secret)
 - Required for browser use: `ALLOWED_ORIGINS` (exact comma-separated trusted origins)
@@ -55,7 +55,7 @@ This deploys the staging Worker only. It does not deploy the production Worker. 
 
 - `wrangler.toml`: health-check Worker only.
 - `wrangler.sync.toml`: SQLite-to-D1 sync Worker (`/sync/push`); not the public API.
-- `wrangler.api.toml`: full D1 API candidate, isolated by Worker name and staging D1 binding.
+- `wrangler.api.toml`: full D1 API staging Worker, isolated from production by Worker name and staging D1 binding.
 
 ## SQLite-to-D1 sync
 
