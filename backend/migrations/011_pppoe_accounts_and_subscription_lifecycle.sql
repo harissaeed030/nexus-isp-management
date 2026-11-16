@@ -47,7 +47,6 @@ BEFORE UPDATE OF tenant_id,customer_id,router_id ON pppoe_accounts BEGIN
  THEN RAISE(ABORT,'PPPoE router tenant mismatch') END;
 END;
 
-ALTER TABLE subscriptions ADD COLUMN expires_at TEXT;
-ALTER TABLE subscriptions ADD COLUMN renewed_at TEXT;
+-- expires_at and renewed_at are already introduced by migration 002.
 CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant_customer_status ON subscriptions(tenant_id,customer_id,status);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_expiry ON subscriptions(tenant_id,status,expires_at);
