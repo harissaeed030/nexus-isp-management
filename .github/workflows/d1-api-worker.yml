@@ -7,6 +7,8 @@ on:
       - "worker/src/d1-api-worker.js"
       - "worker/wrangler.api.toml"
       - "worker/scripts/d1-api-contract.test.js"
+      - "backend/package.json"
+      - "backend/scripts/architecture-boundaries.test.js"
       - ".github/workflows/d1-api-worker.yml"
   pull_request:
     branches: [build/nexus-isp-core]
