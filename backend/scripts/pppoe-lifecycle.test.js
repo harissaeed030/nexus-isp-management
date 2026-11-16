@@ -35,7 +35,7 @@ test("migration 011 safely normalizes legacy PPPoE mapping and adds subscription
   try {
     db.exec(migration);
     const account = db.prepare("SELECT tenant_id,customer_id,router_id,username,status,password_ciphertext FROM pppoe_accounts").get();
-    assert.deepEqual(account, {
+    assert.deepEqual({ ...account }, {
       tenant_id: "tenant-a",
       customer_id: "customer-a",
       router_id: "router-a",
