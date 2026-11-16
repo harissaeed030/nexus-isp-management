@@ -31,7 +31,7 @@ test("contract rejects secrets, unknown entity, wrong version and malformed payl
 test("replayed operation IDs are idempotent and payload reuse is rejected",()=>{
  const ledger=new Map();
  const apply=(op)=>{const prior=ledger.get(op.operationId);const fingerprint=JSON.stringify(op);if(prior){if(prior!==fingerprint)throw new Error("IDEMPOTENCY_KEY_REUSED");return {duplicate:true};}ledger.set(op.operationId,fingerprint);return {duplicate:false};};
- const op=createOperation({operationId:"op-1",tenantId:"local-t1",entity:"customer",record:{id:"c1",customer_code:"C1",full_name:"Test Customer"},organizationId:org});
+ const op=createOperation({operationId:"op-1",tenantId:"local-t1",entity:"customer",record:{id:"c1",tenant_id:"local-t1",customer_code:"C1",full_name:"Test Customer"},organizationId:org});
  assert.deepEqual(apply(op),{duplicate:false});assert.deepEqual(apply(op),{duplicate:true});
  const changed={...op,payload:{...op.payload,first_name:"Changed"}};
  assert.throws(()=>apply(changed),/IDEMPOTENCY_KEY_REUSED/);
