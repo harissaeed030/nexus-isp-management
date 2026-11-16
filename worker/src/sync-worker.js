@@ -98,7 +98,7 @@ export default {
   const url=new URL(request.url);
   if(request.method==="GET"&&url.pathname==="/health")return json({success:true,service:"NEXUS SQLite-to-D1 sync",database:env.DB?"configured":"missing"});
   if(request.method!=="POST"||url.pathname!=="/sync/push")return json({success:false,error:"Not found"},404);
-  const bearer=(request.headers.get("Authorization")||"").replace(/^Bearer\\s+/i,"");
+  const bearer=(request.headers.get("Authorization")||"").replace(/^Bearer\s+/i,"");
   if(!await equalSecret(bearer,env.SYNC_PUSH_TOKEN))return json({success:false,error:"Authentication failed"},401);
   if(!env.DB)return json({success:false,error:"D1 binding missing"},503);
   const length=Number(request.headers.get("Content-Length")||0);
