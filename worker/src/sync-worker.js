@@ -1,3 +1,4 @@
+import { createD1Adapter, createTenantRepository, schemaFor } from "../../shared/database/index.js";
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const ORDER = ["customers","packages","subscriptions","invoices","payments"];
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:JSON_HEADERS});}
@@ -28,14 +29,14 @@ export function validateSyncBatch(sourceTenantId, events) {
   }
   return null;
 }
-async function applyEvent(env,orgId,sourceTenantId,event){
+async function applyEvent(env,orgId,sourceTenantId,event,repository){
   const type=event.entityType, id=String(event.entityId||""), opId=String(event.operationId||"");
   if(!ORDER.includes(type)||!["upsert","delete"].includes(event.operation)||!id||id.length>128||!opId||opId.length>128||!Number.isSafeInteger(event.cursor)||event.cursor<1)throw new Error("Malformed sync event.");
   const hash=await sha256(JSON.stringify(event));
   const prior=await env.DB.prepare("SELECT payload_hash FROM sync_operations WHERE operation_id=?").bind(opId).first();
   if(prior){if(prior.payload_hash!==hash)throw new Error("Idempotency key reused with a different payload.");return {applied:0,duplicate:1};}
   const table=type;
-  const existing=await env.DB.prepare(`SELECT id,organization_id FROM ${table} WHERE id=?`).bind(id).first();
+  const existing=await repository.get(type,orgId,id);
   if(existing&&existing.organization_id!==orgId)throw new Error("Record ID already belongs to another organization.");
   let statement;
   if(event.operation==="delete"){
@@ -143,10 +144,11 @@ export default {
   }
   const organization=await env.DB.prepare("SELECT currency FROM organizations WHERE id=?").bind(mapping.organization_id).first();
   if(!organization||organization.currency!=="PKR")return json({success:false,error:"D1 organization currency must be PKR before importing PKR-denominated SQLite records"},409);
+  const repository = createTenantRepository(createD1Adapter(env.DB), schemaFor("d1"));
   let applied=0,duplicates=0,ackCursor=0;
   try{
     for(const event of events){
-      const result=await applyEvent(env,mapping.organization_id,sourceTenantId,event);
+      const result=await applyEvent(env,mapping.organization_id,sourceTenantId,event,repository);
       applied+=result.applied;duplicates+=result.duplicate;ackCursor=Math.max(ackCursor,Number(event.cursor)||0);
     }
     return json({success:true,organizationId:mapping.organization_id,applied,duplicates,ackCursor});
