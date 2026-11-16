@@ -15,7 +15,8 @@
     "test": "node scripts/smoke-test.js && node scripts/customer-subscription.test.js && node --test scripts/database-hardening.test.js && node --test scripts/mikrotik-adapter.test.js && node --test scripts/olt-adapter.test.js && node --test scripts/tr069-adapter.test.js && node --test scripts/portal-notification.test.js && node --test scripts/migration-reconciliation.test.js && node --test scripts/architecture-boundaries.test.js && node --test scripts/pppoe-lifecycle.test.js",
     "verify": "npm run check && npm test",
     "db:backup": "node scripts/db-backup.js",
-    "db:restore": "node scripts/db-restore.js"
+    "db:restore": "node scripts/db-restore.js",
+    "sync:d1": "node scripts/sync-to-d1.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
