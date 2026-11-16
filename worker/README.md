@@ -27,3 +27,32 @@ The SQLite migrations under `backend/migrations/` are not D1 migrations. Never a
 - Do not add real customer records to this health-only Worker foundation.
 - Do not expose router, OLT or ACS credentials to browser JavaScript.
 - Verify the deployment target, Worker source, D1 binding and current production backup before any production change.
+
+## SQLite-to-D1 sync Worker
+
+The isolated sync deployment is configured by `wrangler.sync.toml` and runs
+`src/sync-worker.js` as Worker `nexus-sqlite-sync`. It is separate from the
+health-check Worker configured by `wrangler.toml` and must not replace the
+production NEXUS API Worker.
+
+- `GET /health` checks that the sync Worker and D1 binding are present.
+- `POST /sync/push` accepts authenticated batches from the local SQLite outbox.
+- `POST /init` is **not** an endpoint on this Worker. D1 migration
+  `cloudflare/d1/migrations/0011_sqlite_sync_inbox.sql` must be applied through
+  the reviewed D1 migration process before sync is enabled.
+- Configure `SYNC_PUSH_TOKEN` as a Worker secret and use the same value as
+  `D1_SYNC_WORKER_TOKEN` in the local backend `.env`. Never put it in browser
+  code or commit it.
+- The sync currently covers customers, packages, subscriptions, invoices and
+  payments in one direction (SQLite to D1). It does not synchronize users,
+  passwords, sessions, PPPoE credentials, router/ACS secrets, support tickets,
+  staff, notifications or network inventory.
+- A source tenant is mapped to a D1 organization only under the documented
+  PKR/organization safeguards. Existing customer-code conflicts require manual
+  reconciliation; the Worker must not silently merge records.
+- Sync is not active until the Worker secret and local environment values are
+  configured. A deployed Worker alone does not prove a successful data sync.
+
+Run `npm run sync:d1` from `backend/` only after verifying the local SQLite
+tenant, D1 organization mapping, PKR currency and a private backup. See
+[SQLite-to-D1 sync implementation](../docs/SQLITE-TO-D1-SYNC-IMPLEMENTATION.md).
