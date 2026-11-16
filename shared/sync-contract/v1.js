@@ -70,7 +70,9 @@ export function mapLocalRecord(entity, local, organizationId) {
       const fullName=requiredString(local.full_name,"full_name");
       const parts=fullName.split(/\s+/);
       const first_name=parts.shift();
-      return {...root,customer_code:requiredString(local.customer_code,"customer_code"),first_name,last_name:parts.join(" "),phone:local.phone??null,email:local.email??null,address:local.address??null,status:local.status??"active"};
+      const customerStatus = {active:"active",inactive:"suspended",blocked:"terminated",suspended:"suspended",terminated:"terminated"}[local.status??"active"];
+      if (!customerStatus) throw new TypeError("unsupported customer status");
+      return {...root,customer_code:requiredString(local.customer_code,"customer_code"),first_name,last_name:parts.join(" "),phone:local.phone??null,email:local.email??null,address:local.address??null,status:customerStatus};
     }
     case "package":
       return {...root,name:requiredString(local.name,"name"),speed_down:safeInteger(local.speed_down_mbps,"speed_down_mbps",1),speed_up:safeInteger(local.speed_up_mbps,"speed_up_mbps",1),speed_mbps:safeInteger(local.speed_down_mbps,"speed_down_mbps",1),price:safeInteger(local.monthly_price_pkr,"monthly_price_pkr"),billing_cycle:"monthly",is_active:(local.status??"active")==="active"?1:0};
@@ -87,7 +89,10 @@ export function mapLocalRecord(entity, local, organizationId) {
       return {...root,customer_id:requiredString(local.customer_id,"customer_id"),invoice_number:requiredString(local.invoice_number,"invoice_number"),amount,tax:0,total:amount,issue_date:requiredString(local.issue_date??local.created_at,"issue_date"),due_date:requiredString(local.due_date,"due_date"),billing_period:local.billing_period??null,status:statusMap[localStatus]};
     }
     case "payment":
-      return {...root,invoice_id:requiredString(local.invoice_id,"invoice_id"),customer_id:requiredString(local.customer_id,"customer_id"),amount:safeInteger(local.amount_pkr,"amount_pkr",1),payment_method:requiredString(local.method,"method"),transaction_ref:local.reference??null,status:"completed",paid_at:local.received_at??null};
+      const localMethod = requiredString(local.method,"method");
+      const paymentMethod = {cash:"cash",bank:"bank_transfer",bank_transfer:"bank_transfer",card:"card",jazzcash:"mobile_money",easypaisa:"mobile_money",mobile_money:"mobile_money",other:"other"}[localMethod];
+      if (!paymentMethod) throw new TypeError("unsupported payment method");
+      return {...root,invoice_id:requiredString(local.invoice_id,"invoice_id"),customer_id:requiredString(local.customer_id,"customer_id"),amount:safeInteger(local.amount_pkr,"amount_pkr",1),payment_method:paymentMethod,transaction_ref:local.reference??null,status:"completed",paid_at:local.received_at??null};
     default: throw new TypeError("entity is not syncable");
   }
 }
