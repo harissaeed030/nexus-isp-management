@@ -11,13 +11,27 @@ const safeInteger = (value, name, min = 0) => {
   if (!Number.isSafeInteger(value) || value < min) throw new TypeError(name + " must be a safe integer >= " + min);
   return value;
 };
-function rejectSecrets(value, path = "payload") {
-  if (Array.isArray(value)) return value.forEach((v, i) => rejectSecrets(v, path + "[" + i + "]"));
-  if (!isObject(value)) return;
-  for (const [key, child] of Object.entries(value)) {
-    if (SECRET_KEYS.test(key)) throw new TypeError("Sensitive field is not syncable: " + path + "." + key);
-    rejectSecrets(child, path + "." + key);
+function rejectSecrets(value, path = "payload", seen = new Set()) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Non-finite number is not syncable: " + path);
+    return;
   }
+  if (typeof value !== "object") throw new TypeError("Non-JSON value is not syncable: " + path);
+  if (seen.has(value)) throw new TypeError("Circular payload is not syncable: " + path);
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => rejectSecrets(v, path + "[" + i + "]", seen));
+  } else {
+    if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+      throw new TypeError("Non-plain object is not syncable: " + path);
+    }
+    for (const [key, child] of Object.entries(value)) {
+      if (SECRET_KEYS.test(key)) throw new TypeError("Sensitive field is not syncable: " + path + "." + key);
+      rejectSecrets(child, path + "." + key, seen);
+    }
+  }
+  seen.delete(value);
 }
 export function validateOperation(input) {
   if (!isObject(input)) throw new TypeError("operation must be an object");
@@ -31,7 +45,14 @@ export function validateOperation(input) {
   if (input.contractVersion !== CONTRACT_VERSION) throw new TypeError("unsupported contractVersion");
   if (!isObject(input.payload)) throw new TypeError("payload must be an object");
   rejectSecrets(input.payload);
-  return Object.freeze({contractVersion:CONTRACT_VERSION,operationId,tenantId,entity,entityId,operation,payload:input.payload});
+  if (requiredString(input.payload.id, "payload.id") !== entityId) {
+    throw new TypeError("payload.id must match entityId");
+  }
+  requiredString(input.payload.organization_id, "payload.organization_id");
+  return Object.freeze({
+    contractVersion: CONTRACT_VERSION, operationId, tenantId, entity, entityId, operation,
+    payload: Object.freeze(structuredClone(input.payload))
+  });
 }
 function base(local, tenantId) {
   return {id:requiredString(local.id,"id"),organization_id:requiredString(tenantId,"organizationId")};
@@ -47,7 +68,7 @@ export function mapLocalRecord(entity, local, organizationId) {
   switch(entity) {
     case "customer": {
       const fullName=requiredString(local.full_name,"full_name");
-      const parts=fullName.split(/\s+/);
+      const parts=fullName.split(/\\s+/);
       const first_name=parts.shift();
       return {...root,customer_code:requiredString(local.customer_code,"customer_code"),first_name,last_name:parts.join(" "),phone:local.phone??null,email:local.email??null,address:local.address??null,status:local.status??"active"};
     }
@@ -63,6 +84,10 @@ export function mapLocalRecord(entity, local, organizationId) {
   }
 }
 export function createOperation({operationId,tenantId,entity,record,organizationId,operation="upsert"}) {
+  const localTenantId = requiredString(record?.tenant_id, "record.tenant_id");
+  if (localTenantId !== requiredString(tenantId, "tenantId")) {
+    throw new TypeError("record tenant_id must match tenantId");
+  }
   const mapped=mapLocalRecord(entity,record,organizationId);
   return validateOperation({contractVersion:CONTRACT_VERSION,operationId,tenantId,entity,entityId:record.id,operation,payload:mapped});
 }
