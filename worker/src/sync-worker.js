@@ -78,7 +78,7 @@ async function applyEvent(env,orgId,sourceTenantId,event){
       if(existing){
         const old=await env.DB.prepare("SELECT invoice_id,customer_id,amount,payment_method,transaction_ref,paid_at FROM payments WHERE id=? AND organization_id=?").bind(id,orgId).first();
         if(old.invoice_id!==r.invoice_id||old.customer_id!==inv.customer_id||Number(old.amount)!==amount||old.payment_method!==method||(old.transaction_ref||null)!==(r.reference||null))throw new Error("Payment is immutable and differs from the existing ledger entry.");
-        return {applied:0,duplicate:1};
+        statement=null;
       }
       if(r.reference){
         const ref=await env.DB.prepare("SELECT id FROM payments WHERE organization_id=? AND transaction_ref=?").bind(orgId,r.reference).first();
@@ -109,6 +109,8 @@ export default {
   if(!sourceTenantId||sourceTenantId.length>128||!Array.isArray(events)||events.length<1||events.length>50)return json({success:false,error:"sourceTenantId and 1-50 events are required"},400);
   const mapping=await env.DB.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind(sourceTenantId).first();
   if(!mapping)return json({success:false,error:"This SQLite tenant has not been explicitly mapped to a D1 organization"},409);
+  const organization=await env.DB.prepare("SELECT currency FROM organizations WHERE id=?").bind(mapping.organization_id).first();
+  if(!organization||organization.currency!=="PKR")return json({success:false,error:"D1 organization currency must be PKR before importing PKR-denominated SQLite records"},409);
   let applied=0,duplicates=0,ackCursor=0;
   try{
     for(const event of events){
