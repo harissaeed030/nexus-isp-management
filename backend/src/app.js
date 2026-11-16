@@ -53,7 +53,7 @@ app.get("/api/v1/auth/me",auth,(req,res)=>res.json({success:true,user:cleanUser(
 
 app.post("/api/v1/tenants/register",rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:"draft-7",legacyHeaders:false,message:{success:false,error:"Too many workspace registrations. Try again later."}}),(req,res)=>{
   const b=req.body||{},company=typeof b.companyName==="string"?b.companyName.trim():"",fullName=typeof b.fullName==="string"?b.fullName.trim():"",email=typeof b.email==="string"?b.email.trim().toLowerCase():"",password=b.password;
-  if(company.length<2||company.length>120||fullName.length<2||fullName.length>160||!/^([^\\s@]+)@([^\\s@]+)\\.([^\\s@]+)$/.test(email)||email.length>254||typeof password!=="string"||password.length<10||password.length>256)
+  if(company.length<2||company.length>120||fullName.length<2||fullName.length>160||!/^([^\s@]+)@([^\s@]+)\.([^\s@]+)$/.test(email)||email.length>254||typeof password!=="string"||password.length<10||password.length>256)
     return fail(res,400,"Company, owner name, valid email and password (10–256 characters) are required.");
   const base=(typeof b.slug==="string"&&b.slug.trim()?b.slug:company).toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,48);
   if(base.length<2)return fail(res,400,"Workspace name must contain at least two letters or numbers.");
