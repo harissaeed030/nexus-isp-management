@@ -4,7 +4,7 @@
 
 The complete D1 API implementation is in `src/d1-api-worker.js`. It is aligned with the deployed API implementation from the repository's production release, while this development branch keeps it isolated from the existing health and SQLite-sync Workers.
 
-The candidate configuration `wrangler.api.toml` targets the **staging** D1 database (`nexus-saas-staging-db`) and uses a distinct Worker name. It does not target the production Worker or production D1 database.
+The configuration `wrangler.api.toml` targets the existing **staging** Worker (`nexus-saas-api-staging`) and staging D1 database (`nexus-saas-staging-db`). The production Worker and production D1 database remain separate.
 
 ### API areas
 
@@ -41,7 +41,7 @@ The D1 binding is `DB` and is defined in `wrangler.api.toml`.
 - Confirm the target database migration state and take a D1 export before applying any migration.
 - The API Worker has an idempotent runtime schema bootstrap for additive application tables/columns. Review the code and staging database before first request/deployment; a new Worker version is not a substitute for migration verification.
 
-### Safe staging deployment
+### Staging deployment
 
 From this `worker/` directory, after confirming Cloudflare account and D1 binding:
 
@@ -49,7 +49,7 @@ From this `worker/` directory, after confirming Cloudflare account and D1 bindin
 npx wrangler deploy --config wrangler.api.toml
 ```
 
-This deploys the candidate Worker only. It does not deploy the production Worker. Do not change `wrangler.api.toml` to production or deploy over `nexus-saas-api` without a separate reviewed release, current backup, migration preflight, staging smoke tests and explicit approval.
+This deploys the staging Worker only. It does not deploy the production Worker. Existing `JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY` and D1 bindings were preserved during the API deployment. Do not change `wrangler.api.toml` to production or deploy over `nexus-saas-api` without a separate reviewed release, current backup, migration preflight, staging smoke tests and explicit approval.
 
 ### Existing separate Workers
 
