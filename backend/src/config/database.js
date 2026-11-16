@@ -175,4 +175,19 @@ if(!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(paym
  catch(error){try{db.exec("ROLLBACK");}catch{}throw new Error(`Database migration ${paymentPromisesMigrationVersion} failed: ${error.message}`);}
 }
 
+
+const sqliteSyncOutboxMigrationVersion = "011_sqlite_sync_outbox";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(sqliteSyncOutboxMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/011_sqlite_sync_outbox.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(sqliteSyncOutboxMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${sqliteSyncOutboxMigrationVersion} failed: ${error.message}`);
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
