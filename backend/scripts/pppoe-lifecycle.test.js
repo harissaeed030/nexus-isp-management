@@ -20,7 +20,7 @@ function fixture() {
     CREATE TABLE subscriptions(
       id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),
       customer_id TEXT NOT NULL REFERENCES customers(id),
-      package_id TEXT,status TEXT,started_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      package_id TEXT,status TEXT,started_at TEXT,expires_at TEXT,renewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
   db.exec("INSERT INTO tenants(id) VALUES('tenant-a'),('tenant-b')");
