@@ -1,0 +1,14 @@
+name = "nexus-saas-api-d1-candidate"
+main = "src/d1-api-worker.js"
+compatibility_date = "2026-11-16"
+
+[vars]
+ENVIRONMENT = "staging"
+# Set ALLOWED_ORIGINS and secrets in Cloudflare Worker settings.
+# Required secret: JWT_SECRET
+# Optional/feature secrets: TURNSTILE_SECRET_KEY
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nexus-saas-staging-db"
+database_id = "194f62e2-2766-48ab-be17-81248610c0cd"
