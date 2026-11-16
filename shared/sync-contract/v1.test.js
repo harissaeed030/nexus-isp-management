@@ -12,7 +12,7 @@ test("package mapping preserves integer PKR and independent upload/download spee
  assert.equal(mapped.speed_down,20);assert.equal(mapped.speed_up,10);assert.equal(mapped.price,2500);assert.equal(mapped.billing_cycle,"monthly");
 });
 test("invoice and payment mapping are integer-safe and append-oriented",()=>{
- const inv=mapLocalRecord("invoice",{id:"i1",customer_id:"c1",invoice_number:"INV-1",amount_pkr:2500,status:"unpaid"},org);
+ const inv=mapLocalRecord("invoice",{id:"i1",customer_id:"c1",invoice_number:"INV-1",amount_pkr:2500,status:"unpaid",issue_date:"2026-11-01",due_date:"2026-11-10"},org);
  const pay=mapLocalRecord("payment",{id:"pay1",invoice_id:"i1",customer_id:"c1",amount_pkr:500,method:"cash"},org);
  assert.equal(inv.total,2500);assert.equal(inv.tax,0);assert.equal(pay.amount,500);assert.equal(pay.status,"completed");
  assert.throws(()=>mapLocalRecord("payment",{id:"pay2",invoice_id:"i1",customer_id:"c1",amount_pkr:0,method:"cash"},org),/safe integer/);
@@ -60,4 +60,14 @@ test("non-JSON values and non-finite numbers are rejected",()=>{
  const base={contractVersion:1,operationId:"op-json",tenantId:"local-t1",entity:"customer",entityId:"c1",operation:"upsert",payload:{id:"c1",organization_id:org}};
  assert.throws(()=>validateOperation({...base,payload:{...base.payload,score:Infinity}}),/Non-finite number/);
  assert.throws(()=>validateOperation({...base,payload:{...base.payload,fn:()=>true}}),/Non-JSON value/);
+});
+
+test("invoice and subscription mappings satisfy strict D1 status and date constraints",()=>{
+ const invoice=mapLocalRecord("invoice",{id:"i2",customer_id:"c1",invoice_number:"INV-2",amount_pkr:1000,status:"overdue",issue_date:"2026-11-01",due_date:"2026-11-05"},org);
+ assert.equal(invoice.status,"overdue");
+ const unpaid=mapLocalRecord("invoice",{id:"i3",customer_id:"c1",invoice_number:"INV-3",amount_pkr:1000,status:"unpaid",issue_date:"2026-11-01",due_date:"2026-11-10"},org);
+ assert.equal(unpaid.status,"pending");
+ assert.throws(()=>mapLocalRecord("invoice",{id:"i4",customer_id:"c1",invoice_number:"INV-4",amount_pkr:1000,status:"written_off",issue_date:"2026-11-01",due_date:"2026-11-10"},org),/unsupported invoice status/);
+ assert.throws(()=>mapLocalRecord("invoice",{id:"i5",customer_id:"c1",invoice_number:"INV-5",amount_pkr:1000,status:"unpaid",issue_date:"2026-11-01"},org),/due_date/);
+ assert.throws(()=>mapLocalRecord("subscription",{id:"s2",customer_id:"c1",package_id:"p1",status:"active"},org),/started_at/);
 });
