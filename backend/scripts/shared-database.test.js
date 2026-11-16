@@ -65,6 +65,25 @@ test("D1 adapter uses bound parameters and returns normalized results", async ()
   assert.equal((await adapter.batch([{sql:"UPDATE customers SET status=?",params:["active"]}])).length,1);
 });
 
+
+test("D1 repository scopes reads to organization_id", async () => {
+  const seen = [];
+  const binding = {
+    prepare(sql) {
+      return { bind(...params) {
+        seen.push({sql,params});
+        return { async first() { return {id:"c1",organization_id:"org-a"}; }, async all() { return {success:true,results:[]}; }, async run() { return {success:true,meta:{changes:1}}; } };
+      }};
+    },
+    async batch() { return []; }
+  };
+  const repository = createTenantRepository(createD1Adapter(binding), schemaFor("d1"));
+  const row = await repository.get("customers","org-a","c1");
+  assert.equal(row.organization_id,"org-a");
+  assert.match(seen[0].sql,/organization_id=\?/);
+  assert.deepEqual(seen[0].params,["c1","org-a"]);
+});
+
 test("schema contract keeps the five synchronized entities mapped for both dialects", () => {
   const sqlite = schemaFor("sqlite"), d1 = schemaFor("d1");
   assert.deepEqual(Object.keys(sqlite),["customers","packages","subscriptions","invoices","payments"]);
