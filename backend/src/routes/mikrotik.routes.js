@@ -241,28 +241,55 @@ export function registerMikroTikRoutes(app, { db, auth, id, audit, fail }) {
     });
   }
 
+  app.get("/api/v1/routers/:id/pppoe/accounts", auth, (req, res) => {
+    const router = getRouter(req.params.id, req.user.tenant_id);
+    if (!router) return fail(res, 404, "Router not found.");
+    const rows = db.prepare(
+      "SELECT p.id,p.customer_id,p.username,p.ip_address,p.mac_address,p.status,p.last_connected_at,p.last_disconnected_at,p.created_at,p.updated_at,c.full_name customer_name,c.customer_code FROM pppoe_accounts p JOIN customers c ON c.id=p.customer_id AND c.tenant_id=p.tenant_id WHERE p.tenant_id=? AND p.router_id=? ORDER BY p.created_at DESC"
+    ).all(req.user.tenant_id, router.id);
+    return res.json({ success: true, data: rows });
+  });
+
   app.post("/api/v1/routers/:id/customers/:customerId/pppoe", auth, (req, res) => {
     const router = getRouter(req.params.id, req.user.tenant_id);
     if (!router) return fail(res, 404, "Router not found.");
     const customer = db.prepare(
-      "SELECT id FROM customers WHERE id=? AND tenant_id=?"
+      "SELECT id,pppoe_username,pppoe_router_id FROM customers WHERE id=? AND tenant_id=?"
     ).get(req.params.customerId, req.user.tenant_id);
     if (!customer) return fail(res, 404, "Customer not found.");
     const username = req.body?.username;
+    const password = req.body?.password;
     if (!validPppoeName(username)) return fail(res, 400, "Valid PPPoE username is required.");
+    if (password !== undefined && (typeof password !== "string" || password.length < 8 || password.length > 128)) {
+      return fail(res, 400, "PPPoE password must be 8–128 characters.");
+    }
+    let passwordCiphertext = null;
     try {
+      if (password !== undefined) passwordCiphertext = encrypt(password);
+      db.prepare(`INSERT INTO pppoe_accounts
+        (id,tenant_id,customer_id,router_id,username,password_ciphertext,status)
+        VALUES(?,?,?,?,?,?, 'active')
+        ON CONFLICT(tenant_id,customer_id) DO UPDATE SET
+          router_id=excluded.router_id,username=excluded.username,
+          password_ciphertext=COALESCE(excluded.password_ciphertext,pppoe_accounts.password_ciphertext),
+          status='active',updated_at=CURRENT_TIMESTAMP`)
+        .run(id(), req.user.tenant_id, customer.id, router.id, username, passwordCiphertext);
+      // Keep legacy customer columns synchronized while older dashboard clients migrate.
       db.prepare("UPDATE customers SET pppoe_username=?,pppoe_router_id=? WHERE id=? AND tenant_id=?")
         .run(username, router.id, customer.id, req.user.tenant_id);
     } catch (error) {
       if (String(error.message).includes("UNIQUE")) {
         return fail(res, 409, "This PPPoE username is already mapped to another customer.");
       }
+      if (String(error.message).includes("ROUTER_CREDENTIAL_KEY")) {
+        return fail(res, 503, "Configure ROUTER_CREDENTIAL_KEY before saving a PPPoE password.");
+      }
       throw error;
     }
     audit(req.user, "map_pppoe", "customer", customer.id);
-    return res.json({
+    return res.status(201).json({
       success: true,
-      data: { customerId: customer.id, routerId: router.id, pppoeUsername: username }
+      data: { customerId: customer.id, routerId: router.id, pppoeUsername: username, passwordStored: passwordCiphertext !== null }
     });
   });
 
@@ -278,22 +305,32 @@ export function registerMikroTikRoutes(app, { db, auth, id, audit, fail }) {
           ".proplist": "name,profile,disabled,service"
         })
       ]));
-      const activeNames = new Set(active.map(row => row.name));
+      const activeByName = new Map(active.map(row => [row.name, row]));
       const mapped = db.prepare(
-        "SELECT id,pppoe_username,connection_status FROM customers WHERE tenant_id=? AND pppoe_router_id=? AND pppoe_username IS NOT NULL"
+        "SELECT p.id account_id,p.customer_id,p.username,p.status account_status,p.ip_address,p.mac_address,p.last_connected_at,p.last_disconnected_at,c.connection_status,c.full_name FROM pppoe_accounts p JOIN customers c ON c.id=p.customer_id AND c.tenant_id=p.tenant_id WHERE p.tenant_id=? AND p.router_id=?"
       ).all(req.user.tenant_id, router.id);
       let updatedCustomers = 0;
-      for (const customer of mapped) {
-        const next = activeNames.has(customer.pppoe_username) ? "active" : "disconnected";
-        if (customer.connection_status === next) continue;
-        db.prepare("UPDATE customers SET connection_status=? WHERE id=? AND tenant_id=?")
-          .run(next, customer.id, req.user.tenant_id);
-        db.prepare(
-          "INSERT INTO customer_connection_history(id,tenant_id,customer_id,event_type,old_status,new_status,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)"
-        ).run(id(), req.user.tenant_id, customer.id, "router_sync",
-          customer.connection_status, next,
-          "Synchronized from live RouterOS PPPoE active sessions", req.user.id);
-        updatedCustomers++;
+      let updatedAccounts = 0;
+      for (const account of mapped) {
+        const session = activeByName.get(account.username);
+        const next = session ? "active" : (["suspended","disabled"].includes(account.account_status) ? account.account_status : "disconnected");
+        const customerNext = session ? "active" : "disconnected";
+        const ipAddress = session?.address || account.ip_address;
+        const macAddress = session?.["caller-id"] || account.mac_address;
+        const now = new Date().toISOString();
+        db.prepare("UPDATE pppoe_accounts SET status=?,ip_address=?,mac_address=?,last_connected_at=CASE WHEN ?='active' AND status<>'active' THEN ? ELSE last_connected_at END,last_disconnected_at=CASE WHEN ?<>'active' AND status='active' THEN ? ELSE last_disconnected_at END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
+          .run(next, ipAddress, macAddress, next, now, next, now, account.account_id, req.user.tenant_id);
+        if (next !== account.account_status || ipAddress !== account.ip_address || macAddress !== account.mac_address) updatedAccounts++;
+        if (customerNext !== account.connection_status) {
+          db.prepare("UPDATE customers SET connection_status=? WHERE id=? AND tenant_id=?")
+            .run(customerNext, account.customer_id, req.user.tenant_id);
+          db.prepare(
+            "INSERT INTO customer_connection_history(id,tenant_id,customer_id,event_type,old_status,new_status,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)"
+          ).run(id(), req.user.tenant_id, account.customer_id, "router_sync",
+            account.connection_status, customerNext,
+            "Synchronized from live RouterOS PPPoE active sessions", req.user.id);
+          updatedCustomers++;
+        }
       }
       log(req.user, router.id, "sync", "success", null);
       return res.json({
@@ -303,6 +340,7 @@ export function registerMikroTikRoutes(app, { db, auth, id, audit, fail }) {
           active,
           secrets,
           mappedCustomers: mapped.length,
+          updatedAccounts,
           updatedCustomers,
           checkedAt: new Date().toISOString()
         }
