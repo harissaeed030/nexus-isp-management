@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { dirname, resolve } from "node:path";
 import { env } from "./env.js";
+import { createSqliteAdapter, createTenantRepository, schemaFor } from "../../../shared/database/index.js";
 const file=resolve(env.databasePath);mkdirSync(dirname(file),{recursive:true});
 export const db=new DatabaseSync(file);
 db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
@@ -204,3 +205,6 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(syn
 }
 
 export function getDatabaseStatus(){return "connected";}
+
+// Shared async repository contract; existing synchronous db access remains supported during migration.
+export const repository = createTenantRepository(createSqliteAdapter(db), schemaFor("sqlite"));
