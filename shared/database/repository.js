@@ -21,7 +21,7 @@ export function createTenantRepository(adapter, definitions) {
       idColumn: assertIdentifier(value.idColumn || "id"),
       columns: value.columns,
       archiveColumn: value.archiveColumn ? assertIdentifier(value.archiveColumn) : "status",
-      archiveValue: value.archiveValue ?? status
+      archiveValue: value.archiveValue
     };
   };
   const columnsFor = (def, fields) => {
