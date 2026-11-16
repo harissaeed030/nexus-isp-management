@@ -104,12 +104,29 @@ export default {
   const bearer=(request.headers.get("Authorization")||"").replace(/^Bearer\s+/i,"");
   if(!await equalSecret(bearer,env.SYNC_PUSH_TOKEN))return json({success:false,error:"Authentication failed"},401);
   if(!env.DB)return json({success:false,error:"D1 binding missing"},503);
-  const length=Number(request.headers.get("Content-Length")||0);
-  if(length>900000)return json({success:false,error:"Batch too large"},413);
-  let body;try{body=await request.json()}catch{return json({success:false,error:"Invalid JSON"},400);}
+  // Enforce the payload limit on bytes actually received; Content-Length may be absent or untrusted.
+  let rawBody;
+  try { rawBody = await request.text(); } catch { return json({success:false,error:"Unable to read request body"},400); }
+  if (new TextEncoder().encode(rawBody).byteLength > 900000) return json({success:false,error:"Batch too large"},413);
+  let body;
+  try { body = JSON.parse(rawBody); } catch { return json({success:false,error:"Invalid JSON"},400); }
   const sourceTenantId=String(body?.sourceTenantId||"");
   const events=body?.events;
   if(!sourceTenantId||sourceTenantId.length>128||!Array.isArray(events)||events.length<1||events.length>50)return json({success:false,error:"sourceTenantId and 1-50 events are required"},400);
+  // The export cursor is global, so gaps are normal, but a batch must be strictly ordered.
+  // Otherwise acknowledging its maximum cursor could permanently skip an earlier event.
+  const seenOperations = new Set();
+  let previousCursor = 0;
+  for (const event of events) {
+    if (!event || !Number.isSafeInteger(event.cursor) || event.cursor <= previousCursor) {
+      return json({success:false,error:"Events must be ordered by strictly increasing cursor"},400);
+    }
+    if (typeof event.operationId !== "string" || !event.operationId || seenOperations.has(event.operationId)) {
+      return json({success:false,error:"Each event must have a unique operationId"},400);
+    }
+    seenOperations.add(event.operationId);
+    previousCursor = event.cursor;
+  }
   let mapping=await env.DB.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind(sourceTenantId).first();
   if(!mapping){
     const organizations=await env.DB.prepare("SELECT id,currency FROM organizations ORDER BY created_at LIMIT 2").all();
