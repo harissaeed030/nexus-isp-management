@@ -22,8 +22,12 @@ export function registerSyncExportRoutes(app, { db, env }) {
     if (!env.syncExportToken || !tokenMatches(bearer, env.syncExportToken)) {
       return res.status(401).json({ success: false, error: "Sync authentication failed." });
     }
-    const tenantId = env.syncTenantId;
-    if (!tenantId) return res.status(503).json({ success: false, error: "SYNC_TENANT_ID is not configured." });
+    let tenantId = env.syncTenantId;
+    if (!tenantId) {
+      const localTenants = db.prepare("SELECT id FROM tenants ORDER BY created_at LIMIT 2").all();
+      if (localTenants.length !== 1) return res.status(503).json({ success: false, error: "Set SYNC_TENANT_ID when the local database has zero or multiple tenants." });
+      tenantId = localTenants[0].id;
+    }
     const after = Number.parseInt(req.query.after || "0", 10);
     const limit = Number.parseInt(req.query.limit || "50", 10);
     if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_BATCH) {
