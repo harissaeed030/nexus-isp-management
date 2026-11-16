@@ -71,3 +71,15 @@ test("invoice and subscription mappings satisfy strict D1 status and date constr
  assert.throws(()=>mapLocalRecord("invoice",{id:"i5",customer_id:"c1",invoice_number:"INV-5",amount_pkr:1000,status:"unpaid",issue_date:"2026-11-01"},org),/due_date/);
  assert.throws(()=>mapLocalRecord("subscription",{id:"s2",customer_id:"c1",package_id:"p1",status:"active"},org),/started_at/);
 });
+
+test("local customer and payment enums map to strict D1 enum values",()=>{
+ const inactive=mapLocalRecord("customer",{id:"c2",customer_code:"C2",full_name:"Inactive Customer",status:"inactive"},org);
+ const blocked=mapLocalRecord("customer",{id:"c3",customer_code:"C3",full_name:"Blocked Customer",status:"blocked"},org);
+ assert.equal(inactive.status,"suspended");
+ assert.equal(blocked.status,"terminated");
+ const bank=mapLocalRecord("payment",{id:"p2",invoice_id:"i1",customer_id:"c1",amount_pkr:100,method:"bank"},org);
+ const mobile=mapLocalRecord("payment",{id:"p3",invoice_id:"i1",customer_id:"c1",amount_pkr:100,method:"jazzcash"},org);
+ assert.equal(bank.payment_method,"bank_transfer");
+ assert.equal(mobile.payment_method,"mobile_money");
+ assert.throws(()=>mapLocalRecord("payment",{id:"p4",invoice_id:"i1",customer_id:"c1",amount_pkr:100,method:"crypto"},org),/unsupported payment method/);
+});
