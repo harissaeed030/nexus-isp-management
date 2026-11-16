@@ -22,7 +22,7 @@ test("subscription mapping keeps relationships explicit",()=>{
  assert.equal(x.customer_id,"c1");assert.equal(x.package_id,"p1");
 });
 test("contract rejects secrets, unknown entity, wrong version and malformed payload",()=>{
- const base={contractVersion:1,operationId:"op1",tenantId:"local1",entity:"customer",entityId:"c1",operation:"upsert",payload:{id:"c1"}};
+ const base={contractVersion:1,operationId:"op1",tenantId:"local1",entity:"customer",entityId:"c1",operation:"upsert",payload:{id:"c1",organization_id:org}};
  assert.throws(()=>validateOperation({...base,payload:{password_hash:"x"}}),/Sensitive field/);
  assert.throws(()=>validateOperation({...base,entity:"router"}),/not syncable/);
  assert.throws(()=>validateOperation({...base,contractVersion:2}),/unsupported/);
@@ -39,4 +39,25 @@ test("replayed operation IDs are idempotent and payload reuse is rejected",()=>{
 test("client tenant ID never becomes the production organization ID",()=>{
  const mapped=mapLocalRecord("customer",{id:"c1",tenant_id:"local-tenant",customer_code:"C1",full_name:"Test"},org);
  assert.notEqual(mapped.organization_id,"local-tenant");assert.equal(mapped.organization_id,org);
+});
+
+test("operation envelope binds payload identity to the operation and requires organization scope",()=>{
+ const base={contractVersion:1,operationId:"op-identity",tenantId:"local-t1",entity:"customer",entityId:"c1",operation:"upsert",payload:{id:"c1",organization_id:org}};
+ assert.throws(()=>validateOperation({...base,payload:{...base.payload,id:"c2"}}),/payload.id must match entityId/);
+ assert.throws(()=>validateOperation({...base,payload:{id:"c1"}}),/organization_id/);
+});
+test("createOperation rejects a record from a different local tenant",()=>{
+ assert.throws(()=>createOperation({operationId:"op-cross-tenant",tenantId:"local-t1",entity:"customer",record:{id:"c1",tenant_id:"local-t2",customer_code:"C1",full_name:"Test"},organizationId:org}),/tenant_id must match tenantId/);
+});
+test("validated payload is copied and frozen against later caller mutation",()=>{
+ const payload={id:"c1",organization_id:org,profile:{name:"A"}};
+ const op=validateOperation({contractVersion:1,operationId:"op-copy",tenantId:"local-t1",entity:"customer",entityId:"c1",operation:"upsert",payload});
+ payload.profile.name="Changed";
+ assert.equal(op.payload.profile.name,"A");
+ assert.equal(Object.isFrozen(op.payload),true);
+});
+test("non-JSON values and non-finite numbers are rejected",()=>{
+ const base={contractVersion:1,operationId:"op-json",tenantId:"local-t1",entity:"customer",entityId:"c1",operation:"upsert",payload:{id:"c1",organization_id:org}};
+ assert.throws(()=>validateOperation({...base,payload:{...base.payload,score:Infinity}}),/Non-finite number/);
+ assert.throws(()=>validateOperation({...base,payload:{...base.payload,fn:()=>true}}),/Non-JSON value/);
 });
