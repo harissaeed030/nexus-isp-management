@@ -68,7 +68,7 @@ export function mapLocalRecord(entity, local, organizationId) {
   switch(entity) {
     case "customer": {
       const fullName=requiredString(local.full_name,"full_name");
-      const parts=fullName.split(/\\s+/);
+      const parts=fullName.split(/\s+/);
       const first_name=parts.shift();
       return {...root,customer_code:requiredString(local.customer_code,"customer_code"),first_name,last_name:parts.join(" "),phone:local.phone??null,email:local.email??null,address:local.address??null,status:local.status??"active"};
     }
