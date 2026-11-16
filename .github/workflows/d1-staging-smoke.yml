@@ -1,12 +1,6 @@
 name: D1 staging API smoke tests
 
 on:
-  push:
-    branches: [build/nexus-isp-core]
-    paths:
-      - "worker/scripts/d1-staging-smoke.mjs"
-      - ".github/workflows/d1-staging-smoke.yml"
-      - "worker/src/d1-api-worker.js"
   workflow_dispatch:
 
 jobs:
