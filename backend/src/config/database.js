@@ -175,4 +175,18 @@ if(!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(paym
  catch(error){try{db.exec("ROLLBACK");}catch{}throw new Error(`Database migration ${paymentPromisesMigrationVersion} failed: ${error.message}`);}
 }
 
+const pppoeLifecycleMigrationVersion = "011_pppoe_accounts_and_subscription_lifecycle";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(pppoeLifecycleMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/011_pppoe_accounts_and_subscription_lifecycle.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(pppoeLifecycleMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${pppoeLifecycleMigrationVersion} failed: ${error.message}`);
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
