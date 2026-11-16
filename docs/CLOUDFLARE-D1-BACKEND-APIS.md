@@ -4,7 +4,7 @@
 
 This branch now contains a dedicated D1 API Worker candidate at `worker/src/d1-api-worker.js`, copied from the repository's released Cloudflare API implementation. It is separate from the health-only Worker and the SQLite-to-D1 sync Worker.
 
-The configuration is `worker/wrangler.api.toml`. The D1 API was deployed to the existing staging Worker `nexus-saas-api-staging`, bound to staging D1 `nexus-saas-staging-db`. The pre-deployment D1 export completed successfully; production Worker and production D1 were not changed.
+The configuration is `worker/wrangler.api.toml`. The D1 API was deployed to the existing staging Worker `nexus-saas-api-staging`, bound to staging D1 `nexus-saas-staging-db`. The pre-deployment D1 export completed successfully. Existing staging `JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY` and D1 bindings were preserved. Staging source now matches the currently deployed production API source; production Worker and D1 were not changed.
 
 ## API capabilities
 
@@ -49,7 +49,7 @@ Do not deploy to production as part of this task. Before staging deployment, ver
 
 ## Verification status
 
-The branch adds a Node syntax check, static API contract test and live staging smoke workflow (`worker/scripts/d1-staging-smoke.mjs`). The live workflow exercises registration/login, CORS, customer/package/subscription CRUD, monthly billing, invoice/payment settlement, list APIs and cross-tenant isolation. Its result is tracked in GitHub Actions. Hardware integration still requires live MikroTik, HSGQ OLT, ONU and ACS connectivity.
+The branch adds a Node syntax check, static API contract test and live staging smoke workflow (`worker/scripts/d1-staging-smoke.mjs`). The live workflow passed against the deployed staging Worker: registration/login, CORS, customer/package/subscription CRUD, monthly billing, invoice/payment settlement, list APIs, cross-tenant isolation and unauthenticated rejection. Two synthetic test tenants remain in staging after the final smoke run. See [production deployment review](PRODUCTION-DEPLOYMENT-REVIEW.md). Hardware integration still requires live MikroTik, HSGQ OLT, ONU and ACS connectivity.
 
 ## Explicit non-goals
 
