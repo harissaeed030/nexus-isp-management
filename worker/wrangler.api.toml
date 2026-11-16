@@ -1,4 +1,4 @@
-name = "nexus-saas-api-d1-candidate"
+name = "nexus-saas-api-staging"
 main = "src/d1-api-worker.js"
 compatibility_date = "2026-11-16"
 
