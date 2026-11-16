@@ -1,0 +1,24 @@
+name: D1 staging API smoke tests
+
+on:
+  push:
+    branches: [build/nexus-isp-core]
+    paths:
+      - "worker/scripts/d1-staging-smoke.mjs"
+      - ".github/workflows/d1-staging-smoke.yml"
+      - "worker/src/d1-api-worker.js"
+  workflow_dispatch:
+
+jobs:
+  staging-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test live staging API
+        env:
+          NEXUS_STAGING_API_URL: https://nexus-saas-api-staging.harissaeed030.workers.dev
+        run: node worker/scripts/d1-staging-smoke.mjs
