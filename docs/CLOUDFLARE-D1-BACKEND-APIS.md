@@ -4,7 +4,7 @@
 
 This branch now contains a dedicated D1 API Worker candidate at `worker/src/d1-api-worker.js`, copied from the repository's released Cloudflare API implementation. It is separate from the health-only Worker and the SQLite-to-D1 sync Worker.
 
-The candidate configuration is `worker/wrangler.api.toml`. It targets the staging D1 database and uses a separate Worker name. No Worker was deployed and no D1 data was changed by these GitHub commits.
+The configuration is `worker/wrangler.api.toml`. The D1 API was deployed to the existing staging Worker `nexus-saas-api-staging`, bound to staging D1 `nexus-saas-staging-db`. The pre-deployment D1 export completed successfully; production Worker and production D1 were not changed.
 
 ## API capabilities
 
@@ -23,7 +23,7 @@ All API requests that require a user session use a signed JWT and resolve the or
 
 ## Deployment configuration
 
-`worker/wrangler.api.toml` binds `DB` to `nexus-saas-staging-db` (not the production D1 database) and publishes under `nexus-saas-api-d1-candidate`.
+`worker/wrangler.api.toml` binds `DB` to `nexus-saas-staging-db` (not the production D1 database) and publishes under `nexus-saas-api-staging`.
 
 Set secrets in Cloudflare Worker settings, not Git:
 
@@ -49,11 +49,11 @@ Do not deploy to production as part of this task. Before staging deployment, ver
 
 ## Verification status
 
-The branch adds a Node syntax check for the D1 API Worker and a static API contract test. These checks do not replace a deployed staging smoke test, real authentication flow, tenant-isolation E2E, billing/payment scenario, or hardware integration test.
+The branch adds a Node syntax check, static API contract test and live staging smoke workflow (`worker/scripts/d1-staging-smoke.mjs`). The live workflow exercises registration/login, CORS, customer/package/subscription CRUD, monthly billing, invoice/payment settlement, list APIs and cross-tenant isolation. Its result is tracked in GitHub Actions. Hardware integration still requires live MikroTik, HSGQ OLT, ONU and ACS connectivity.
 
 ## Explicit non-goals
 
-- No deployment to production or staging was performed.
+- Staging Worker deployment was performed; production deployment was not performed.
 - No live customer data was imported, changed or deleted.
 - A configured router/OLT/ONU record does not prove a live hardware session. MikroTik, HSGQ and TR-069 integrations still require their respective reachable equipment, vendor-supported interfaces and credentials.
 - SQLite-to-D1 sync remains a separate one-way worker and does not automatically synchronize users, staff, sessions, tickets, network inventory or secrets.
