@@ -6,12 +6,12 @@ async function equalSecret(a,b){if(!a||!b)return false;const [x,y]=await Promise
 function clean(v){return typeof v==="string"?v.trim():v;}
 function statusCustomer(v){return v==="active"?"active":"suspended";}
 function statusSubscription(v){return ["active","suspended","cancelled","expired"].includes(v)?v:"active";}
-function statusInvoice(v){return v==="paid"?"paid":v==="void"?"cancelled":"pending";}
-function paymentMethod(v){return v==="cash"?"cash":v==="bank"?"bank_transfer":v==="jazzcash"||v==="easypaisa"?"mobile_money":"other";}
+function statusInvoice(v){return v==="paid"?"paid":v==="overdue"?"overdue":v==="cancelled"?"cancelled":"pending";}
+function paymentMethod(v){return v==="cash"?"cash":v==="bank"?"bank_transfer":v==="jazzcash"||v==="easypaisa"?"mobile_money":v==="bank_transfer"?"bank_transfer":v==="mobile_money"?"mobile_money":"other";}
 function changedAt(e){return e.changedAt||new Date().toISOString();}
 async function applyEvent(env,orgId,sourceTenantId,event){
   const type=event.entityType, id=String(event.entityId||""), opId=String(event.operationId||"");
-  if(!ORDER.includes(type)||!id||id.length>128||!opId||opId.length>128||!Number.isSafeInteger(event.cursor)||event.cursor<1)throw new Error("Malformed sync event.");
+  if(!ORDER.includes(type)||!["upsert","delete"].includes(event.operation)||!id||id.length>128||!opId||opId.length>128||!Number.isSafeInteger(event.cursor)||event.cursor<1)throw new Error("Malformed sync event.");
   const hash=await sha256(JSON.stringify(event));
   const prior=await env.DB.prepare("SELECT payload_hash FROM sync_operations WHERE operation_id=?").bind(opId).first();
   if(prior){if(prior.payload_hash!==hash)throw new Error("Idempotency key reused with a different payload.");return {applied:0,duplicate:1};}
@@ -81,13 +81,14 @@ async function applyEvent(env,orgId,sourceTenantId,event){
         const old=await env.DB.prepare("SELECT invoice_id,customer_id,amount,payment_method,transaction_ref,paid_at FROM payments WHERE id=? AND organization_id=?").bind(id,orgId).first();
         if(old.invoice_id!==r.invoice_id||old.customer_id!==inv.customer_id||Number(old.amount)!==amount||old.payment_method!==method||(old.transaction_ref||null)!==(r.reference||null)||(old.paid_at||null)!==(r.received_at||changedAt(event)))throw new Error("Payment is immutable and differs from the existing ledger entry.");
         statement=null;
+      }else{
+        if(r.reference){
+          const ref=await env.DB.prepare("SELECT id FROM payments WHERE organization_id=? AND transaction_ref=?").bind(orgId,r.reference).first();
+          if(ref&&ref.id!==id)throw new Error("Payment reference already exists in D1.");
+        }
+        statement=env.DB.prepare("INSERT INTO payments(id,organization_id,invoice_id,customer_id,amount,payment_method,transaction_ref,status,paid_at,created_at) VALUES(?,?,?,?,?,?,?,'completed',?,?)")
+          .bind(id,orgId,r.invoice_id,inv.customer_id,amount,method,r.reference||null,r.received_at||changedAt(event),r.received_at||changedAt(event));
       }
-      if(r.reference){
-        const ref=await env.DB.prepare("SELECT id FROM payments WHERE organization_id=? AND transaction_ref=?").bind(orgId,r.reference).first();
-        if(ref&&ref.id!==id)throw new Error("Payment reference already exists in D1.");
-      }
-      statement=env.DB.prepare("INSERT INTO payments(id,organization_id,invoice_id,customer_id,amount,payment_method,transaction_ref,status,paid_at,created_at) VALUES(?,?,?,?,?,?,?,'completed',?,?)")
-        .bind(id,orgId,r.invoice_id,inv.customer_id,amount,method,r.reference||null,r.received_at||changedAt(event),r.received_at||changedAt(event));
     }
   }
   const ledger=env.DB.prepare("INSERT INTO sync_operations(operation_id,organization_id,entity_type,entity_id,payload_hash) VALUES(?,?,?,?,?)")
