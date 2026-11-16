@@ -10,7 +10,7 @@ NEXUS currently has two separate runtimes. They are not interchangeable and must
 1. **Local/offline development:** Node.js + Express + SQLite in `backend/`. This is the maintained Android/Termux development runtime. Its default database is `backend/data/nexus.sqlite`.
 2. **Hosted production/staging:** Cloudflare Worker + D1, maintained and released from the repository's `main` branch. The production release record is [2026-11-15 production release](https://github.com/harissaeed030/nexus-isp-management/blob/main/docs/PRODUCTION-RELEASE-2026-11-15.md).
 
-The `worker/` directory on this development branch is only a health-check Worker. It is not the production API and must never be deployed over the production Worker.
+The `worker/` directory on this development branch now contains three isolated entry points: a health-check Worker, a full D1 API candidate (`src/d1-api-worker.js`) configured for staging only, and a separate SQLite sync Worker. The D1 API candidate is not the deployed production Worker and must not be deployed over the production Worker.
 
 ## Selected data authority (2026-11-15)
 
@@ -59,7 +59,7 @@ Never run `backend/migrations/*.sql` against D1. Never run D1 migrations against
 
 ## Deployment safeguards
 
-- This branch's `worker/wrangler.toml` points to the legacy development resource `nexus-db` and its `worker/src/index.js` exposes only `GET /api/health` and `OPTIONS`.
+- This branch's `worker/wrangler.toml` points to the legacy development resource `nexus-db` and its `worker/src/index.js` exposes only `GET /api/health` and `OPTIONS`. The separate `worker/wrangler.api.toml` points to staging D1 and runs the D1 API candidate; it is not the production config.
 - Do not deploy this branch's Worker configuration or source to production.
 - Production deployment must use the production config and source recorded on `main`, after backup verification, staging E2E, migration-state verification and secret/binding review.
 - Keep production secrets out of Git, source files, browser code and chat messages.
