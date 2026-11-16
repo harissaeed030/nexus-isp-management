@@ -2,6 +2,7 @@
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 function uuid(){return crypto.randomUUID()}
+function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
 function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
@@ -15,7 +16,6 @@ async function verifyJWT(t,sec){try{const ps=t.split('.');if(ps.length!==3)retur
 function b64u(b){return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function b64uDec(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const b=atob(s);const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
 function getSec(env){if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');return env.JWT_SECRET}
-function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
 async function getAuth(r,env){const a=r.headers.get('Authorization');if(!a||!a.startsWith('Bearer '))return null;return await verifyJWT(a.slice(7),getSec(env))}
 async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT INTO audit_log(id,organization_id,user_id,action,detail,ip_address)VALUES(?,?,?,?,?,?)').bind(uuid(),oid,uid,act,det||null,ip||null).run()}catch(e){console.error('NEXUS_AUDIT_WRITE_FAILED',{action:act,errorType:safeErrorType(e)})}}
 function vEmail(e){return/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e||'')}
@@ -197,11 +197,12 @@ async function runMigrations(env){
  ['invoices.period_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL'],
  ['onu_devices.index','CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id,status)'],
  ['invoices.number_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id,invoice_number)'],
- ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"]
+ ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"],
+ ['users.rebuild','SPECIAL']
  ];
  const results=[];
  for(const[name,sql]of migrations){
-  try{await env.DB.prepare(sql).run();results.push(name+':OK')}
+  try{if(name==='users.rebuild'){try{const _idx=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_users_org_email_ci'").first();if(_idx){results.push(name+':EXISTS');continue}await env.DB.prepare("DROP TABLE IF EXISTS users_new").run();await env.DB.batch([env.DB.prepare("CREATE TABLE users_new(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,email TEXT NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'staff',name TEXT,phone TEXT,status TEXT DEFAULT 'active',avatar TEXT,password_salt TEXT,last_login TEXT,token_version INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"),env.DB.prepare("INSERT INTO users_new(id,organization_id,email,password_hash,role,name,phone,status,avatar,password_salt,last_login,token_version,created_at,updated_at) SELECT id,organization_id,email,password_hash,role,name,phone,status,avatar,password_salt,last_login,token_version,created_at,updated_at FROM users"),env.DB.prepare("DROP TABLE users"),env.DB.prepare("ALTER TABLE users_new RENAME TO users"),env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_org_email_ci ON users(organization_id,lower(email))")]);results.push(name+':OK')}catch(re){try{await env.DB.prepare("DROP TABLE IF EXISTS users_new").run()}catch(_){}results.push(name+':SKIP:'+String(re?.message||re).slice(0,80));continue}}else{await env.DB.prepare(sql).run();results.push(name+':OK')}}
   catch(e){const message=String(e?.message||'');if(/duplicate column name|already exists/i.test(message)){results.push(name+':EXISTS');continue}throw new Error('NEXUS migration '+name+' failed: '+message.slice(0,140))}
  }
  return results
@@ -292,7 +293,7 @@ if(path==='/api/profile'&&m==='PUT')return await updProf(request,env,auth,ip);
 if(path==='/api/profile/password'&&m==='PUT')return await chgPw(request,env,auth,ip);
 if(path==='/api/company'&&m==='GET')return await getCo(env,orgId);
 if(path==='/api/company'&&m==='PUT')return await updCo(request,env,orgId,userId,ip);
-return json({error:'Not Found',path},404)}catch(e){return json({error:'Server Error',message:e.message},500)}}
+return json({error:'Not Found',path},404)}catch(e){console.error('NEXUS_API_UNEXPECTED_ERROR',e);return json({error:'Internal server error'},500)}}
 
 
 async function portalLogin(r,env,ip){
@@ -569,7 +570,7 @@ async function runScheduledBilling(controller,env){
    outcomes.push({organizationId:org.id,...result});
   }catch(e){
    console.error('NEXUS_SCHEDULED_BILLING_ORG_FAILED',{errorType:safeErrorType(e)});
-   outcomes.push({organizationId:org.id,errorType:safeErrorType(e)});
+   outcomes.push({organizationId:org.id,error:String(e?.message||'Billing failed').slice(0,160)});
   }
  }
  return outcomes
@@ -706,7 +707,7 @@ async function createStaff(r,env,oid,uid,role,ip){
  const allowed=['admin','billing','support','technician','staff'],assigned=b.role||'staff';
  if(!allowed.includes(assigned))return json({error:'Invalid role'},400);
  if(assigned==='admin'&&role!=='owner')return json({error:'Only the owner can create administrators'},403);
- if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(b.email.toLowerCase()).first())return json({error:'Email exists'},409);
+ if(await env.DB.prepare('SELECT id FROM users WHERE organization_id=? AND lower(email)=lower(?)').bind(oid,b.email.trim()).first())return json({error:'Email exists'},409);
  const id=uuid(),{hash,salt}=await hashPw(b.password);
  await env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.email.toLowerCase(),hash,salt,s(b.name),assigned,b.phone||null).run();
  await audit(env,oid,uid,'create_staff','Staff:'+b.name,ip);
@@ -912,4 +913,3 @@ async function updProf(r,env,auth,ip){const b=await parseBody(r);if(!b||typeof b
 async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords required'},400);if(b.newPassword.length<8)return json({error:'Password must be at least 8 characters'},400);const u=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.userId).first();if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt))return json({error:'Current password incorrect'},401);const{hash,salt}=await hashPw(b.newPassword);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now')WHERE id=?").bind(hash,salt,auth.userId).run();return json({success:true,message:'Password changed'})}
 async function getCo(env,oid){const o=await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first();return json(o||{error:'Not found'},o?200:404)}
 async function updCo(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Company name must be 1-120 characters'},400);if(b.email&&!vEmail(b.email))return json({error:'Invalid company email'},400);if(b.currency!==undefined&&!/^[A-Z]{3}$/.test(String(b.currency)))return json({error:'Currency must be a 3-letter ISO code'},400);const f=['name','email','phone','address','logo','currency'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(oid);await env.DB.prepare('UPDATE organizations SET '+u.join(', ')+' WHERE id=?').bind(...p).run();await audit(env,oid,uid,'update_company','Company updated',ip);return json(await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first())}
-
