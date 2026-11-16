@@ -28,4 +28,4 @@ Run the backend, then run `npm run sync:d1` from `backend/`. The command is resu
 
 ## Activation status
 
-Code and additive migrations are committed to the development branch. Production D1 migration, isolated Worker deployment/secrets, tenant mapping, PKR currency correction, and a first reconciliation/dry run are separate activation steps. They must be completed before claiming live sync is active.
+Code is committed to the development branch. D1 migration 0011 has been applied to the production `nexus-saas-db`, and the isolated `nexus-sqlite-sync` Worker has been deployed with the correct D1 binding and observability. The Worker secret `SYNC_PUSH_TOKEN` is not yet configured, the tenant mapping is empty, and the existing Vancom organization currency is still USD. The Worker deliberately rejects PKR imports until the currency is confirmed and corrected. No business records have been synced; live sync is not active.
