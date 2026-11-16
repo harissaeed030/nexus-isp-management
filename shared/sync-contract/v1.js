@@ -74,10 +74,18 @@ export function mapLocalRecord(entity, local, organizationId) {
     }
     case "package":
       return {...root,name:requiredString(local.name,"name"),speed_down:safeInteger(local.speed_down_mbps,"speed_down_mbps",1),speed_up:safeInteger(local.speed_up_mbps,"speed_up_mbps",1),speed_mbps:safeInteger(local.speed_down_mbps,"speed_down_mbps",1),price:safeInteger(local.monthly_price_pkr,"monthly_price_pkr"),billing_cycle:"monthly",is_active:(local.status??"active")==="active"?1:0};
-    case "subscription":
-      return {...root,customer_id:requiredString(local.customer_id,"customer_id"),package_id:requiredString(local.package_id,"package_id"),status:requiredString(local.status??"active","status"),start_date:local.started_at??local.start_date??null,end_date:local.end_date??null};
-    case "invoice":
-      return {...root,customer_id:requiredString(local.customer_id,"customer_id"),invoice_number:requiredString(local.invoice_number,"invoice_number"),amount:safeInteger(local.amount_pkr,"amount_pkr"),tax:0,total:safeInteger(local.amount_pkr,"amount_pkr"),issue_date:local.issue_date??local.created_at??null,due_date:local.due_date??null,billing_period:local.billing_period??null,status:requiredString(local.status??"unpaid","status")};
+    case "subscription": {
+      const status = requiredString(local.status ?? "active", "status");
+      if (!["active","suspended","cancelled","expired"].includes(status)) throw new TypeError("unsupported subscription status");
+      return {...root,customer_id:requiredString(local.customer_id,"customer_id"),package_id:requiredString(local.package_id,"package_id"),status,start_date:requiredString(local.started_at??local.start_date,"started_at"),end_date:local.end_date??null};
+    }
+    case "invoice": {
+      const localStatus = requiredString(local.status ?? "unpaid", "status");
+      const statusMap = {unpaid:"pending",partial:"pending",pending:"pending",paid:"paid",overdue:"overdue",cancelled:"cancelled"};
+      if (!statusMap[localStatus]) throw new TypeError("unsupported invoice status");
+      const amount = safeInteger(local.amount_pkr,"amount_pkr");
+      return {...root,customer_id:requiredString(local.customer_id,"customer_id"),invoice_number:requiredString(local.invoice_number,"invoice_number"),amount,tax:0,total:amount,issue_date:requiredString(local.issue_date??local.created_at,"issue_date"),due_date:requiredString(local.due_date,"due_date"),billing_period:local.billing_period??null,status:statusMap[localStatus]};
+    }
     case "payment":
       return {...root,invoice_id:requiredString(local.invoice_id,"invoice_id"),customer_id:requiredString(local.customer_id,"customer_id"),amount:safeInteger(local.amount_pkr,"amount_pkr",1),payment_method:requiredString(local.method,"method"),transaction_ref:local.reference??null,status:"completed",paid_at:local.received_at??null};
     default: throw new TypeError("entity is not syncable");
