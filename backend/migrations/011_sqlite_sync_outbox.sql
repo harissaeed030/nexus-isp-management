@@ -68,5 +68,5 @@ END;
 CREATE TRIGGER IF NOT EXISTS sync_outbox_payment_insert AFTER INSERT ON payments BEGIN
  INSERT INTO sync_outbox(operation_id,tenant_id,entity,entity_id,operation,payload_json)
  VALUES(lower(hex(randomblob(16))),NEW.tenant_id,'payment',NEW.id,'create',
- json_object('id',NEW.id,'tenant_id',NEW.tenant_id,'invoice_id',NEW.invoice_id,'amount_pkr',NEW.amount_pkr,'method',NEW.method,'reference',NEW.reference,'received_at',NEW.received_at));
+ json_object('id',NEW.id,'tenant_id',NEW.tenant_id,'invoice_id',NEW.invoice_id,'customer_id',(SELECT customer_id FROM invoices WHERE id=NEW.invoice_id AND tenant_id=NEW.tenant_id),'amount_pkr',NEW.amount_pkr,'method',NEW.method,'reference',NEW.reference,'received_at',NEW.received_at));
 END;
