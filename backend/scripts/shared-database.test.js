@@ -21,7 +21,7 @@ test("SQLite repository enforces tenant scope and optimistic updates", async () 
   const stale = await repo.update("customers","tenant-a","customer-1",{phone:"03000000001"},{expectedUpdatedAt:"2000-01-01"});
   assert.equal(stale.conflict,true);
   assert.equal((await repo.get("customers","tenant-a","customer-1")).phone,"03000000000");
-  await assert.rejects(() => repo.get("customers","tenant-b","customer-1"));
+  assert.equal(await repo.get("customers","tenant-b","customer-1"),null);
   await assert.rejects(() => repo.update("customers","tenant-a","customer-1",{tenant_id:"tenant-b"}));
   await assert.rejects(() => repo.list("customers","tenant-a",{limit:501}));
   db.close();
