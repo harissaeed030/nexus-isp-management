@@ -9,6 +9,25 @@ function statusSubscription(v){return ["active","suspended","cancelled","expired
 function statusInvoice(v){return v==="paid"?"paid":v==="overdue"?"overdue":v==="cancelled"?"cancelled":"pending";}
 function paymentMethod(v){return v==="cash"?"cash":v==="bank"?"bank_transfer":v==="jazzcash"||v==="easypaisa"?"mobile_money":v==="bank_transfer"?"bank_transfer":v==="mobile_money"?"mobile_money":"other";}
 function changedAt(e){return e.changedAt||new Date().toISOString();}
+
+export function validateSyncBatch(sourceTenantId, events) {
+  if (!sourceTenantId || sourceTenantId.length > 128 || !Array.isArray(events) || events.length < 1 || events.length > 50) {
+    return "sourceTenantId and 1-50 events are required";
+  }
+  const seenOperations = new Set();
+  let previousCursor = 0;
+  for (const event of events) {
+    if (!event || !Number.isSafeInteger(event.cursor) || event.cursor <= previousCursor) {
+      return "Events must be ordered by strictly increasing cursor";
+    }
+    if (typeof event.operationId !== "string" || !event.operationId || seenOperations.has(event.operationId)) {
+      return "Each event must have a unique operationId";
+    }
+    seenOperations.add(event.operationId);
+    previousCursor = event.cursor;
+  }
+  return null;
+}
 async function applyEvent(env,orgId,sourceTenantId,event){
   const type=event.entityType, id=String(event.entityId||""), opId=String(event.operationId||"");
   if(!ORDER.includes(type)||!["upsert","delete"].includes(event.operation)||!id||id.length>128||!opId||opId.length>128||!Number.isSafeInteger(event.cursor)||event.cursor<1)throw new Error("Malformed sync event.");
@@ -112,21 +131,8 @@ export default {
   try { body = JSON.parse(rawBody); } catch { return json({success:false,error:"Invalid JSON"},400); }
   const sourceTenantId=String(body?.sourceTenantId||"");
   const events=body?.events;
-  if(!sourceTenantId||sourceTenantId.length>128||!Array.isArray(events)||events.length<1||events.length>50)return json({success:false,error:"sourceTenantId and 1-50 events are required"},400);
-  // The export cursor is global, so gaps are normal, but a batch must be strictly ordered.
-  // Otherwise acknowledging its maximum cursor could permanently skip an earlier event.
-  const seenOperations = new Set();
-  let previousCursor = 0;
-  for (const event of events) {
-    if (!event || !Number.isSafeInteger(event.cursor) || event.cursor <= previousCursor) {
-      return json({success:false,error:"Events must be ordered by strictly increasing cursor"},400);
-    }
-    if (typeof event.operationId !== "string" || !event.operationId || seenOperations.has(event.operationId)) {
-      return json({success:false,error:"Each event must have a unique operationId"},400);
-    }
-    seenOperations.add(event.operationId);
-    previousCursor = event.cursor;
-  }
+  const batchError = validateSyncBatch(sourceTenantId, events);
+  if (batchError) return json({success:false,error:batchError},400);
   let mapping=await env.DB.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind(sourceTenantId).first();
   if(!mapping){
     const organizations=await env.DB.prepare("SELECT id,currency FROM organizations ORDER BY created_at LIMIT 2").all();
