@@ -6,7 +6,7 @@
 export const DATABASE_SCHEMA_VERSION = 1;
 export const DATABASE_ENTITIES = Object.freeze({
   customers: {
-    sqlite: { table: "customers", tenantColumn: "tenant_id", columns: ["customer_code","full_name","phone","email","address","status","updated_at"] },
+    sqlite: { table: "customers", tenantColumn: "tenant_id", columns: ["customer_code","full_name","phone","email","address","status","updated_at","created_at"] },
     d1: { table: "customers", tenantColumn: "organization_id", columns: ["first_name","last_name","phone","email","address","status","customer_code","updated_at"] }
   },
   packages: {
@@ -22,8 +22,8 @@ export const DATABASE_ENTITIES = Object.freeze({
     d1: { table: "invoices", tenantColumn: "organization_id", columns: ["customer_id","subscription_id","invoice_number","amount","tax","total","status","issue_date","due_date","updated_at"] }
   },
   payments: {
-    sqlite: { table: "payments", tenantColumn: "tenant_id", columns: ["invoice_id","amount_pkr","method","reference","received_at"] },
-    d1: { table: "payments", tenantColumn: "organization_id", columns: ["invoice_id","customer_id","amount","payment_method","transaction_ref","status","paid_at"] }
+    sqlite: { table: "payments", tenantColumn: "tenant_id", columns: ["invoice_id","amount_pkr","method","reference","received_at","created_at"] },
+    d1: { table: "payments", tenantColumn: "organization_id", columns: ["invoice_id","customer_id","amount","payment_method","transaction_ref","status","paid_at","created_at"] }
   }
 });
 
