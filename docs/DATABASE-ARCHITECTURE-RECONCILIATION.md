@@ -1,6 +1,6 @@
 # NEXUS database architecture reconciliation
 
-**Status:** D1 production authority selected; SQLite remains an offline/local workspace. Runtime boundaries are guarded by automated tests; cross-database synchronization is not implemented.
+**Status:** D1 production authority selected; SQLite remains an offline/local workspace. A shared asynchronous SQLite/D1 adapter and tenant-scoped repository now exist for the five core synchronized entities. Legacy Express route handlers still use direct synchronous SQLite calls; full route migration and full-schema parity remain pending. Synchronization remains a separate, guarded one-way workflow.
 **Reviewed:** 2026-11-15
 
 ## Decision
@@ -66,7 +66,7 @@ Never run `backend/migrations/*.sql` against D1. Never run D1 migrations against
 
 ## Data movement and synchronization
 
-There is currently **no SQLite-to-D1 import, export, replication or bidirectional synchronization**. A local SQLite database is not production data. Do not manually copy rows or database files between environments.
+A shared persistence contract now exists under `shared/database/` (see [Shared database architecture](SHARED-DATABASE-ARCHITECTURE.md)). The existing sync implementation remains a separate one-way SQLite outbox → authenticated Worker → D1 workflow for customers, packages, subscriptions, invoices and payments only. This is not full database replication or bidirectional synchronization. A local SQLite database is not production data. Do not manually copy rows or database files between environments.
 
 Before implementing a future migration or offline sync, require:
 
@@ -87,3 +87,13 @@ Until those steps are implemented and accepted, keep local development data and 
 - The development Worker cannot be mistaken for the production Worker.
 - The production and staging D1 bindings remain separate.
 - No claim of data parity or synchronization is made without a tested implementation and reconciliation report.
+
+
+## Shared repository rollout status (2026-11-16)
+
+- `shared/database/adapters.js` provides SQLite and D1 adapters with one asynchronous method contract.
+- `shared/database/repository.js` provides tenant-scoped CRUD, pagination, optimistic update checks and safe archival.
+- `shared/database/schema.js` describes physical mappings for customers, packages, subscriptions, invoices and payments.
+- The local SQLite runtime exports this repository as `repository`; existing synchronous routes are intentionally preserved until individually migrated.
+- CI now runs shared contract tests. This does not establish production D1 migration readiness or full module parity.
+- Users, sessions, staff permissions, tickets, refunds, notifications, PPPoE credentials, routers, OLT/ONU and ACS still need reviewed mappings before they can share this persistence contract.
