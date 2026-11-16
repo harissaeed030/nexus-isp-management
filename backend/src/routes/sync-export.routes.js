@@ -18,7 +18,7 @@ function tokenMatches(candidate, expected) {
 
 export function registerSyncExportRoutes(app, { db, env }) {
   app.get("/api/v1/sync/export", (req, res) => {
-    const bearer = (req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+    const bearer = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     if (!env.syncExportToken || !tokenMatches(bearer, env.syncExportToken)) {
       return res.status(401).json({ success: false, error: "Sync authentication failed." });
     }
