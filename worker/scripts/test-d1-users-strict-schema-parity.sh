@@ -9,6 +9,7 @@ command -v sqlite3 >/dev/null 2>&1 || { echo "sqlite3 CLI is required" >&2; exit
 sqlite3 "$DB" <<'SQL'
 PRAGMA foreign_keys=ON;
 CREATE TABLE organizations(id TEXT PRIMARY KEY,name TEXT NOT NULL,slug TEXT NOT NULL UNIQUE);
+CREATE TABLE schema_migrations(id INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL DEFAULT(datetime('now')));
 CREATE TABLE customers(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE);
 CREATE TABLE users(
  id TEXT PRIMARY KEY DEFAULT(lower(hex(randomblob(16)))),organization_id TEXT NOT NULL,
@@ -66,6 +67,7 @@ test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM ticket_messages WHERE id='message-a'
 test -z "$(sqlite3 "$DB" "PRAGMA foreign_key_check;")"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_d1_%';")" = "6"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('idx_users_organization','idx_users_email_global','idx_users_org_email_ci');")" = "3"
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM schema_migrations WHERE id=10 AND name='0010_users_strict_schema_parity';")" = "1"
 
 # Production-compatible constraints: missing password hash rejected; role defaults to staff.
 if sqlite3 "$DB" "INSERT INTO users(id,organization_id,email,role) VALUES('bad-null-hash','org-a','nullhash@example.test','staff');" >/dev/null 2>&1; then
