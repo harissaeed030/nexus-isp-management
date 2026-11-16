@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { registerSyncExportRoutes } from "../src/routes/sync-export.routes.js";
 
 const dir = mkdtempSync(join(tmpdir(), "nexus-sync-test-"));
 process.env.SQLITE_PATH = join(dir, "test.sqlite");
@@ -22,6 +23,21 @@ test("sync outbox records all five business entities and changes", () => {
   const initial = db.prepare("SELECT entity_type,COUNT(*) AS n FROM sync_outbox WHERE tenant_id=? GROUP BY entity_type").all(tenant);
   assert.deepEqual(new Set(initial.map(x=>x.entity_type)),new Set(["customers","packages","subscriptions","invoices","payments"]));
   assert.equal(initial.reduce((sum,x)=>sum+x.n,0),5);
+
+  let exportHandler;
+  registerSyncExportRoutes({ get(_path, handler) { exportHandler = handler; } }, { db, env: { syncExportToken: "test-sync-token", syncTenantId: "" } });
+  const response = {
+    statusCode: 200, body: null, headers: {},
+    status(code) { this.statusCode = code; return this; },
+    set(name,value) { this.headers[name] = value; return this; },
+    json(value) { this.body = value; return this; }
+  };
+  exportHandler({ headers: { authorization: "Bearer test-sync-token" }, query: { after: "0", limit: "50" } }, response);
+  assert.equal(response.statusCode,200);
+  assert.equal(response.body.tenantId,tenant);
+  assert.equal(response.body.count,5);
+  assert.deepEqual(new Set(response.body.events.map(x=>x.entityType)),new Set(["customers","packages","subscriptions","invoices","payments"]));
+  assert.ok(response.body.events.every(x=>x.record && !("password" in x.record) && !("password_hash" in x.record)));
 
   const before = db.prepare("SELECT MAX(cursor) AS n FROM sync_outbox WHERE tenant_id=?").get(tenant).n;
   db.prepare("UPDATE customers SET phone=? WHERE id=? AND tenant_id=?").run("03000000000",customer,tenant);
