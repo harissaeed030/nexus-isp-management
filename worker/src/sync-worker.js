@@ -110,8 +110,14 @@ export default {
   const sourceTenantId=String(body?.sourceTenantId||"");
   const events=body?.events;
   if(!sourceTenantId||sourceTenantId.length>128||!Array.isArray(events)||events.length<1||events.length>50)return json({success:false,error:"sourceTenantId and 1-50 events are required"},400);
-  const mapping=await env.DB.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind(sourceTenantId).first();
-  if(!mapping)return json({success:false,error:"This SQLite tenant has not been explicitly mapped to a D1 organization"},409);
+  let mapping=await env.DB.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind(sourceTenantId).first();
+  if(!mapping){
+    const organizations=await env.DB.prepare("SELECT id,currency FROM organizations ORDER BY created_at LIMIT 2").all();
+    if(organizations.results.length!==1)return json({success:false,error:"Explicit source-tenant to D1-organization mapping is required when D1 has zero or multiple organizations"},409);
+    if(organizations.results[0].currency!=="PKR")return json({success:false,error:"The sole D1 organization must use PKR before mapping this PKR source tenant"},409);
+    await env.DB.prepare("INSERT INTO sync_tenant_mappings(source_tenant_id,organization_id,active) VALUES(?,?,1)").bind(sourceTenantId,organizations.results[0].id).run();
+    mapping={organization_id:organizations.results[0].id};
+  }
   const organization=await env.DB.prepare("SELECT currency FROM organizations WHERE id=?").bind(mapping.organization_id).first();
   if(!organization||organization.currency!=="PKR")return json({success:false,error:"D1 organization currency must be PKR before importing PKR-denominated SQLite records"},409);
   let applied=0,duplicates=0,ackCursor=0;
