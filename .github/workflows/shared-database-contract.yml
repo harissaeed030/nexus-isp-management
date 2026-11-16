@@ -1,0 +1,35 @@
+name: Shared database contract
+on:
+  push:
+    branches:
+      - build/nexus-isp-core
+    paths:
+      - "shared/database/**"
+      - "backend/src/config/database.js"
+      - "backend/scripts/shared-database.test.js"
+      - "backend/package.json"
+      - ".github/workflows/shared-database-contract.yml"
+  pull_request:
+    paths:
+      - "shared/database/**"
+      - "backend/src/config/database.js"
+      - "backend/scripts/shared-database.test.js"
+      - "backend/package.json"
+      - ".github/workflows/shared-database-contract.yml"
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install
+      - name: Check shared database modules
+        working-directory: backend
+        run: npm run check
+      - name: Run shared database contract tests
+        working-directory: backend
+        run: node --test scripts/shared-database.test.js
