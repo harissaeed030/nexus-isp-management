@@ -67,7 +67,7 @@ async function applyEvent(env,orgId,sourceTenantId,event){
       if(existing){
         const old=await env.DB.prepare("SELECT customer_id,invoice_number,amount,total,status FROM invoices WHERE id=? AND organization_id=?").bind(id,orgId).first();
         if(old.customer_id!==r.customer_id||old.invoice_number!==r.invoice_number||Number(old.amount)!==amount||Number(old.total)!==amount)throw new Error("Issued invoice identity and total are immutable; manual reconciliation is required.");
-        statement=env.DB.prepare("UPDATE invoices SET status=?,due_date=?,updated_at=? WHERE id=? AND organization_id=?").bind(statusInvoice(r.status),due,changedAt(event),id,orgId);
+        statement=env.DB.prepare("UPDATE invoices SET status=CASE WHEN status='paid' THEN status ELSE ? END,due_date=?,updated_at=? WHERE id=? AND organization_id=?").bind(statusInvoice(r.status),due,changedAt(event),id,orgId);
       }else{
         statement=env.DB.prepare("INSERT INTO invoices(id,organization_id,customer_id,invoice_number,amount,tax,total,status,issue_date,due_date,created_at,updated_at) VALUES(?,?,?,?,?,0,?,?,?,?,?,?)")
           .bind(id,orgId,r.customer_id,r.invoice_number,amount,amount,statusInvoice(r.status),String(r.created_at||changedAt(event)).slice(0,10),due,r.created_at||changedAt(event),changedAt(event));
@@ -79,7 +79,7 @@ async function applyEvent(env,orgId,sourceTenantId,event){
       if(!Number.isInteger(amount)||amount<=0)throw new Error("Invalid payment amount.");
       if(existing){
         const old=await env.DB.prepare("SELECT invoice_id,customer_id,amount,payment_method,transaction_ref,paid_at FROM payments WHERE id=? AND organization_id=?").bind(id,orgId).first();
-        if(old.invoice_id!==r.invoice_id||old.customer_id!==inv.customer_id||Number(old.amount)!==amount||old.payment_method!==method||(old.transaction_ref||null)!==(r.reference||null))throw new Error("Payment is immutable and differs from the existing ledger entry.");
+        if(old.invoice_id!==r.invoice_id||old.customer_id!==inv.customer_id||Number(old.amount)!==amount||old.payment_method!==method||(old.transaction_ref||null)!==(r.reference||null)||(old.paid_at||null)!==(r.received_at||changedAt(event)))throw new Error("Payment is immutable and differs from the existing ledger entry.");
         statement=null;
       }
       if(r.reference){
