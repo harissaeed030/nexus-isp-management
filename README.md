@@ -137,3 +137,20 @@ See [docs/HSGQ-G04R-INTEGRATION.md](docs/HSGQ-G04R-INTEGRATION.md) for verified 
 ## License
 
 All rights reserved until a license is added. Do not assume this project is open source for reuse or resale.
+
+
+## Shared SQLite + Cloudflare D1 persistence
+
+The shared asynchronous database adapter and tenant-scoped repository are implemented in `shared/database/`. The local SQLite runtime exports it as `repository`, and the isolated SQLite-to-D1 sync Worker uses the shared D1 repository for tenant-scoped record reads.
+
+See [Shared database architecture](docs/SHARED-DATABASE-ARCHITECTURE.md) for the adapter contract, schema mappings, safety guarantees, migration boundaries and current integration limitations.
+
+From `backend/`, run:
+
+```sh
+npm install
+npm run check
+node --test scripts/shared-database.test.js
+```
+
+This is an incremental persistence-layer migration: legacy Express handlers remain on the existing synchronous SQLite API until each module is migrated. The shared metadata currently covers customers, packages, subscriptions, invoices and payments; it does not imply complete schema parity for credentials, staff, tickets, network inventory or every production API.
