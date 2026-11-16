@@ -19,7 +19,9 @@ export function createTenantRepository(adapter, definitions) {
       table: assertIdentifier(value.table),
       tenantColumn: assertIdentifier(value.tenantColumn || (adapter.dialect === "sqlite" ? "tenant_id" : "organization_id")),
       idColumn: assertIdentifier(value.idColumn || "id"),
-      columns: value.columns
+      columns: value.columns,
+      archiveColumn: value.archiveColumn ? assertIdentifier(value.archiveColumn) : "status",
+      archiveValue: value.archiveValue ?? status
     };
   };
   const columnsFor = (def, fields) => {
@@ -72,8 +74,9 @@ export function createTenantRepository(adapter, definitions) {
     },
     async archive(entity, tenantId, id, status = "inactive") {
       const d = definition(entity);
-      if (!d.columns.includes("status")) throw new TypeError("Entity does not support safe archival.");
-      return adapter.run(`UPDATE ${d.table} SET status=? WHERE ${d.idColumn}=? AND ${d.tenantColumn}=?`, [status, id, tenantId]);
+      if (!d.columns.includes(d.archiveColumn)) throw new TypeError("Entity does not support safe archival.");
+      const value = d.archiveValue === status ? status : (d.archiveValue ?? status);
+      return adapter.run(`UPDATE ${d.table} SET ${d.archiveColumn}=? WHERE ${d.idColumn}=? AND ${d.tenantColumn}=?`, [value, id, tenantId]);
     },
     async batch(statements) {
       if (!Array.isArray(statements) || statements.some(item => !item || typeof item.sql !== "string" || !Array.isArray(item.params || []))) throw new TypeError("Invalid SQL batch.");
