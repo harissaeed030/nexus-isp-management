@@ -15,7 +15,7 @@ test("SQLite and Cloudflare D1 remain separate runtimes", () => {
   assert.match(database, /from "node:sqlite"/);
   assert.match(database, /CREATE TABLE IF NOT EXISTS tenants/);
   assert.match(database, /schema_migrations/);
-  assert.match(workerReadme, /D1 API Worker \(development candidate\)/);
+  assert.match(workerReadme, /D1 API Worker \(staging\)/);
   assert.match(workerSource, /\/api\/health/);
   assert.match(wrangler, /database_name\s*=\s*"nexus-db"/);
   assert.match(reconciliation, /tenants/);
