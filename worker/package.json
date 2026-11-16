@@ -1,0 +1,5 @@
+{
+  "name": "nexus-cloudflare-workers",
+  "private": true,
+  "type": "module"
+}
