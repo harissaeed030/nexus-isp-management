@@ -1,58 +1,70 @@
-# Nexus Cloudflare Worker — repository scope
+# NEXUS Cloudflare Workers
 
-The `worker/` directory on this development branch is a minimal Cloudflare Worker/D1 health-check foundation. Its current source exposes `GET /api/health` and `OPTIONS`; it does **not** implement the full local Node.js API contract or the full ISP-management module set.
+## D1 API Worker (development candidate)
 
-The maintained local development runtime is `backend/` (Node.js + SQLite). Its setup and test instructions are in [Backend setup](../docs/BACKEND-SETUP.md).
+The complete D1 API implementation is in `src/d1-api-worker.js`. It is aligned with the deployed API implementation from the repository's production release, while this development branch keeps it isolated from the existing health and SQLite-sync Workers.
 
-## Health endpoint
+The candidate configuration `wrangler.api.toml` targets the **staging** D1 database (`nexus-saas-staging-db`) and uses a distinct Worker name. It does not target the production Worker or production D1 database.
 
-Configure the D1 binding in `wrangler.toml` for a disposable development database, then deploy only when the target Worker and database have been explicitly reviewed. The health route is:
+### API areas
 
+- Organization registration and owner authentication
+- JWT sessions, password hashing, login throttling and logout/token-version invalidation
+- Tenant-scoped users and staff permissions
+- Customers and customer portal accounts
+- Packages and subscriptions
+- Invoices, monthly billing generation, payments and refunds
+- Support complaints/tickets, ticket messages and notifications
+- Audit log and reports
+- PPPoE accounts and network inventory
+- OLT/ONU inventory, alarms, service mapping and adapter capability reporting
+- Customer portal login, profile, dashboard, invoice/payment history, subscriptions and tickets
+
+Hardware integrations remain capability-limited: inventory CRUD does not prove a live MikroTik, HSGQ OLT, ONU or ACS connection. Keep device credentials server-side.
+
+### Required configuration
+
+Before deploying the candidate, configure Worker secrets in Cloudflare (never in Git):
+
+- Required: `JWT_SECRET` (long random secret)
+- Required for browser use: `ALLOWED_ORIGINS` (exact comma-separated trusted origins)
+- Optional/feature-specific: `TURNSTILE_SECRET_KEY`
+
+The D1 binding is `DB` and is defined in `wrangler.api.toml`.
+
+### Schema and migrations
+
+- `schema-production-v6.sql` is a baseline snapshot for a **new empty database only**.
+- Migrations `0006`–`0009` are additive integrity/index migrations aligned with the released schema.
+- Migrations `0010` and `0011` add PPPoE metadata and SQLite sync inbox tables.
+- Never apply the baseline snapshot to an existing D1 database.
+- Confirm the target database migration state and take a D1 export before applying any migration.
+- The API Worker has an idempotent runtime schema bootstrap for additive application tables/columns. Review the code and staging database before first request/deployment; a new Worker version is not a substitute for migration verification.
+
+### Safe staging deployment
+
+From this `worker/` directory, after confirming Cloudflare account and D1 binding:
+
+```sh
+npx wrangler deploy --config wrangler.api.toml
 ```
-GET /api/health
-```
 
-It reports Worker status and whether the configured D1 binding can execute a simple query. It is not an authentication or business API readiness check.
+This deploys the candidate Worker only. It does not deploy the production Worker. Do not change `wrangler.api.toml` to production or deploy over `nexus-saas-api` without a separate reviewed release, current backup, migration preflight, staging smoke tests and explicit approval.
 
-## Important production boundary
+### Existing separate Workers
 
-The repository's `main` branch contains the separately released Cloudflare customer-portal Worker path. The production release record is documented in the [Production release 2026-11-15 on main](https://github.com/harissaeed030/nexus-isp-management/blob/main/docs/PRODUCTION-RELEASE-2026-11-15.md). Do not deploy this branch's minimal `worker/` directory over the production Worker: it is not a replacement for the released Worker source.
+- `wrangler.toml`: health-check Worker only.
+- `wrangler.sync.toml`: SQLite-to-D1 sync Worker (`/sync/push`); not the public API.
+- `wrangler.api.toml`: full D1 API candidate, isolated by Worker name and staging D1 binding.
 
-The SQLite migrations under `backend/migrations/` are not D1 migrations. Never apply them to a Cloudflare D1 database. Use additive D1 migrations and the documented release procedure for the Cloudflare runtime.
+## SQLite-to-D1 sync
 
-## Security
+The isolated sync Worker runs `src/sync-worker.js` as `nexus-sqlite-sync`.
 
-- Keep D1 bindings and Worker secrets in Cloudflare configuration, never in source control.
-- Restrict CORS to exact approved origins.
-- Do not add real customer records to this health-only Worker foundation.
-- Do not expose router, OLT or ACS credentials to browser JavaScript.
-- Verify the deployment target, Worker source, D1 binding and current production backup before any production change.
-
-## SQLite-to-D1 sync Worker
-
-The isolated sync deployment is configured by `wrangler.sync.toml` and runs
-`src/sync-worker.js` as Worker `nexus-sqlite-sync`. It is separate from the
-health-check Worker configured by `wrangler.toml` and must not replace the
-production NEXUS API Worker.
-
-- `GET /health` checks that the sync Worker and D1 binding are present.
+- `GET /health` checks the sync Worker and D1 binding.
 - `POST /sync/push` accepts authenticated batches from the local SQLite outbox.
-- `POST /init` is **not** an endpoint on this Worker. D1 migration
-  `cloudflare/d1/migrations/0011_sqlite_sync_inbox.sql` must be applied through
-  the reviewed D1 migration process before sync is enabled.
-- Configure `SYNC_PUSH_TOKEN` as a Worker secret and use the same value as
-  `D1_SYNC_WORKER_TOKEN` in the local backend `.env`. Never put it in browser
-  code or commit it.
-- The sync currently covers customers, packages, subscriptions, invoices and
-  payments in one direction (SQLite to D1). It does not synchronize users,
-  passwords, sessions, PPPoE credentials, router/ACS secrets, support tickets,
-  staff, notifications or network inventory.
-- A source tenant is mapped to a D1 organization only under the documented
-  PKR/organization safeguards. Existing customer-code conflicts require manual
-  reconciliation; the Worker must not silently merge records.
-- Sync is not active until the Worker secret and local environment values are
-  configured. A deployed Worker alone does not prove a successful data sync.
+- Configure `SYNC_PUSH_TOKEN` as a Worker secret and use the same value as `D1_SYNC_WORKER_TOKEN` in local backend `.env`.
+- Sync currently covers customers, packages, subscriptions, invoices and payments in one direction (SQLite to D1). It does not synchronize users, passwords, sessions, PPPoE credentials, router/ACS secrets, support tickets, staff, notifications or network inventory.
+- Verify the tenant-to-organization mapping, PKR currency and private backup before running `npm run sync:d1` from `backend/`.
 
-Run `npm run sync:d1` from `backend/` only after verifying the local SQLite
-tenant, D1 organization mapping, PKR currency and a private backup. See
-[SQLite-to-D1 sync implementation](../docs/SQLITE-TO-D1-SYNC-IMPLEMENTATION.md).
+See [SQLite-to-D1 sync implementation](../docs/SQLITE-TO-D1-SYNC-IMPLEMENTATION.md).
