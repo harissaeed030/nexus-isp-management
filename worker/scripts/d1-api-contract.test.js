@@ -426,3 +426,8 @@ test("D1 migration 0021 creates the full tenant-scoped field operations schema",
   assert.match(source, /ops\.geo_locations/);
   assert.match(source, /ops\.index_ledger/);
 });
+
+
+test("D1 user-table compatibility rebuild runs before operations foreign-key tables are created", () => {
+  assert.ok(source.indexOf("['users.rebuild','SPECIAL']") < source.indexOf("['ops.geo_locations'"));
+});
