@@ -55,6 +55,7 @@ The `sync_state` table difference may be legacy; the current checked-in SQLite-t
 
 ### P1 — complete platform integration
 
+- [x] Add a backward-compatible D1 Worker method adapter for dashboard `PATCH` updates by mapping them to the existing `PUT` handlers; add a contract test. This is committed on the development branch only and has not been deployed.
 - [ ] Resolve a confirmed dashboard/API contract mismatch before hosting the admin UI against D1: the dashboard submits/reads local-API fields such as `full_name`, `speedDownMbps` and `monthlyPricePkr`, while the D1 Worker currently reads/writes fields such as `first_name`, `speed_mbps` and `price`. The dashboard also calls `/api/v1/routers` and `/api/v1/acs/connections`, while the inspected D1 Worker exposes different network inventory/OLT/TR-069 routes and does not provide the local RouterOS route set. Add and test a deliberate compatibility/domain-mapping layer; do not assume path-prefix rewriting alone makes the APIs interchangeable.
 - [ ] Migrate remaining legacy SQLite route handlers to the shared async repository where appropriate; preserve SQLite compatibility and transaction semantics.
 - [ ] Expand database mapping/sync deliberately beyond the current five entities. Users, sessions, staff permissions, tickets, refunds, notifications, PPPoE credentials, routers, OLT/ONU and ACS data are not part of the current shared sync contract. Never sync passwords, session tokens or device secrets.
@@ -68,6 +69,9 @@ The `sync_state` table difference may be legacy; the current checked-in SQLite-t
 - [ ] Verify HSGQ-G04R OLT and Huawei ONU management using documented vendor-supported interfaces. Current inventory/capability records are not proof of optical telemetry or provisioning.
 - [ ] Verify GenieACS/TR-069 against a reachable ACS and test ONU: inform, identity, parameter reads and explicitly approved configuration writes.
 - [ ] Confirm real payment-provider and scheduled-billing behavior in a non-production environment before enabling automatic billing.
+
+
+The PATCH/PUT method mismatch has now been addressed in the development branch (Worker compatibility adapter plus contract test). The remaining mismatch is not resolved: customer/package/subscription/invoice/payment request and response field shapes still differ, several dashboard route families remain unimplemented in the D1 Worker, and the admin UI has not passed D1 end-to-end acceptance. The compatibility work must continue with explicit, tested DTO mapping rather than blanket path rewriting.
 
 ## Explicit integration boundaries
 
