@@ -259,7 +259,7 @@ if(path==='/api/e2e/tenant'&&m==='DELETE'){
  if(env.ENVIRONMENT!=='staging')return json({error:'Not Found',path},404);
  if(role!=='owner'||!String(currentUser.email||'').toLowerCase().endsWith('@e2e.invalid'))return json({error:'Forbidden'},403);
  const body=await parseBody(request),slug=typeof body?.slug==='string'?body.slug.trim():'';
- if(!/^nexus-stage-\\d+-\\d+-[a-z0-9-]+$/.test(slug))return json({error:'A valid synthetic staging tenant slug is required'},400);
+ if(!/^nexus-stage-\d+-\d+-[a-z0-9-]+$/.test(slug))return json({error:'A valid synthetic staging tenant slug is required'},400);
  const tenant=await env.DB.prepare('SELECT id FROM organizations WHERE id=? AND slug=?').bind(orgId,slug).first();
  if(!tenant)return json({error:'Synthetic staging tenant not found'},404);
  await env.DB.batch([env.DB.prepare('DELETE FROM audit_log WHERE organization_id=?').bind(orgId),env.DB.prepare('DELETE FROM organizations WHERE id=? AND slug=?').bind(orgId,slug)]);
