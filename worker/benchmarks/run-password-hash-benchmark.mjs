@@ -9,8 +9,8 @@ const repoRoot = resolve(here, "../..");
 const port = Number(process.env.NEXUS_BENCH_PORT || 8799);
 const origin = `http://127.0.0.1:${port}`;
 const workerFiles = [
-  resolve(repoRoot, "src/index.js"),
-  resolve(repoRoot, "src/production-worker.js"),
+  resolve(repoRoot, "worker/src/index.js"),
+  resolve(repoRoot, "worker/src/production-worker.js"),
 ];
 
 for (const file of workerFiles) {
