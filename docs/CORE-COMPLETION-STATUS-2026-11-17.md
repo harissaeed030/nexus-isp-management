@@ -76,6 +76,9 @@ The PATCH/PUT method mismatch has now been addressed in the development branch (
 
 The D1 API compatibility layer now also exposes dashboard summary routes in the response shape expected by the existing UI, aliases the dashboard's `/api/tickets` path to the tenant-scoped complaints module, and maps ticket list/create fields. Role permission mapping was updated for the dashboard/report aliases. GitHub Actions passed the D1 Worker syntax check and contract tests on commit `ff66e87e0b15550987ebda56c0a240fe6a2123af`. This does not establish full dashboard compatibility: customer/package/subscription/invoice/payment DTO mappings, other UI route families, and end-to-end D1 acceptance remain open.
 
+
+Verification on `ff66e87e0b15550987ebda56c0a240fe6a2123af`: GitHub Actions `Cloudflare D1 API Worker`, `Nexus backend checks`, and `Nexus backend verification` all completed successfully. The D1 Worker workflow ran `node --check worker/src/d1-api-worker.js` and `node --test worker/scripts/d1-api-contract.test.js`; the backend workflows ran their configured checks. The documentation-only follow-up commit is `a3d99d3d010def53fe684d19a5a6f10a3833ff4c`. These are automated source checks, not a live staging API acceptance test.
+
 ## Explicit integration boundaries
 
 - Local SQLite and Cloudflare D1 are separate runtime databases; they are not replicas.
