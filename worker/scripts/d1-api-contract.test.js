@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
+const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
 const customerMigration = await readFile(new URL("../../cloudflare/d1/migrations/0012_customer_workspace_compatibility.sql", import.meta.url), "utf8");
 const subscriptionMigration = await readFile(new URL("../../cloudflare/d1/migrations/0013_subscription_workspace_status.sql", import.meta.url), "utf8");
@@ -339,4 +340,12 @@ test("RouterOS credential encryption uses a separate key context from PPPoE and 
   assert.match(source,/encryptRouterCredential\(password,env\)/);
   assert.match(source,/encryptRouterCredential\(b\.password,env\)/);
   assert.match(source,/export async function decryptRouterCredential/);
+});
+
+
+test("TR-069 dashboard supports ACS enable, disable and delete actions", () => {
+  assert.match(dashboardSource,/data-acs-toggle/);
+  assert.match(dashboardSource,/data-acs-delete/);
+  assert.match(dashboardSource,/method:"PATCH",body:JSON\.stringify\(\{enabled:/);
+  assert.match(dashboardSource,/method:"DELETE"/);
 });
