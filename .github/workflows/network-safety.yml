@@ -3,31 +3,23 @@ name: Network safety and adapter contract
 on:
   pull_request:
     paths:
-      - "worker/src/index.js"
-      - "worker/src/network-connector-contract.js"
-      - "worker/scripts/network-connector-contract.test.js"
-      - "worker/scripts/network-connector-migration.test.js"
-      - "backend/src/services/network-connector-agent.js"
-      - "backend/scripts/network-connector-agent.test.js"
-      - "assets/js/app.js"
-      - "index.html"
       - "backend/src/lib/network-write-guard.js"
       - "backend/src/services/network-adapter-contract.js"
+      - "backend/src/services/mikrotik-readonly-adapter.js"
+      - "backend/src/services/network-connector-agent.js"
+      - "backend/src/routes/mikrotik.routes.js"
+      - "backend/src/app.js"
       - "backend/scripts/network-write-guard.test.js"
       - "backend/scripts/network-adapter-contract.test.js"
-      - "backend/src/services/mikrotik-readonly-adapter.js"
       - "backend/scripts/mikrotik-readonly-adapter.test.js"
-      - "backend/src/routes/mikrotik.routes.js"
+      - "backend/scripts/network-connector-agent.test.js"
+      - "backend/package.json"
       - "worker/src/index.js"
       - "worker/src/network-connector-contract.js"
       - "worker/scripts/network-connector-contract.test.js"
       - "worker/scripts/network-connector-migration.test.js"
-      - "backend/src/services/network-connector-agent.js"
-      - "backend/scripts/network-connector-agent.test.js"
       - "assets/js/app.js"
       - "index.html"
-      - "backend/src/app.js"
-      - "backend/package.json"
       - ".github/workflows/network-safety.yml"
   push:
     branches:
@@ -35,10 +27,21 @@ on:
     paths:
       - "backend/src/lib/network-write-guard.js"
       - "backend/src/services/network-adapter-contract.js"
+      - "backend/src/services/mikrotik-readonly-adapter.js"
+      - "backend/src/services/network-connector-agent.js"
+      - "backend/src/routes/mikrotik.routes.js"
+      - "backend/src/app.js"
       - "backend/scripts/network-write-guard.test.js"
       - "backend/scripts/network-adapter-contract.test.js"
-      - "backend/src/app.js"
+      - "backend/scripts/mikrotik-readonly-adapter.test.js"
+      - "backend/scripts/network-connector-agent.test.js"
       - "backend/package.json"
+      - "worker/src/index.js"
+      - "worker/src/network-connector-contract.js"
+      - "worker/scripts/network-connector-contract.test.js"
+      - "worker/scripts/network-connector-migration.test.js"
+      - "assets/js/app.js"
+      - "index.html"
       - ".github/workflows/network-safety.yml"
 
 permissions:
@@ -79,16 +82,16 @@ jobs:
       - name: Run adapter contract tests
         working-directory: backend
         run: node --test scripts/network-adapter-contract.test.js
-
       - name: Run full local backend verification
         working-directory: backend
         run: npm run verify
-      - name: Syntax-check hosted connector Worker
+      - name: Syntax-check hosted connector Worker and dashboard
         run: |
           node --check worker/src/index.js
           node --check worker/src/network-connector-contract.js
           node --check worker/scripts/network-connector-contract.test.js
           node --check worker/scripts/network-connector-migration.test.js
+          node --check assets/js/app.js
       - name: Run hosted connector contract tests
         run: node --test worker/scripts/network-connector-contract.test.js
       - name: Run hosted connector migration tests
