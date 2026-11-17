@@ -90,4 +90,4 @@ CREATE INDEX IF NOT EXISTS idx_ops_collections_org ON cash_collections(organizat
 CREATE INDEX IF NOT EXISTS idx_ops_promises_org ON payment_promises(organization_id,promise_date,status);
 CREATE INDEX IF NOT EXISTS idx_ops_inventory_org ON inventory_items(organization_id,name);
 CREATE INDEX IF NOT EXISTS idx_ops_ledger_customer ON customer_ledger_entries(organization_id,customer_id,created_at);
-INSERT INTO schema_migrations(version,name,applied_at) VALUES(21,'0021_field_operations',datetime('now'));
+INSERT OR IGNORE INTO schema_migrations(id,name,applied_at) VALUES(21,'0021_field_operations',datetime('now'));
