@@ -330,3 +330,13 @@ test("Router PPPoE customer mapping is tenant scoped and never stores PPPoE pass
   assert.match(routerMappingMigration,/UNIQUE\(organization_id,router_id,pppoe_username\)/);
   assert.doesNotMatch(routerMappingMigration,/password/i);
 });
+
+
+test("RouterOS credential encryption uses a separate key context from PPPoE and ACS secrets", () => {
+  assert.match(source,/NEXUS-ROUTER-CREDENTIAL-SALT-V1/);
+  assert.match(source,/NEXUS-ROUTEROS-API-CREDENTIAL-ENCRYPTION/);
+  assert.match(source,/return 'rtr:v1:'/);
+  assert.match(source,/encryptRouterCredential\(password,env\)/);
+  assert.match(source,/encryptRouterCredential\(b\.password,env\)/);
+  assert.match(source,/export async function decryptRouterCredential/);
+});
