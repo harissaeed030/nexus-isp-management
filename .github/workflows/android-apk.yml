@@ -12,6 +12,7 @@ on:
       - "manifest.webmanifest"
       - "sw.js"
       - "www/**"
+      - "scripts/**"
   push:
     branches: [main]
     paths:
