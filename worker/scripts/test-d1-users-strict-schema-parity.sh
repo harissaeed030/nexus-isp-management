@@ -47,6 +47,7 @@ CREATE TRIGGER trg_d1_ticket_org_u BEFORE UPDATE OF organization_id,customer_id,
 CREATE TRIGGER trg_d1_message_org_i BEFORE INSERT ON ticket_messages WHEN NEW.user_id IS NOT NULL BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM support_tickets t JOIN users u ON u.id=NEW.user_id WHERE t.id=NEW.ticket_id AND t.organization_id=u.organization_id) THEN RAISE(ABORT,'ticket message user organization mismatch') END; END;
 CREATE TRIGGER trg_d1_message_org_u BEFORE UPDATE OF ticket_id,user_id ON ticket_messages WHEN NEW.user_id IS NOT NULL BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM support_tickets t JOIN users u ON u.id=NEW.user_id WHERE t.id=NEW.ticket_id AND t.organization_id=u.organization_id) THEN RAISE(ABORT,'ticket message user organization mismatch') END; END;
 INSERT INTO organizations VALUES('org-a','ISP A','isp-a'),('org-b','ISP B','isp-b');
+INSERT INTO users(id,organization_id,email,password_hash,role,name) VALUES('user-b','org-b','owner-b@example.test','hash-b','owner','Owner B');
 INSERT INTO customers VALUES('cust-a','org-a');
 INSERT INTO users(id,organization_id,email,password_hash,role,name) VALUES('user-a','org-a','owner@example.test','hash-a','owner','Owner A');
 INSERT INTO sessions(id,user_id,token,expires_at) VALUES('session-a','user-a','session-token','2099-01-01');
@@ -87,4 +88,20 @@ echo "PASS: all user/dependent rows preserved"
 echo "PASS: exact production users constraints/defaults and column order restored"
 echo "PASS: global and organization-scoped email indexes preserved"
 echo "PASS: six organization-integrity triggers restored"
+
+# Cross-tenant relationships must be rejected by the restored integrity triggers.
+if sqlite3 "$DB" "INSERT INTO notifications(id,organization_id,user_id,title) VALUES('bad-notification','org-a','user-b','Cross-tenant');" >/dev/null 2>&1; then
+ echo "FAIL: cross-tenant notification user was accepted" >&2; exit 1
+fi
+if sqlite3 "$DB" "INSERT INTO support_tickets(id,organization_id,subject,assigned_to) VALUES('bad-ticket','org-a','Cross-tenant assignee','user-b');" >/dev/null 2>&1; then
+ echo "FAIL: cross-tenant ticket assignee was accepted" >&2; exit 1
+fi
+if sqlite3 "$DB" "INSERT INTO ticket_messages(id,ticket_id,user_id,message) VALUES('bad-message','ticket-a','user-b','Cross-tenant message');" >/dev/null 2>&1; then
+ echo "FAIL: cross-tenant ticket message user was accepted" >&2; exit 1
+fi
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM notifications WHERE id='bad-notification';")" = "0"
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM support_tickets WHERE id='bad-ticket';")" = "0"
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM ticket_messages WHERE id='bad-message';")" = "0"
+echo "PASS: cross-tenant notification, ticket-assignee and ticket-message writes rejected"
+
 echo "PASS: PRAGMA foreign_key_check is clean"
