@@ -30,6 +30,10 @@ jobs:
         run: npm run verify
       - name: Verify hosted frontend and Worker route contract
         run: node worker/scripts/verify-frontend-worker-contract.mjs
+      - name: Syntax-check local password-hash benchmark harness (no benchmark/deploy)
+        run: |
+          node --check worker/benchmarks/password-hash-benchmark-worker.mjs
+          node --check worker/benchmarks/run-password-hash-benchmark.mjs
       - name: Verify production Worker source and staging-only route isolation
         run: |
           node --check worker/src/index.js
