@@ -1,4 +1,4 @@
--- NEXUS staging-only D1 schema-parity migration (ledger version 0012).
+-- NEXUS staging-only D1 schema-parity migration (ledger version 0024).
 -- Target: nexus-saas-staging-db only. Never run against production.
 -- Rebuilds staging users to match the already-verified stricter production table.
 -- Preserves every user and dependent row; recreates indexes and org-integrity triggers.
@@ -158,6 +158,6 @@ DROP TABLE _nexus_parity_notifications;
 DROP TABLE _nexus_parity_support_tickets;
 DROP TABLE _nexus_parity_ticket_messages;
 
-INSERT OR IGNORE INTO schema_migrations(id,name,applied_at) VALUES(12,'0012_users_strict_schema_parity',datetime('now'));
+INSERT OR IGNORE INTO schema_migrations(id,name,applied_at) VALUES(24,'0024_users_strict_schema_parity',datetime('now'));
 
 -- Run PRAGMA foreign_key_check after migration; it must return zero rows.
