@@ -512,3 +512,58 @@ footer{color:#8ca0b5}
  .nx-video-bottom-grid .was-panel{padding:14px!important}
 }
 @media(max-width:380px){.nx-video-kpis article{grid-template-columns:1fr}.nx-kpi-icon{grid-row:auto}.nx-video-kpis b{font-size:17px}}
+
+
+/* NEXUS mobile viewport repair — keep desktop layout unchanged */
+html,body{width:100%;max-width:100%;overflow-x:hidden}
+.app-shell{width:100%;max-width:100%;min-width:0;overflow-x:clip}
+.main{width:calc(100% - 252px);min-width:0;max-width:100%}
+.content{width:100%;min-width:0;min-height:0}
+.content>*{min-width:0;max-width:100%}
+.was-panel,.nx-panel,.nx-kpi,.nx-video-activity,.nx-video-announcements,.nx-video-moderation{min-width:0;max-width:100%}
+.nx-video-chart-grid>*,.nx-video-bottom-grid>*,.was-dashboard-grid>*{min-width:0}
+.nx-table{max-width:100%}
+@media(max-width:760px){
+ html,body{width:100%;max-width:100%;overflow-x:hidden}
+ .app-shell{width:100%;max-width:100%;overflow-x:clip}
+ .main,.app-shell.sidebar-collapsed .main{width:100%;max-width:100%;min-width:0;margin-left:0}
+ .topbar{width:100%;min-width:0;padding-left:12px;padding-right:12px;gap:8px}
+ .crumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .top-actions{min-width:0;flex:0 0 auto}
+ .content{width:100%;max-width:100%;min-width:0;padding-left:12px;padding-right:12px}
+ .page-heading{width:100%;min-width:0;flex-wrap:wrap}
+ .page-heading>div{min-width:0;flex:1 1 170px}
+ .page-heading .primary-btn{flex:0 0 auto}
+ .nx-video-hero,.nx-video-kpis,.nx-video-activity,.nx-video-chart-grid,.nx-video-bottom-grid,.was-dashboard-grid{width:100%;min-width:0;max-width:100%}
+ .nx-video-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .nx-video-kpis article{min-width:0}
+ .nx-video-kpis b,.nx-video-kpis small,.nx-video-kpis em{overflow-wrap:anywhere}
+ .nx-video-activity-grid{grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+ .nx-video-activity-grid article{min-width:0;overflow-wrap:anywhere}
+ .was-panel,.nx-panel,.nx-kpi{width:100%;min-width:0;max-width:100%;overflow:hidden}
+ .was-toolbar{flex-wrap:wrap}
+ .was-tabs{max-width:100%;overflow-x:auto}
+ .was-bars{width:100%;min-width:0;gap:clamp(3px,1.5vw,8px)}
+ .was-bar-col{min-width:0}
+ .was-bar-col b,.was-bar-col small{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+ .was-package-row{grid-template-columns:minmax(0,1fr) minmax(55px,1.6fr) 26px;gap:7px}
+ .was-feature-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .nx-row{min-width:0}
+ .nx-row input,.nx-row select{min-width:0;max-width:100%}
+ .nx-video-bottom-grid .was-panel>div:last-child,.was-collections{max-width:100%;overflow-x:auto}
+ .nx-table{min-width:520px}
+ img,svg,canvas,iframe{max-width:100%}
+ footer{flex-wrap:wrap}
+}
+@media(max-width:390px){
+ .content{padding-left:9px;padding-right:9px}
+ .topbar{padding-left:9px;padding-right:9px;gap:6px}
+ .demo-pill{max-width:116px;overflow:hidden;text-overflow:ellipsis}
+ .nx-video-kpis article{grid-template-columns:30px minmax(0,1fr);column-gap:7px;padding:11px 8px}
+ .nx-kpi-icon{width:29px;height:29px}
+ .nx-video-kpis b{font-size:17px}
+ .nx-video-hero{padding:16px}
+ .nx-video-activity-grid{gap:6px}
+ .nx-video-activity-grid article{padding:9px 8px}
+ .was-feature-list{grid-template-columns:1fr}
+}
