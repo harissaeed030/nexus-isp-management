@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeApiMethod } from "../src/d1-api-worker.js";
 import { readFile } from "node:fs/promises";
+import { normalizeApiMethod } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
@@ -37,5 +37,5 @@ test("D1 API accepts dashboard PATCH updates through the existing PUT handlers",
   assert.equal(normalizeApiMethod("PATCH"), "PUT");
   assert.equal(normalizeApiMethod("PUT"), "PUT");
   assert.equal(normalizeApiMethod("GET"), "GET");
-  assert.match(source, /new Request\\(request,\\{method:'PUT'\\}\\)/);
+  assert.match(source, /new Request\(request,\{method:'PUT'\}\)/);
 });
