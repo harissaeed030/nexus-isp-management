@@ -431,3 +431,14 @@ test("D1 migration 0021 creates the full tenant-scoped field operations schema",
 test("D1 user-table compatibility rebuild runs before operations foreign-key tables are created", () => {
   assert.ok(source.indexOf("['users.rebuild','SPECIAL']") < source.indexOf("['ops.geo_locations'"));
 });
+
+
+test("D1 Worker AI endpoint keeps Gemini credentials server-side and validates bounded chat history", () => {
+  assert.match(source, /async function handleAiChat/);
+  assert.match(source, /env\.GEMINI_API_KEY/);
+  assert.match(source, /x-goog-api-key/);
+  assert.match(source, /MAX_HISTORY|messages\.length>12/);
+  assert.match(source, /aiRecentRequests/);
+  assert.match(source, /path==='\/api\/ai\/chat'&&m==='POST'/);
+  assert.match(source, /The latest message must be from you/);
+});
