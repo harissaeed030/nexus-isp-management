@@ -99,7 +99,9 @@ function permissionForRoute(path,method){
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
  if(path==='/api/payments')return v==='GET'?'billing.read':v==='POST'?'payments.create':null;
  if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
- if(match('/api/network/devices')||match('/api/routers')||match('/api/olts')||match('/api/acs/connections'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;\n if(match('/api/tr069/devices'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;\n if(path==='/api/tr069/audit-logs')return v==='GET'?'audit.read':null;
+ if(match('/api/network/devices')||match('/api/routers')||match('/api/olts')||match('/api/acs/connections'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
+ if(match('/api/tr069/devices'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
+ if(path==='/api/tr069/audit-logs')return v==='GET'?'audit.read':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
  if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
