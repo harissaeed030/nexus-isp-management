@@ -8,10 +8,12 @@
 
 ## Migration numbering correction — 2026-11-17
 
-The live staging and production D1 databases have already used migration ID 13 for `0013_subscription_workspace_status`. This security migration therefore uses **ID 14** and the file `cloudflare/d1/migrations/0014_security_hardening.sql`. Never apply the former `0013_security_hardening.sql` file or reuse migration ID 13. The migration writes its own `schema_migrations` record for ID 14. Its regression test runs the SQL twice and verifies idempotency, the migration ledger, and cross-tenant insert/update rejection.
+A read-only inspection of both live D1 migration ledgers found that staging already assigns ID 14 to `0014_router_credential_cipher` and has applied migrations through ID 21. Production records migrations through ID 13. The earlier security migration ID 14 therefore collided with the staging history and was not safe to apply.
+
+The security migration has been renumbered to **ID 22**, using `cloudflare/d1/migrations/0022_security_hardening.sql`. ID 22 is unused in both inspected environments. The SQL, ledger insert, Python idempotency test and source-contract guard now all require the exact ID/name pair `(22, 0022_security_hardening)`. Do not apply the migration until the separately approved staging preflight and backup are complete.
 
 ## Release gates
-1. Apply migration 0014 only after an approved staging D1 preflight and verified backup. This source change does not apply the migration.
+1. Apply migration 0022 only after an approved staging D1 preflight and verified backup. This source change does not apply the migration.
 2. Run Cloudflare workerd password-hash profiling and staging E2E before deployment. 600,000 PBKDF2-HMAC-SHA256 iterations follows OWASP guidance where PBKDF2/FIPS is required; measured Worker latency/load remains a release gate.
 3. Verified-email/invite onboarding and Cloudflare edge rate limiting remain separate release gates. Account currently has no zones, so zone-level rate limiting cannot be configured.
 4. Review key rotation and legacy PPPoE v1 re-encryption before production.
