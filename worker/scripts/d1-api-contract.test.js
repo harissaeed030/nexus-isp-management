@@ -8,6 +8,7 @@ const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), 
 const customerMigration = await readFile(new URL("../../cloudflare/d1/migrations/0012_customer_workspace_compatibility.sql", import.meta.url), "utf8");
 const subscriptionMigration = await readFile(new URL("../../cloudflare/d1/migrations/0013_subscription_workspace_status.sql", import.meta.url), "utf8");
 const acsMigration = await readFile(new URL("../../cloudflare/d1/migrations/0015_genieacs_tr069_inventory.sql", import.meta.url), "utf8");
+const routerMappingMigration = await readFile(new URL("../../cloudflare/d1/migrations/0016_router_customer_pppoe_mappings.sql", import.meta.url), "utf8");
 
 test("D1 API Worker includes authenticated organization registration and login", () => {
   assert.match(source, /\/api\/auth\/register/);
@@ -315,4 +316,17 @@ test("GenieACS D1 migration creates organization-isolated connection, device and
   }
   assert.match(acsMigration,/UNIQUE\(organization_id,acs_connection_id,device_id\)/);
   assert.match(acsMigration,/VALUES\(15,'0015_genieacs_tr069_inventory'/);
+});
+
+
+test("Router PPPoE customer mapping is tenant scoped and never stores PPPoE passwords", () => {
+  assert.match(source,/async function mapRouterCustomer/);
+  assert.match(source,/router_customer_mappings/);
+  assert.match(source,/customers WHERE id=\? AND organization_id=\?/);
+  assert.match(source,/device_type='mikrotik'/);
+  assert.match(source,/mapRouterCustomer\(request,env,path,orgId,userId,ip\)/);
+  assert.match(source,/does not create, change or verify a live RouterOS PPPoE account/);
+  assert.match(routerMappingMigration,/CREATE TABLE IF NOT EXISTS router_customer_mappings/);
+  assert.match(routerMappingMigration,/UNIQUE\(organization_id,router_id,pppoe_username\)/);
+  assert.doesNotMatch(routerMappingMigration,/password/i);
 });
