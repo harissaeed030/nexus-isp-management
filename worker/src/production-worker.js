@@ -927,7 +927,7 @@ async function createPaymentPromise(request,env,oid,uid,ip){
  const customerId=s(b.customer_id||''),amount=Number(b.amount),promiseDate=s(b.promise_date||''),notes=s(b.notes||'').slice(0,500)||null;
  if(!customerId||!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(customerId,oid).first())return json({error:'Customer not found'},404);
  if(!Number.isSafeInteger(amount)||amount<=0)return json({error:'Promised amount must be a positive whole number of rupees'},400);
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(promiseDate)||Number.isNaN(Date.parse(promiseDate))||new Date(promiseDate).toISOString().slice(0,10)!==promiseDate)return json({error:'A valid promise date is required'},400);
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(promiseDate)||Number.isNaN(Date.parse(promiseDate))||new Date(promiseDate).toISOString().slice(0,10)!==promiseDate)return json({error:'A valid promise date is required'},400);
  const id=uuid();await env.DB.prepare("INSERT INTO payment_promises(id,organization_id,customer_id,amount,promise_date,status,notes,created_by) VALUES(?,?,?,?,?,'open',?,?)").bind(id,oid,customerId,amount,promiseDate,notes,uid).run();
  await audit(env,oid,uid,'create_payment_promise','Customer:'+customerId+' · '+amount+' PKR · '+promiseDate,ip);
  const row=await env.DB.prepare("SELECT p.id,p.customer_id,p.amount AS amount_pkr,p.promise_date,p.status,p.notes,p.created_at,p.updated_at,c.first_name||' '||c.last_name AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
