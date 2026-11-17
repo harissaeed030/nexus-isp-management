@@ -370,3 +370,12 @@ test("D1 migration 0018 tightens PPPoE router tenant/type guards and sync idempo
   assert.match(reconciliationMigration, /VALUES \(10, '0010_pppoe_connection_metadata'/);
   assert.match(reconciliationMigration, /VALUES \(18, '0018_reconcile_pppoe_and_sync_guards'/);
 });
+
+const userEmailParityMigration = await readFile(new URL("../../cloudflare/d1/migrations/0019_restore_case_insensitive_user_email_uniqueness.sql", import.meta.url), "utf8");
+
+test("D1 migration 0019 restores case-insensitive organization-scoped user email uniqueness", () => {
+  assert.match(userEmailParityMigration, /DROP INDEX IF EXISTS idx_users_org_email_ci/);
+  assert.match(userEmailParityMigration, /CREATE UNIQUE INDEX idx_users_org_email_ci/);
+  assert.match(userEmailParityMigration, /ON users\(organization_id, lower\(email\)\)/);
+  assert.match(userEmailParityMigration, /VALUES\(19,'0019_restore_case_insensitive_user_email_uniqueness'/);
+});
