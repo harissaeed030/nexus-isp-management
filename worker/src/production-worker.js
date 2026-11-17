@@ -709,7 +709,7 @@ async function createStaffTicketMessage(request,env,path,oid,uid,ip){
  const mid=uuid();await env.DB.prepare('INSERT INTO ticket_messages(id,ticket_id,user_id,message,is_staff) VALUES(?,?,?,?,1)').bind(mid,id,uid,message).run();
  await env.DB.prepare("UPDATE support_tickets SET updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid).run();
  await audit(env,oid,uid,'reply_support_ticket','Ticket:'+id,ip);
- if(ticket.customer_id)await env.DB.prepare("INSERT INTO notifications(id,organization_id,user_id,title,message,type,is_read,created_at) SELECT ?,organization_id,NULL,?,?, 'support',0,datetime('now') FROM users WHERE id=? AND organization_id=? LIMIT 1").bind(uuid(),'Staff replied to your complaint',String(ticket.subject).slice(0,160),uid,oid).run().catch(()=>{});
+ 
  return json({success:true,data:{id:mid,ticket_id:id,message,is_staff:1,created_at:new Date().toISOString()}},201)
 }
 async function listPortalTicketMessages(env,path,account){
