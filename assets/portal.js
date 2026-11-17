@@ -111,7 +111,7 @@
       $("#complaints").querySelectorAll("[data-ticket-conversation]").forEach((button) => {
         button.addEventListener("click", async () => {
           const id = button.dataset.ticketConversation;
-          const thread = $("#portal-thread-" + CSS.escape(id));
+          const thread = document.getElementById("portal-thread-" + id);
           button.disabled = true;
           try {
             const response = await api("/tickets/" + encodeURIComponent(id) + "/messages");
