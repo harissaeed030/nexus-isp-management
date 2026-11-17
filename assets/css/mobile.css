@@ -1,0 +1,27 @@
+/* NEXUS Android/PWA layout refinements */
+html,body{width:100%;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+button,a,input,select,textarea{touch-action:manipulation}
+button,.nav-item{min-height:42px}
+input,select,textarea{font-size:16px}
+@media(max-width:760px){
+  .main{min-width:0;width:100%}
+  .content{padding:16px 13px 88px}
+  .topbar{min-height:58px;padding-inline:12px}
+  .crumb{font-size:11px}
+  .top-actions .demo-pill{display:none}
+  .page-heading{align-items:flex-start;gap:12px;flex-wrap:wrap}
+  .page-heading h1{font-size:23px}
+  .primary-btn{min-height:42px}
+  .nx-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .nx-panel,.nx-card{padding:13px;border-radius:11px}
+  .nx-table-wrap,.table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .nx-acs-grid{grid-template-columns:1fr}
+}
+@media(max-width:380px){
+  .content{padding-inline:10px}
+  .nx-grid{grid-template-columns:1fr 1fr}
+  .page-heading h1{font-size:20px}
+}
+@media(display-mode:standalone){
+  body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+}
