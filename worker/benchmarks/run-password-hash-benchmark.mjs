@@ -22,7 +22,11 @@ for (const file of workerFiles) {
   assert.match(source, /const PASSWORD_HASH_ITERATIONS=600000;/,
     "New password hashes must use the reviewed 600,000-iteration setting.");
   assert.match(hashFn, /iterations:PASSWORD_HASH_ITERATIONS/);
-  const verifyFn = source.match(/async function verifyPw\(pw,h,salt\)\{[\\s\\S]*?(?=\\nfunction b2h\()/)?.[0];
+  const verifyStart = source.indexOf("async function verifyPw(");
+  const verifyEnd = source.indexOf("\\nfunction b2h(", verifyStart);
+  const verifyFn = verifyStart >= 0 && verifyEnd > verifyStart
+    ? source.slice(verifyStart, verifyEnd)
+    : null;
   assert.ok(verifyFn, `verifyPw function missing in ${file}`);
   assert.match(verifyFn, /let iterations=100000/,
     "Existing 100,000-iteration hashes must remain verifiable.");
