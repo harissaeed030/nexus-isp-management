@@ -73,6 +73,9 @@ The `sync_state` table difference may be legacy; the current checked-in SQLite-t
 
 The PATCH/PUT method mismatch has now been addressed in the development branch (Worker compatibility adapter plus contract test). The remaining mismatch is not resolved: customer/package/subscription/invoice/payment request and response field shapes still differ, several dashboard route families remain unimplemented in the D1 Worker, and the admin UI has not passed D1 end-to-end acceptance. The compatibility work must continue with explicit, tested DTO mapping rather than blanket path rewriting.
 
+
+The D1 API compatibility layer now also exposes dashboard summary routes in the response shape expected by the existing UI, aliases the dashboard's `/api/tickets` path to the tenant-scoped complaints module, and maps ticket list/create fields. Role permission mapping was updated for the dashboard/report aliases. GitHub Actions passed the D1 Worker syntax check and contract tests on commit `ff66e87e0b15550987ebda56c0a240fe6a2123af`. This does not establish full dashboard compatibility: customer/package/subscription/invoice/payment DTO mappings, other UI route families, and end-to-end D1 acceptance remain open.
+
 ## Explicit integration boundaries
 
 - Local SQLite and Cloudflare D1 are separate runtime databases; they are not replicas.
