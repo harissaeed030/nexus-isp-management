@@ -714,7 +714,7 @@ async function createStaffTicketMessage(request,env,path,oid,uid,ip){
 }
 async function listPortalTicketMessages(env,path,account){
  const id=path.split('/')[4],ticket=await env.DB.prepare('SELECT id FROM support_tickets WHERE id=? AND organization_id=? AND customer_id=?').bind(id,account.organization_id,account.customer_id).first();if(!ticket)return json({error:'Ticket not found'},404);
- const rows=await env.DB.prepare("SELECT m.id,m.message,m.is_staff,m.created_at,COALESCE(u.name,'You') AS sender_name FROM ticket_messages m LEFT JOIN users u ON u.id=m.user_id WHERE m.ticket_id=? ORDER BY m.created_at ASC").bind(id).all();
+ const rows=await env.DB.prepare("SELECT m.id,m.message,m.is_staff,m.created_at,COALESCE(u.name,CASE WHEN m.is_staff=1 THEN 'Support team' ELSE 'You' END) AS sender_name FROM ticket_messages m LEFT JOIN users u ON u.id=m.user_id WHERE m.ticket_id=? ORDER BY m.created_at ASC").bind(id).all();
  return json({data:rows.results||[]})
 }
 async function createPortalTicketMessage(request,env,path,account,ip){
