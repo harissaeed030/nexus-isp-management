@@ -271,3 +271,5 @@ A corrective, additive migration `0018_reconcile_pppoe_and_sync_guards.sql` has 
 - Organization/customer/network-device counts remained 178/181/1; `PRAGMA foreign_key_check` returned zero rows.
 - GitHub Actions on branch head `8848ef5f9a246de6530ce2415cb0df7bede21151`: backend verification and backend checks succeeded. The D1 Worker syntax/contract workflow succeeded on `e4033c26ba9b182e2eb358a7c4928cd37241959f`, including `node --check worker/src/d1-api-worker.js` and `node --test worker/scripts/d1-api-contract.test.js`.
 - No production D1 operation, Worker deployment, secret access, customer billing operation, or live network-device operation occurred. Restore rehearsal, public staging HTTP/E2E and production DDL reconciliation remain open.
+
+- A live negative staging test attempted a PPPoE account insert referencing a nonexistent router. The corrected trigger rejected it with `SQLITE_CONSTRAINT_TRIGGER`; a follow-up count confirmed zero probe rows. No real PPPoE account or credential was created.
