@@ -1,7 +1,6 @@
 -- NEXUS D1 migration 0023: tenant-scoped payment promises.
--- Live production and staging ledgers already use ID 10 for
--- 0010_pppoe_connection_metadata. IDs 11-21 are also assigned in staging,
--- ID 22 is security hardening on this development branch. Do not reuse them.
+-- Live production/staging ledgers already use IDs 10-21 for other migrations.
+-- ID 22 is security hardening; 23 is the next unused shared migration ID.
 -- Additive only; no existing business rows are modified.
 CREATE TABLE IF NOT EXISTS payment_promises (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -20,5 +19,30 @@ CREATE TABLE IF NOT EXISTS payment_promises (
 );
 CREATE INDEX IF NOT EXISTS idx_payment_promises_org_date
   ON payment_promises(organization_id, promise_date, status);
+CREATE TRIGGER IF NOT EXISTS trg_payment_promises_customer_tenant_insert
+ BEFORE INSERT ON payment_promises BEGIN
+ SELECT CASE WHEN NOT EXISTS(
+  SELECT 1 FROM customers
+  WHERE id=NEW.customer_id AND organization_id=NEW.organization_id
+ ) THEN RAISE(ABORT,'payment promise customer tenant mismatch') END;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_payment_promises_creator_tenant_insert
+ BEFORE INSERT ON payment_promises BEGIN
+ SELECT CASE WHEN NOT EXISTS(
+  SELECT 1 FROM users
+  WHERE id=NEW.created_by AND organization_id=NEW.organization_id
+ ) THEN RAISE(ABORT,'payment promise creator tenant mismatch') END;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_payment_promises_tenant_update
+ BEFORE UPDATE OF organization_id,customer_id,created_by ON payment_promises BEGIN
+ SELECT CASE WHEN NOT EXISTS(
+  SELECT 1 FROM customers
+  WHERE id=NEW.customer_id AND organization_id=NEW.organization_id
+ ) THEN RAISE(ABORT,'payment promise customer tenant mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(
+  SELECT 1 FROM users
+  WHERE id=NEW.created_by AND organization_id=NEW.organization_id
+ ) THEN RAISE(ABORT,'payment promise creator tenant mismatch') END;
+END;
 INSERT OR IGNORE INTO schema_migrations(id,name,applied_at)
 VALUES(23,'0023_payment_promises',datetime('now'));
