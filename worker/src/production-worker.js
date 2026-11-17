@@ -294,8 +294,8 @@ if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
 if(path==='/api/complaints'&&m==='GET')return await listComp(env,url,orgId);
 if(path==='/api/complaints'&&m==='POST')return await createComp(request,env,orgId,userId,ip);
-if(path.match(/^\\/api\\/complaints\\/[^/]+\\/messages$/)&&m==='GET')return await listStaffTicketMessages(env,path,orgId);
-if(path.match(/^\\/api\\/complaints\\/[^/]+\\/messages$/)&&m==='POST')return await createStaffTicketMessage(request,env,path,orgId,userId,ip);
+if(path.match(/^\/api\/complaints\/[^/]+\/messages$/)&&m==='GET')return await listStaffTicketMessages(env,path,orgId);
+if(path.match(/^\/api\/complaints\/[^/]+\/messages$/)&&m==='POST')return await createStaffTicketMessage(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
