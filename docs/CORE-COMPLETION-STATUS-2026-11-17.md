@@ -235,3 +235,15 @@ This section supersedes earlier statements in this document about the live statu
 - No live MikroTik, HSGQ OLT, Huawei ONU, or GenieACS endpoint was contacted. Network integrations remain unverified against hardware.
 - No production schema, production Worker, secret value, financial transaction, or customer network configuration was changed.
 - The platform is not certified production-ready. Branch reconciliation, D1 ledger/DDL reconciliation, restore rehearsal, live staging E2E, independent security review, Android acceptance, and real-device verification remain release gates.
+
+## Authentication schema guard update — 2026-11-17 07:08 UTC
+
+A further live schema audit found that staging's `users.password_hash` column was nullable, while production already enforces NOT NULL. Staging had 177 users and zero rows with a NULL/blank password hash.
+
+- Added D1 migration `0017_users_password_hash_guard.sql` with BEFORE INSERT and BEFORE UPDATE triggers. It rejects NULL or blank password hashes without rebuilding the populated users table.
+- Added contract coverage in `worker/scripts/d1-api-contract.test.js` and registered migration 0017 in `docs/MIGRATION-VERSION-REGISTRY.md`.
+- Took another complete D1 export before applying migration 0017. The export completed; a restore rehearsal remains outstanding.
+- Applied migration 0017 to staging only. Both triggers and the migration ledger entry were verified.
+- Live negative tests confirmed that INSERT with a NULL password hash and UPDATE to a NULL password hash are both rejected. The temporary synthetic test user was removed; user count remained 177 and the test ID was absent.
+- GitHub Actions passed on commit `130ce526d81e293fedd536b9059d45f308ef64d4`: D1 API Worker syntax/contract tests, backend verification, and backend checks. The subsequent documentation commit `b0d370b7f0f19d22a46175a8243d1cc3f4ce3bdf` also passed backend verification and checks.
+- No production D1 schema or Worker was changed.
