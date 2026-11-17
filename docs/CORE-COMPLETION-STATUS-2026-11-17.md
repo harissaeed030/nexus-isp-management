@@ -122,3 +122,15 @@ A second dashboard compatibility slice is committed:
 - Contract tests cover customer, package and subscription DTOs and the renewal route. The D1 Worker workflow passed on `240e3815076f9da9b1fe1ab3c110d86b7de8cfbd`; backend checks and verification were still running when this note was prepared.
 
 The code is committed to the development branch only. No Worker deployment, D1 migration execution, production data change, secret operation or live router action was performed. End-to-end staging acceptance remains outstanding.
+
+
+## Invoice and payment dashboard compatibility — 2026-11-17
+
+The D1 Worker now also maps the current billing dashboard contract:
+
+- Invoice creation accepts `customerId`, `amountPkr` and `dueDate`; invoice list/detail responses expose `customer_name`, `amount_pkr` and the computed display status.
+- Payment creation now supports the dashboard's `POST /api/payments` route as well as the existing invoice-scoped payment route. It accepts `invoiceId` and `amountPkr`, retains the existing outstanding-balance checks, and uses the `payments.create` permission.
+- Payment list/detail responses expose `customer_name`, `amount_pkr`, `method` and `received_at`, while preserving the existing D1 payment ledger fields.
+- Contract tests cover invoice/payment DTO mapping and the new route/permission mapping. D1 Worker tests and backend verification passed on `c6e34b488af86d8b125a72781e100635bb7555c9`; backend checks were still running at the time of this note.
+
+These are source-level contract checks only. No payment was recorded, no billing run was triggered, and no D1/Worker deployment was performed. A staging E2E must verify invoice creation, partial/full payment, refund interactions and ledger consistency before release.
