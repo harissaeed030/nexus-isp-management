@@ -848,6 +848,31 @@ async function delPppoe(env,path,oid,uid,ip){
  if(!r.meta?.changes)return json({error:'Not found'},404);
  await audit(env,oid,uid,'delete_pppoe','PPPoE:'+id,ip);return json({success:true})
 }
+
+async function mapRouterCustomer(request,env,path,oid,uid,ip){
+ const parts=path.split('/'),routerId=parts[3],customerId=parts[5],body=await parseBody(request);
+ if(!body||typeof body.username!=='string'||!body.username.trim()||body.username.trim().length>128)return json({error:'A valid PPPoE username is required.'},400);
+ const router=await env.DB.prepare("SELECT id,name FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(routerId,oid).first();
+ if(!router)return json({error:'Router not found.'},404);
+ const customer=await env.DB.prepare("SELECT id,first_name,last_name FROM customers WHERE id=? AND organization_id=?").bind(customerId,oid).first();
+ if(!customer)return json({error:'Customer not found.'},404);
+ const username=body.username.trim();
+ const id=uuid();
+ try{
+  await env.DB.prepare("INSERT INTO router_customer_mappings(id,organization_id,router_id,customer_id,pppoe_username) VALUES(?,?,?,?,?) ON CONFLICT(organization_id,router_id,pppoe_username) DO UPDATE SET customer_id=excluded.customer_id,updated_at=datetime('now')").bind(id,oid,routerId,customerId,username).run();
+  await audit(env,oid,uid,'map_router_pppoe_customer',router.name+':'+username,ip);
+  const row=await env.DB.prepare("SELECT id,router_id,customer_id,pppoe_username,is_online,last_connected_at,last_seen_at,created_at,updated_at FROM router_customer_mappings WHERE organization_id=? AND router_id=? AND pppoe_username=?").bind(oid,routerId,username).first();
+  return json({success:true,data:{...row,customer_name:[customer.first_name,customer.last_name].filter(Boolean).join(' '),router_name:router.name},notice:'Customer mapping saved. This does not create, change or verify a live RouterOS PPPoE account.'},201);
+ }catch(error){if(String(error.message).includes('no such table'))return json({error:'D1 migration 0016 is not installed. Mapping is unavailable until the approved migration is applied.'},503);throw error}
+}
+async function listRouterCustomerMappings(env,path,oid){
+ const routerId=path.split('/')[3];
+ const router=await env.DB.prepare("SELECT id FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(routerId,oid).first();
+ if(!router)return json({error:'Router not found.'},404);
+ try{const rows=await env.DB.prepare("SELECT m.id,m.router_id,m.customer_id,m.pppoe_username,m.is_online,m.last_connected_at,m.last_seen_at,m.created_at,m.updated_at,c.first_name,c.last_name FROM router_customer_mappings m JOIN customers c ON c.id=m.customer_id AND c.organization_id=m.organization_id WHERE m.organization_id=? AND m.router_id=? ORDER BY m.created_at DESC").bind(oid,routerId).all();return json({success:true,data:(rows.results||[]).map(x=>({...x,customer_name:[x.first_name,x.last_name].filter(Boolean).join(' ')}))})}
+ catch(error){if(String(error.message).includes('no such table'))return json({error:'D1 migration 0016 is not installed.'},503);throw error}
+}
+
 async function listRouters(env,url,oid){const rows=await env.DB.prepare("SELECT * FROM network_devices WHERE organization_id=? AND device_type='mikrotik' ORDER BY created_at DESC").bind(oid).all();return json({data:(rows.results||[]).map(mapRouterRow)})}
 async function createRouter(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const name=s(b.name),host=s(b.host),username=s(b.username),password=String(b.password||''),port=Number(b.apiPort??8729);if(!name||!host||!username||password.length<8)return json({error:'Name, host, username and password (minimum 8 characters) are required'},400);if(!Number.isInteger(port)||port<1||port>65535)return json({error:'API port must be between 1 and 65535'},400);const cipher=await encryptPppoePassword(password,env),id=uuid();await env.DB.prepare("INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,credential_password_cipher)VALUES(?,?,?,'mikrotik',?,?,?,'inactive',?,NULL,'routeros_api_ssl',NULL,?)").bind(id,oid,name,host,port,username,b.location||null,cipher).run();await audit(env,oid,uid,'create_router_inventory',name,ip);const row=await env.DB.prepare('SELECT * FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first();return json(mapRouterRow(row),201)}
 async function updateRouter(r,env,path,oid,uid,ip){const id=path.split('/')[3],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare("SELECT * FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(id,oid).first();if(!ex)return json({error:'Router not found'},404);const sets=[],params=[];for(const [from,to] of Object.entries({name:'name',host:'host',apiPort:'port',location:'notes',username:'username'})){if(b[from]!==undefined){sets.push(to+'=?');params.push(from==='apiPort'?Number(b[from]):b[from])}}if(b.status!==undefined){if(!['active','inactive','maintenance'].includes(b.status))return json({error:'Invalid status'},400);sets.push('status=?');params.push(b.status)}if(b.password!==undefined){if(typeof b.password!=='string'||b.password.length<8)return json({error:'Router password must be at least 8 characters'},400);sets.push('credential_password_cipher=?');params.push(await encryptPppoePassword(b.password,env))}if(!sets.length)return json({error:'No fields'},400);sets.push("updated_at=datetime('now')");params.push(id,oid);await env.DB.prepare('UPDATE network_devices SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...params).run();await audit(env,oid,uid,'update_router_credentials','Router:'+id,ip);const row=await env.DB.prepare('SELECT * FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first();return json(mapRouterRow(row))}
