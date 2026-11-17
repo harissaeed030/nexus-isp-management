@@ -391,6 +391,6 @@ test("D1 migration 0020 removes global email uniqueness while retaining workspac
   assert.match(workspaceEmailMigration, /DROP INDEX IF EXISTS idx_users_email_global/);
   assert.match(workspaceEmailMigration, /VALUES\(20,'0020_allow_workspace_scoped_user_emails'/);
   assert.match(userEmailParityMigration, /CREATE UNIQUE INDEX idx_users_org_email_ci/);
-  assert.match(source, /requestedWorkspace=b\\.workspace\\?\\?b\\.tenantSlug\\?\\?b\\.tenant_slug/);
+  assert.match(source, /requestedWorkspace=b\.workspace\?\?b\.tenantSlug\?\?b\.tenant_slug/);
   assert.match(source, /if\(rows\.length>1\)return json\(/);
 });
