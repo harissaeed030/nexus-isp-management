@@ -114,3 +114,8 @@ The proposed strict users-table rebuild remains a **staging-only manual migratio
 5. Only after independent review and explicit owner approval may a separate staging change be considered. Production requires its own fresh export, restore rehearsal, review and explicit approval; this staging SQL must never be pointed at production.
 
 The local parity regression script now also asserts that cross-tenant notification, ticket-assignee and ticket-message writes are rejected after the rebuild. These are local SQLite-backed migration tests, not proof that a live D1 migration has run. No production or staging D1 database was changed by this documentation or test update.
+
+
+### D1 migration-number allocation correction (2026-11-17)
+
+Migration identifiers are globally unique within the shared `schema_migrations` ledger. The hosted payment-promises feature owns **0010** (`0010_payment_promises`). The separate manual users-table parity operation is therefore numbered **0011** (`0011_users_strict_schema_parity`) in both its staging migration ledger entry and production ledger-only SQL. Do not record both operations as version 10. The users-parity operation remains staging-only for the rebuild; production receives only its reviewed ledger record because its users table already has the target definition. Neither operation has been applied to live D1 by this feature branch.
