@@ -10,6 +10,9 @@ on:
       - "backend/src/services/mikrotik-readonly-adapter.js"
       - "backend/scripts/mikrotik-readonly-adapter.test.js"
       - "backend/src/routes/mikrotik.routes.js"
+      - "worker/src/index.js"
+      - "worker/src/network-connector-contract.js"
+      - "worker/scripts/network-connector-contract.test.js"
       - "backend/src/app.js"
       - "backend/package.json"
       - ".github/workflows/network-safety.yml"
@@ -55,3 +58,11 @@ jobs:
       - name: Run adapter contract tests
         working-directory: backend
         run: node --test scripts/network-adapter-contract.test.js
+
+      - name: Syntax-check hosted connector Worker
+        run: |
+          node --check worker/src/index.js
+          node --check worker/src/network-connector-contract.js
+          node --check worker/scripts/network-connector-contract.test.js
+      - name: Run hosted connector contract tests
+        run: node --test worker/scripts/network-connector-contract.test.js
