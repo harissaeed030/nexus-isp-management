@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload } from "../src/d1-api-worker.js";
+import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
@@ -91,4 +91,28 @@ test("customer workspace migration is additive and tenant-scoped", () => {
   assert.match(customerMigration, /organization_id, customer_id, created_at/);
   assert.match(customerMigration, /customer connection history tenant mismatch/);
   assert.match(customerMigration, /subscription history tenant mismatch/);
+});
+
+
+test("package DTO maps D1 pricing and speed fields to the dashboard contract", () => {
+  assert.deepEqual(mapPackageRow({
+    id: "p1", name: "Home 10M", speed_mbps: 10, speed_down: "10", speed_up: "5",
+    price: 1200, is_active: 1
+  }), {
+    id: "p1", name: "Home 10M", speed_mbps: 10, speed_down: "10", speed_up: "5",
+    price: 1200, is_active: 1, speed_down_mbps: 10, speed_up_mbps: 5,
+    monthly_price_pkr: 1200, status: "active"
+  });
+});
+
+test("package create and edit adapter maps camelCase fields and archive status", () => {
+  assert.deepEqual(normalizePackagePayload({
+    name: "Home 10M", speedDownMbps: "10", speedUpMbps: "5",
+    monthlyPricePkr: "1200", status: "archived"
+  }), {
+    name: "Home 10M", speedDownMbps: "10", speedUpMbps: "5",
+    monthlyPricePkr: "1200", status: "archived",
+    speed_down: "10", speed_up: "5", speed_mbps: 10,
+    price: 1200, is_active: false
+  });
 });
