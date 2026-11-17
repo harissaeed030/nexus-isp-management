@@ -53,6 +53,24 @@ Every request/result carries:
 
 Never include passwords, private keys, community strings or ACS credentials in adapter responses, audit payloads or UI data.
 
+## 3A. Implementation status on the feature branch
+
+Completed in code (not deployed):
+- Local backend: versioned adapter contract, MikroTik read-only capability allow-list, identity/resource/interface/PPPoE read routes, default-locked PPPoE/TR-069 write gate.
+- Hosted Worker: tenant-scoped connector registration, one-time token issuance (SHA-256 hash stored), connector job queue, idempotency, 60-second claim lease, result redaction and tenant-scoped audit.
+- Local connector agent: explicit hosted-device-to-local-router mapping, local tenant scoping, TLS-only RouterOS transport and read-only capability execution.
+- Focused CI: adapter, safety, agent and Worker contract checks.
+
+Validation:
+- GitHub Actions Network safety and adapter contract run #28 passed after installing backend dependencies.
+- GitHub Actions SQLite-D1 sync contract run #44 passed.
+- No full product release, live hardware acceptance or production deployment is implied.
+
+Deployment gate:
+- Worker connector routes require `NETWORK_CONNECTOR_ENABLED=true`.
+- The Worker migration runner automatically applies the new additive D1 tables on the first API request after deployment. A Worker deployment therefore requires explicit approval for the chosen environment and its bound D1 database.
+- The local connector agent is not started automatically and has not connected to any physical device.
+
 ## 4. Delivery phases
 
 ### Phase 0 — inventory and simulator (first)
