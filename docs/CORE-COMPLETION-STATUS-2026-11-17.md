@@ -259,7 +259,7 @@ A fresh read-only comparison of staging and production confirmed the following:
 - Staging ledger ID 10 was absent; ID 11 was recorded under the historical name `0011_sync_staging_with_production`. Production recorded ID 10 and had no ID 11 row. Migration 0011 itself does not insert a ledger record, so ID 11 is not force-normalized.
 - No production database operation was performed.
 
-A corrective, additive migration `0018_reconcile_pppoe_and_sync_guards.sql` has been committed to the development branch. It replaces only the two staging PPPoE router triggers, recreates the sync index with the full three-column key, records the already-present migration-0010 schema as applied, and records migration 0018. It does not rebuild tables, change business rows, remove legacy `sync_state`, or alter production. A contract test and migration registry entry were added. The migration has **not yet been applied**: first run CI, take a fresh staging export, and re-check preconditions.
+A corrective, additive migration `0018_reconcile_pppoe_and_sync_guards.sql` has been committed to the development branch. It replaces only the two staging PPPoE router triggers, recreates the sync index with the full three-column key, records the already-present migration-0010 schema as applied, and records migration 0018. It does not rebuild tables, change business rows, remove legacy `sync_state`, or alter production. A contract test and migration registry entry were added. The migration was applied to staging after CI passed, a fresh completed D1 export, and preflight. Postflight and a live negative test confirmed the guard behavior; production was not changed.
 
 
 ### Migration 0018 staging execution result — 2026-11-17 07:11 UTC
@@ -279,6 +279,17 @@ A corrective, additive migration `0018_reconcile_pppoe_and_sync_guards.sql` has 
 
 A full `sqlite_master` inventory shows staging has newer network-automation/TR-069 objects absent from production (ACS connections, network connectors/jobs, router-customer mappings, TR-069 devices/audit logs and related indexes). Production retains a legacy `sync_state` table and a subscription-history trigger absent from staging. In addition, several shared-table definitions and indexes differ. This is not a safe blanket schema-copy or table-rebuild exercise; production may simply be on an older application generation. No attempt was made to force staging or production to match wholesale.
 
-A specific migration-0008 regression was identified: staging's `idx_users_org_email_ci` exists as a **non-unique** index on `(organization_id,email COLLATE NOCASE)`, while migration 0008 and production require a **UNIQUE** index on `(organization_id,lower(email)`. Staging preflight returned 177 users, zero NULL/blank password hashes, zero case-insensitive duplicate email groups, and zero exact duplicate email groups. Migration `0019_restore_case_insensitive_user_email_uniqueness.sql` was added with a temporary unique guard index before replacing the drifted index. It will be applied only after CI passes and a fresh staging export is complete.
+A specific migration-0008 regression was identified: staging's `idx_users_org_email_ci` exists as a **non-unique** index on `(organization_id,email COLLATE NOCASE)`, while migration 0008 and production require a **UNIQUE** index on `(organization_id,lower(email)`. Staging preflight returned 177 users, zero NULL/blank password hashes, zero case-insensitive duplicate email groups, and zero exact duplicate email groups. Migration `0019_restore_case_insensitive_user_email_uniqueness.sql` was added with a temporary unique guard index before replacing the drifted index. It was applied to staging only after CI passed and a fresh completed D1 export. Postflight confirms the index is UNIQUE and a case-variant duplicate user insert is rejected.
 
 Restore rehearsal remains blocked: the D1 export endpoint confirms a complete D1-compatible SQL export and returns a time-limited signed download URL, but the available execution environment cannot retrieve that R2 object. Therefore no restore test is claimed. The backup artifact is evidence of export completion, not proof of recoverability.
+
+
+### Migration 0019 staging execution result — 2026-11-17 07:17 UTC
+
+- Before applying, CI passed on commit `067b7089929bf8b69736bd95a8bdb85d2a9d3938`: backend verification and backend checks.
+- A fresh D1-compatible staging export completed immediately before migration 0019; bookmark `000000b1-00000000-00005126-55f656343df1be83894969c268a6b0b1`. This is not a restore rehearsal.
+- Preflight: 177 users; zero NULL/blank password hashes; zero case-insensitive duplicate email groups; zero exact duplicate email groups.
+- Applied migration 0019 to staging only. It first created a temporary UNIQUE guard index, replaced the drifted non-unique index with UNIQUE `(organization_id,lower(email))`, dropped the temporary guard, and recorded migration 19.
+- Postflight: `PRAGMA index_list('users')` reports `idx_users_org_email_ci` unique=1; the global email index remains unique; 177 users remain; organization/customer counts remain 178/181; zero foreign-key violations.
+- Negative test: an insert using an existing email with different letter case was rejected by `idx_users_org_email_ci`; follow-up confirmed zero probe rows.
+- Production database and Workers remain unchanged.
