@@ -294,6 +294,8 @@ if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
 if(path==='/api/complaints'&&m==='GET')return await listComp(env,url,orgId);
 if(path==='/api/complaints'&&m==='POST')return await createComp(request,env,orgId,userId,ip);
+if(path.match(/^\\/api\\/complaints\\/[^/]+\\/messages$/)&&m==='GET')return await listStaffTicketMessages(env,path,orgId);
+if(path.match(/^\\/api\\/complaints\\/[^/]+\\/messages$/)&&m==='POST')return await createStaffTicketMessage(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
@@ -425,6 +427,8 @@ async function handlePortalApi(request,env,url,path,m,auth,ip){
  if(path==='/api/portal/payments'&&m==='GET')return await portalPayments(env,url,account);
  if(path==='/api/portal/tickets'&&m==='GET')return await portalTickets(env,url,account);
  if(path==='/api/portal/tickets'&&m==='POST')return await createPortalTicket(request,env,account,ip);
+ if(path.startsWith('/api/portal/tickets/')&&path.endsWith('/messages')&&path.split('/').length===6&&m==='GET')return await listPortalTicketMessages(env,path,account);
+ if(path.startsWith('/api/portal/tickets/')&&path.endsWith('/messages')&&path.split('/').length===6&&m==='POST')return await createPortalTicketMessage(request,env,path,account,ip);
  if(path==='/api/portal/password'&&m==='PUT')return await changePortalPassword(request,env,account);
  return json({error:'Forbidden'},403)
 }
@@ -694,6 +698,34 @@ async function updateRefund(request,env,path,oid,uid,ip){
 }
 
 async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT t.*,c.first_name,c.last_name,CASE WHEN c.id IS NULL THEN '—' ELSE c.first_name||' '||c.last_name END AS customer_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id AND c.organization_id=t.organization_id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT? OFFSET?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listStaffTicketMessages(env,path,oid){
+ const id=path.split('/')[3],ticket=await env.DB.prepare('SELECT id FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ticket)return json({error:'Ticket not found'},404);
+ const rows=await env.DB.prepare("SELECT m.id,m.message,m.is_staff,m.created_at,u.name AS sender_name FROM ticket_messages m LEFT JOIN users u ON u.id=m.user_id WHERE m.ticket_id=? ORDER BY m.created_at ASC").bind(id).all();
+ return json({data:rows.results||[]})
+}
+async function createStaffTicketMessage(request,env,path,oid,uid,ip){
+ const id=path.split('/')[3],b=await parseBody(request),message=s(b?.message||'').trim();if(!message||message.length>4000)return json({error:'Message must be 1-4000 characters'},400);
+ const ticket=await env.DB.prepare('SELECT id,customer_id,subject FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ticket)return json({error:'Ticket not found'},404);
+ const mid=uuid();await env.DB.prepare('INSERT INTO ticket_messages(id,ticket_id,user_id,message,is_staff) VALUES(?,?,?,?,1)').bind(mid,id,uid,message).run();
+ await env.DB.prepare("UPDATE support_tickets SET updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid).run();
+ await audit(env,oid,uid,'reply_support_ticket','Ticket:'+id,ip);
+ if(ticket.customer_id)await env.DB.prepare("INSERT INTO notifications(id,organization_id,user_id,title,message,type,is_read,created_at) SELECT ?,organization_id,NULL,?,?, 'support',0,datetime('now') FROM users WHERE id=? AND organization_id=? LIMIT 1").bind(uuid(),'Staff replied to your complaint',String(ticket.subject).slice(0,160),uid,oid).run().catch(()=>{});
+ return json({success:true,data:{id:mid,ticket_id:id,message,is_staff:1,created_at:new Date().toISOString()}},201)
+}
+async function listPortalTicketMessages(env,path,account){
+ const id=path.split('/')[4],ticket=await env.DB.prepare('SELECT id FROM support_tickets WHERE id=? AND organization_id=? AND customer_id=?').bind(id,account.organization_id,account.customer_id).first();if(!ticket)return json({error:'Ticket not found'},404);
+ const rows=await env.DB.prepare("SELECT m.id,m.message,m.is_staff,m.created_at,COALESCE(u.name,'You') AS sender_name FROM ticket_messages m LEFT JOIN users u ON u.id=m.user_id WHERE m.ticket_id=? ORDER BY m.created_at ASC").bind(id).all();
+ return json({data:rows.results||[]})
+}
+async function createPortalTicketMessage(request,env,path,account,ip){
+ const id=path.split('/')[4],b=await parseBody(request),message=s(b?.message||'').trim();if(!message||message.length>4000)return json({error:'Message must be 1-4000 characters'},400);
+ const ticket=await env.DB.prepare('SELECT id,subject FROM support_tickets WHERE id=? AND organization_id=? AND customer_id=?').bind(id,account.organization_id,account.customer_id).first();if(!ticket)return json({error:'Ticket not found'},404);
+ const mid=uuid();await env.DB.prepare('INSERT INTO ticket_messages(id,ticket_id,user_id,message,is_staff) VALUES(?,?,NULL,?,0)').bind(mid,id,message).run();
+ await env.DB.prepare("UPDATE support_tickets SET updated_at=datetime('now') WHERE id=? AND organization_id=? AND customer_id=?").bind(id,account.organization_id,account.customer_id).run();
+ await audit(env,account.organization_id,null,'customer_ticket_reply','Ticket:'+id,ip);
+ await notifyAdmins(env,account.organization_id,'Customer replied to a complaint',String(ticket.subject).slice(0,180),'support');
+ return json({success:true,data:{id:mid,ticket_id:id,message,is_staff:0,created_at:new Date().toISOString()}},201)
+}
 async function createComp(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ms=vReq(b,['subject']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
