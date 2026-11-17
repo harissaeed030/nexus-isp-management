@@ -52,8 +52,16 @@ jobs:
 
       - name: Install Android SDK packages
         run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
-          test -x "$SDKMANAGER"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ] && [ -d "$ANDROID_HOME/cmdline-tools" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android SDK manager was not found. ANDROID_HOME=$ANDROID_HOME"
+            ls -la "$ANDROID_HOME" || true
+            exit 1
+          fi
+          echo "Using Android SDK manager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
