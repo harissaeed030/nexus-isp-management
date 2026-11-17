@@ -51,6 +51,10 @@ const PERMISSIONS=[
  {key:'tickets.manage',group:'Support',label:'Create and update complaints'},
  {key:'routers.read',group:'Network',label:'View router and OLT inventory'},
  {key:'routers.manage',group:'Network',label:'Manage router and OLT inventory'},
+ {key:'network.connectors.read',group:'Network',label:'View network connectors'},
+ {key:'network.connectors.manage',group:'Network',label:'Register and disable network connectors'},
+ {key:'network.jobs.read',group:'Network',label:'View network automation jobs'},
+ {key:'network.jobs.manage',group:'Network',label:'Queue approved read-only network jobs'},
  {key:'pppoe.read',group:'Network',label:'View PPPoE accounts'},
  {key:'pppoe.manage',group:'Network',label:'Manage PPPoE accounts'},
  {key:'onus.read',group:'Network',label:'View ONU / ONT inventory'},
@@ -65,7 +69,7 @@ const ROLE_PERMISSIONS={
  owner:['*'],admin:['*'],
  billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read','refunds.read','refunds.manage'],
  support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read','notifications.read'],
- technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read'],
+ technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read','network.connectors.read','network.jobs.read'],
  staff:['dashboard.read','notifications.read']
 };
 function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
@@ -81,6 +85,10 @@ function permissionForRoute(path,method){
  if(path==='/api/payments')return v==='GET'?'billing.read':null;
  if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
  if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
+ if(path==='/api/network/connectors')return v==='GET'?'network.connectors.read':v==='POST'?'network.connectors.manage':null;
+ if(path.match(/^\/api\/network\/connectors\/[^/]+$/))return v==='GET'?'network.connectors.read':v==='DELETE'?'network.connectors.manage':null;
+ if(path==='/api/network/jobs')return v==='GET'?'network.jobs.read':v==='POST'?'network.jobs.manage':null;
+ if(path.match(/^\/api\/network\/jobs\/[^/]+$/))return v==='GET'?'network.jobs.read':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
  if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
