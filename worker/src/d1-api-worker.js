@@ -2,6 +2,7 @@
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 export function normalizeApiMethod(method){return method==='PATCH'?'PUT':method}
+export function normalizeApiPath(pathname){const path=String(pathname||'').replace(/^\/api\/v1\//,'/api/');return path==='/api/tenants/register'?'/api/auth/register':path}
 export function mapTicketRow(row){return {...row,customer_name:[row.first_name,row.last_name].filter(Boolean).join(' ')||row.customer_name||'',customer_id:row.customer_id||null,priority:row.priority||'normal'}}
 export function normalizeTicketPayload(body){return {...body,customer_id:body.customer_id??body.customerId??null,subject:body.subject,description:body.description||null}}
 export function mapCustomerRow(row){const fullName=[row.first_name,row.last_name].filter(Boolean).join(' ').trim();return {...row,full_name:fullName||row.full_name||'',account_number:row.account_number||row.customer_code||'',service_address:row.service_address||row.installation_address||row.address||'',coverage_area:row.coverage_area||'',status:row.account_status||row.status,connection_status:row.connection_status||'pending'}}
@@ -250,7 +251,7 @@ async function runMigrations(env){
 }
 
 let _migrated=false;
-export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=normalizeApiMethod(request.method);const apiRequest=request.method==='PATCH'?new Request(request,{method:'PUT'}):request;
+export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=normalizeApiPath(url.pathname);const m=normalizeApiMethod(request.method);const apiRequest=request.method==='PATCH'?new Request(request,{method:'PUT'}):request;
 if(m==='OPTIONS')return withCors(new Response(null,{status:204}),request,env);
 if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
