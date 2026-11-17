@@ -88,3 +88,12 @@ These changes are source changes on the feature branch only. They have not been 
 - Wired the guard into `.github/workflows/verify.yml` before Worker source verification. This checks source-level route presence only; it does not claim payload, authorization, D1, browser or live endpoint correctness.
 - Recorded the current hosted network-control boundary in [ADR-001](ADR-001-hosted-network-control-scope.md): hosted device features are inventory-only; live MikroTik/OLT/ONU/ACS/TR-069 control stays outside the hosted milestone and local adapters remain separate.
 - These additions are feature-branch source changes. The CI run must execute on the resulting commit before the checks can be called passed. No Worker/Pages deployment, D1 change, secret change or device command was performed.
+
+
+## Staging E2E cleanup compatibility follow-up — 2026-11-17
+
+- Latest PR workflow run confirmed the portal E2E journey itself passed, but teardown failed because the currently deployed staging D1 did not contain the optional `payment_promises` table.
+- The staging-only teardown now checks `sqlite_master` before attempting that optional delete. All tenant cleanup statements remain organization-scoped and run as one D1 batch.
+- Added a regression guard that requires this schema check and confirms the destructive teardown route remains absent from the production Worker bundle.
+- Changed the staging tenant-creating E2E job to manual `workflow_dispatch` only. Ordinary pushes and pull requests no longer create staging tenants automatically; this prevents repeated test data accumulation while staging schema/deployment parity is unresolved.
+- This is source/CI-only remediation. It does not delete existing staging rows or deploy a Worker. The failed run may have left its two synthetic tenants in staging; confirm their exact ownership before any manual cleanup.
