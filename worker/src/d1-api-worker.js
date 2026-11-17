@@ -14,6 +14,9 @@ export function mapInvoiceRow(row){const customerName=[row.first_name,row.last_n
 export function normalizeInvoicePayload(body){const out={...body};for(const [from,to] of Object.entries({customerId:'customer_id',amountPkr:'amount',dueDate:'due_date',issueDate:'issue_date',subscriptionId:'subscription_id'})){if(body[from]!==undefined)out[to]=body[from]}return out}
 export function mapPaymentRow(row){const customerName=[row.first_name,row.last_name].filter(Boolean).join(' ').trim();let method=row.payment_method||row.method||'';if(method==='bank_transfer')method='bank';if(method==='mobile_money'){const note=String(row.notes||'');method=note.includes('Payment channel: jazzcash')?'jazzcash':note.includes('Payment channel: easypaisa')?'easypaisa':'mobile_money'}return {...row,customer_name:row.customer_name||customerName,amount_pkr:Number(row.amount_pkr??row.amount)||0,method,received_at:row.paid_at||row.received_at||null}}
 export function normalizePaymentPayload(body){const out={...body};if(body.invoiceId!==undefined)out.invoice_id=body.invoiceId;if(body.amountPkr!==undefined)out.amount=Number(body.amountPkr);return out}
+export function mapOltRow(row){return {...row,vendor:row.vendor||'Unknown',model:row.model||'Unknown',location:row.notes||'',firmwareVersion:null,status:row.status||'inactive',pon_ports:Number(row.pon_ports)||0}}
+export function mapOnuRow(row){return {...row,olt_id:row.olt_device_id||null,pon_index:Number.parseInt(row.pon_port,10)||row.pon_port||null,customer_name:[row.first_name,row.last_name].filter(Boolean).join(' ').trim()||''}}
+export function normalizeOnuPayload(body){const out={...body};for(const [from,to] of Object.entries({serialNumber:'serial_number',oltId:'olt_device_id',customerId:'customer_id',macAddress:'mac_address',ponPort:'pon_port',ponPortId:'pon_port',rxPowerDbm:'rx_power_dbm'})){if(body[from]!==undefined)out[to]=body[from]}return out}
 function uuid(){return crypto.randomUUID()}
 function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
 function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
@@ -95,7 +98,7 @@ function permissionForRoute(path,method){
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
  if(path==='/api/payments')return v==='GET'?'billing.read':v==='POST'?'payments.create':null;
  if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
- if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
+ if(match('/api/network/devices')||match('/api/routers')||match('/api/olts'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
  if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
@@ -285,6 +288,11 @@ if(path==='/api/pppoe'&&m==='POST')return await createPppoe(request,env,orgId,us
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='GET')return await getPppoe(env,path,orgId);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='PUT')return await updatePppoe(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='DELETE')return await delPppoe(env,path,orgId,userId,ip);
+if(path==='/api/olts'&&m==='GET')return await listOlts(env,url,orgId);
+if(path==='/api/olts'&&m==='POST')return await createOlt(request,env,orgId,userId,ip);
+if(path.match(/^\\/api\\/olts\\/[^/]+\\/pons$/)&&m==='GET')return await getOltPorts(env,path,orgId);
+if(path.match(/^\\/api\\/olts\\/[^/]+\\/capabilities$/)&&m==='GET')return await getOltCapabilities(env,path,orgId);
+if(path.match(/^\\/api\\/olts\\/[^/]+$/)&&m==='DELETE')return await delNetworkDevice(env,'/api/network/devices/'+path.split('/')[3],orgId,userId,ip);
 if(path==='/api/network/devices'&&m==='GET')return await listNetworkDevices(env,url,orgId);
 if(path==='/api/network/devices'&&m==='POST')return await createNetworkDevice(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='GET')return await getNetworkDevice(env,path,orgId);
@@ -293,6 +301,7 @@ if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='DELETE')return await del
 if(path==='/api/network/status'&&m==='GET')return await networkStatus(env,orgId);
 if(path==='/api/onus'&&m==='GET')return await listOnus(env,url,orgId);
 if(path==='/api/onus'&&m==='POST')return await createOnu(request,env,orgId,userId,ip);
+if(path.match(/^\\/api\\/onus\\/[^/]+\\/service-mapping$/)&&m==='POST'){const id=path.split('/')[3],b=await parseBody(request);if(!b||!b.customerId)return json({error:'Customer is required'},400);const customer=await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customerId,orgId).first();if(!customer)return json({error:'Customer not found'},404);if(b.subscriptionId&&!await env.DB.prepare('SELECT id FROM subscriptions WHERE id=? AND organization_id=? AND customer_id=?').bind(b.subscriptionId,orgId,b.customerId).first())return json({error:'Subscription not found for this customer'},404);const onu=await env.DB.prepare('SELECT id FROM onu_devices WHERE id=? AND organization_id=?').bind(id,orgId).first();if(!onu)return json({error:'ONU not found'},404);await env.DB.prepare("UPDATE onu_devices SET customer_id=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(b.customerId,id,orgId).run();await audit(env,orgId,userId,'map_onu_customer','ONU:'+id+' customer:'+b.customerId,ip);return json({success:true,id,customer_id:b.customerId,subscription_id:b.subscriptionId||null,service_label:b.serviceLabel||null})}
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='GET')return await getOnu(env,path,orgId);
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='PUT')return await updateOnu(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='DELETE')return await deleteOnu(env,path,orgId,userId,ip);
@@ -803,6 +812,10 @@ async function delPppoe(env,path,oid,uid,ip){
  if(!r.meta?.changes)return json({error:'Not found'},404);
  await audit(env,oid,uid,'delete_pppoe','PPPoE:'+id,ip);return json({success:true})
 }
+async function listOlts(env,url,oid){const rows=await env.DB.prepare("SELECT * FROM network_devices WHERE organization_id=? AND device_type='olt' ORDER BY created_at DESC").bind(oid).all();return json({data:(rows.results||[]).map(mapOltRow)})}
+async function createOlt(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(b.username||b.password)return json({error:'OLT credential storage is not enabled in this D1 schema. Save inventory without credentials; live management is not available.'},501);const name=s(b.name),model=s(b.model||'HSGQ-G04R'),ports=Number(b.pon_ports||b.ponPorts||(model==='HSGQ-G04R'?4:0));if(!name)return json({error:'OLT name is required'},400);if(!Number.isInteger(ports)||ports<1||ports>256)return json({error:'Valid PON port count is required'},400);const id=uuid();await env.DB.prepare("INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports)VALUES(?,?,?,'olt',?,NULL,NULL,?,?,?,'inventory_only',?)").bind(id,oid,name,b.host||null,b.status||'inactive',b.location||null,model,ports).run();await audit(env,oid,uid,'create_olt_inventory',name,ip);const row=await env.DB.prepare('SELECT * FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first();return json(mapOltRow(row),201)}
+async function getOltPorts(env,path,oid){const id=path.split('/')[3],olt=await env.DB.prepare("SELECT id,name,model,pon_ports FROM network_devices WHERE id=? AND organization_id=? AND device_type='olt'").bind(id,oid).first();if(!olt)return json({error:'OLT not found'},404);const n=Number(olt.pon_ports)||(olt.model==='HSGQ-G04R'?4:0),rows=[];for(let p=1;p<=n;p++){const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM onu_devices WHERE organization_id=? AND olt_device_id=? AND CAST(pon_port AS INTEGER)=?').bind(oid,id,p).first();rows.push({id:id+':'+p,olt_id:id,port_index:p,label:'PON '+p,status:'inventory_only',onu_count:Number(count?.n)||0})}return json({data:rows})}
+async function getOltCapabilities(env,path,oid){const id=path.split('/')[3],row=await env.DB.prepare("SELECT id,name,model,pon_ports FROM network_devices WHERE id=? AND organization_id=? AND device_type='olt'").bind(id,oid).first();if(!row)return json({error:'OLT not found'},404);return json({model:row.model,ponPorts:Number(row.pon_ports)||0,managementProtocol:'inventory_only',liveTelemetry:false,notice:'Inventory-only capability. No vendor API or SNMP session has been established.'})}
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
  const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
@@ -816,14 +829,14 @@ async function listOnus(env,url,oid){
  if(olt){where+=' AND o.olt_device_id=?';params.push(olt)}
  const cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM onu_devices o LEFT JOIN customers c ON c.id=o.customer_id AND c.organization_id=o.organization_id '+where).bind(...params).first();
  const rows=await env.DB.prepare('SELECT o.*,c.first_name,c.last_name,n.name AS olt_name FROM onu_devices o LEFT JOIN customers c ON c.id=o.customer_id AND c.organization_id=o.organization_id LEFT JOIN network_devices n ON n.id=o.olt_device_id AND n.organization_id=o.organization_id '+where+' ORDER BY o.created_at DESC LIMIT ? OFFSET ?').bind(...params,pp,off).all();
- return json({data:rows.results||[],pagination:{page,per_page:pp,total:cnt.n,total_pages:Math.ceil(cnt.n/pp)}})
+ return json({data:(rows.results||[]).map(mapOnuRow),pagination:{page,per_page:pp,total:cnt.n,total_pages:Math.ceil(cnt.n/pp)}})
 }
 async function getOnu(env,path,oid){
  const id=path.split('/')[3],row=await env.DB.prepare('SELECT o.*,c.first_name,c.last_name,n.name AS olt_name FROM onu_devices o LEFT JOIN customers c ON c.id=o.customer_id AND c.organization_id=o.organization_id LEFT JOIN network_devices n ON n.id=o.olt_device_id AND n.organization_id=o.organization_id WHERE o.id=? AND o.organization_id=?').bind(id,oid).first();
- return row?json(row):json({error:'Not found'},404)
+ return row?json(mapOnuRow(row)):json({error:'Not found'},404)
 }
 async function createOnu(r,env,oid,uid,ip){
- const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
+ const raw=await parseBody(r);if(!raw)return json({error:'Invalid body'},400);const b=normalizeOnuPayload(raw);if(b.pon_port&&String(b.pon_port).includes(':'))b.pon_port=String(b.pon_port).split(':').pop();
  if(!s(b.serial_number))return json({error:'Serial number is required'},400);
  const allowed=['active','inactive','offline','faulty','unknown'],status=b.status||'unknown';
  if(!allowed.includes(status))return json({error:'Invalid ONU status'},400);
@@ -841,7 +854,7 @@ async function createOnu(r,env,oid,uid,ip){
  return await getOnu(env,'/api/onus/'+id,oid)
 }
 async function updateOnu(r,env,path,oid,uid,ip){
- const id=path.split('/')[3],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
+ const id=path.split('/')[3],raw=await parseBody(r);if(!raw)return json({error:'Invalid body'},400);const b=normalizeOnuPayload(raw);if(b.pon_port&&String(b.pon_port).includes(':'))b.pon_port=String(b.pon_port).split(':').pop();
  const ex=await env.DB.prepare('SELECT * FROM onu_devices WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
  if(b.olt_device_id!==undefined&&b.olt_device_id&&!await env.DB.prepare("SELECT id FROM network_devices WHERE id=? AND organization_id=? AND device_type='olt'").bind(b.olt_device_id,oid).first())return json({error:'OLT device not found'},404);
  if(b.customer_id!==undefined&&b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);
