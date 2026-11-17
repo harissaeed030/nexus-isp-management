@@ -32,3 +32,17 @@ Those migrations are retained, but assigned the next unused versions 007 and 008
 - Each migration and its ledger insert must commit in the same transaction.
 - Test fresh installation and upgrade against disposable copies before applying to any live database.
 - This change only updates the SQLite migration track. It does not migrate Cloudflare D1 or deploy a Worker.
+
+
+## Cloudflare D1 migration track
+
+The D1 Worker schema has a separate numeric migration ledger; these IDs are not SQLite migration versions.
+
+| ID | Migration | Purpose |
+|---|---|---|
+| 0012 | `0012_customer_workspace_compatibility.sql` | Customer workspace compatibility |
+| 0013 | `0013_subscription_workspace_status.sql` | Subscription workspace status |
+| 0014 | `0014_router_credential_cipher.sql` | Encrypted RouterOS credential storage |
+| 0015 | `0015_genieacs_tr069_inventory.sql` | Tenant-scoped ACS connections, TR-069 devices and audit records |
+
+Apply D1 migrations only after a verified backup, checking the live `schema_migrations` ledger and the exact production/staging schema. The development branch does not automatically apply these files to either database.
