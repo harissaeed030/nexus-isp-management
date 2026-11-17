@@ -941,7 +941,7 @@ async function handleNetworkConnectorAgent(request,env,path,m,ip){
   const safeResult=redactNetworkResult(body.result??{}),encoded=JSON.stringify(safeResult);
   if(encoded.length>16384)return json({error:'Result payload exceeds 16 KB'},413);
   const errorCode=body.status==='failed'?String(body.error_code||'CONNECTOR_OPERATION_FAILED').replace(/[^A-Z0-9_-]/gi,'').slice(0,80):null;
-  const updated=await env.DB.prepare("UPDATE network_jobs SET status=?,result_json=?,error_code=?,completed_at=datetime('now'),lease_expires_at=NULL WHERE id=? AND connector_id=? AND organization_id=? AND status='claimed'").bind(body.status,encoded,errorCode,resultMatch[1],connector.id,connector.organization_id).run();
+  const updated=await env.DB.prepare("UPDATE network_jobs SET status=?,result_json=?,error_code=?,completed_at=datetime('now'),lease_expires_at=NULL WHERE id=? AND connector_id=? AND organization_id=? AND status='claimed' AND lease_expires_at>datetime('now')").bind(body.status,encoded,errorCode,resultMatch[1],connector.id,connector.organization_id).run();
   if(!updated.meta?.changes)return json({error:'Claimed job not found or lease no longer active'},409);
   await audit(env,connector.organization_id,connector.created_by,'network_job_'+body.status,'Job:'+resultMatch[1],ip);
   return json({success:true});
