@@ -49,6 +49,7 @@ The D1 Worker schema has a separate numeric migration ledger; these IDs are not 
 | 0016 | `0016_router_customer_pppoe_mappings.sql` | Tenant-scoped RouterOS PPPoE username-to-customer mappings |
 | 0017 | `0017_users_password_hash_guard.sql` | Enforce non-empty password hashes on user insert/update in legacy nullable schemas |
 | 0018 | `0018_reconcile_pppoe_and_sync_guards.sql` | Correct PPPoE router type/tenant guards and sync operation index; reconcile verified 0010 ledger |
+| 0019 | `0019_restore_case_insensitive_user_email_uniqueness.sql` | Restore the UNIQUE organization-scoped lower(email) index where staging drifted to a non-unique index |
 
 
 Apply D1 migrations only after a verified backup, checking the live `schema_migrations` ledger and the exact production/staging schema. The development branch does not automatically apply these files to either database.
