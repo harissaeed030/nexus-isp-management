@@ -13,6 +13,8 @@ on:
       - "worker/src/index.js"
       - "worker/src/network-connector-contract.js"
       - "worker/scripts/network-connector-contract.test.js"
+      - "backend/src/services/network-connector-agent.js"
+      - "backend/scripts/network-connector-agent.test.js"
       - "backend/src/app.js"
       - "backend/package.json"
       - ".github/workflows/network-safety.yml"
@@ -43,6 +45,8 @@ jobs:
         working-directory: backend
         run: |
           node --check src/app.js
+          node --check src/services/network-connector-agent.js
+          node --check scripts/network-connector-agent.test.js
           node --check src/services/mikrotik-readonly-adapter.js
           node --check scripts/mikrotik-readonly-adapter.test.js
           node --check src/lib/network-write-guard.js
@@ -52,6 +56,9 @@ jobs:
       - name: Run MikroTik read-only adapter tests
         working-directory: backend
         run: node --test scripts/mikrotik-readonly-adapter.test.js
+      - name: Run private connector agent tests
+        working-directory: backend
+        run: node --test scripts/network-connector-agent.test.js
       - name: Run network write gate tests
         working-directory: backend
         run: node --test scripts/network-write-guard.test.js
