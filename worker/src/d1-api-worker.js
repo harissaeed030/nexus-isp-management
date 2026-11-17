@@ -436,7 +436,7 @@ async function handleAiChat(request,env,userId){
   'Do not invent live network status, customer balances, prices or completed actions. Distinguish general guidance from verified facts.',
   'For network changes, recommend a backup and maintenance window. Keep answers concise and safety-conscious.'
  ].join('\n');
- const model=String(env.GEMINI_MODEL||'gemini-2.0-flash');
+ const model=String(env.GEMINI_MODEL||'gemini-2.5-flash');
  try{
   const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
    method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},
