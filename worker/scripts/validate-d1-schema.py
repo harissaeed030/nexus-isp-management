@@ -243,6 +243,16 @@ except sqlite3.IntegrityError:
 else:
     raise AssertionError("Payment promise update accepted cross-tenant creator")
 
+try:
+    fresh.execute(
+        "INSERT INTO payment_promises(id,organization_id,customer_id,amount,promise_date,status,created_by) "
+        "VALUES('promise-bad-status','billing-org','billing-customer',1500,'2026-12-01','pending','billing-user')"
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Payment promise accepted an unsupported status")
+
 fresh_fk_violations = fresh.execute("PRAGMA foreign_key_check").fetchall()
 assert not fresh_fk_violations, (
     "Migration 0023 introduced foreign-key violations: " + repr(fresh_fk_violations)
