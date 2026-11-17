@@ -233,6 +233,7 @@ async function handleApi(request,env,url,path,m){if(path.startsWith('/api/custom
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
 if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
+if(path.startsWith('/api/network/agent/'))return await handleNetworkConnectorAgent(request,env,path,m,ip);
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
 const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status,token_version,email FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
@@ -312,6 +313,12 @@ if(path==='/api/pppoe'&&m==='POST')return await createPppoe(request,env,orgId,us
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='GET')return await getPppoe(env,path,orgId);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='PUT')return await updatePppoe(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='DELETE')return await delPppoe(env,path,orgId,userId,ip);
+if(path==='/api/network/connectors'&&m==='GET')return await listNetworkConnectors(env,orgId);
+if(path==='/api/network/connectors'&&m==='POST')return await createNetworkConnector(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/network\/connectors\/[^/]+$/)&&m==='DELETE')return await disableNetworkConnector(env,path,orgId,userId,ip);
+if(path==='/api/network/jobs'&&m==='GET')return await listNetworkJobs(env,url,orgId);
+if(path==='/api/network/jobs'&&m==='POST')return await createNetworkJob(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/network\/jobs\/[^/]+$/)&&m==='GET')return await getNetworkJob(env,path,orgId);
 if(path==='/api/network/devices'&&m==='GET')return await listNetworkDevices(env,url,orgId);
 if(path==='/api/network/devices'&&m==='POST')return await createNetworkDevice(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='GET')return await getNetworkDevice(env,path,orgId);
