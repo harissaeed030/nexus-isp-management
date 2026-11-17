@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { createMikroTikAdapter, safeRouterError } from "../services/mikrotik-api.js";
+import { MikroTikReadOnlyAdapter } from "../services/mikrotik-readonly-adapter.js";
 
 const b64 = value => Buffer.from(value).toString("base64url");
 
@@ -98,18 +99,19 @@ export function registerMikroTikRoutes(app, { db, auth, id, audit, fail }) {
     }
   }
 
-  function read(operation) {
+  function read(capability) {
     return async (req, res) => {
       const router = getRouter(req.params.id, req.user.tenant_id);
       if (!router) return fail(res, 404, "Router not found.");
       try {
-        const data = await withRouter(router, operation);
-        log(req.user, router.id, "read", "success", null);
+        const data = await withRouter(router, api =>
+          new MikroTikReadOnlyAdapter(api).read(capability));
+        log(req.user, router.id, capability, "success", null);
         return res.json({ success: true, source: "live", data });
       } catch (error) {
         const message = safeRouterError(error);
-        log(req.user, router.id, "read", "error", message);
-        return fail(res, 502, "Router operation failed: " + message);
+        log(req.user, router.id, capability, "error", message);
+        return fail(res, 502, "Router read failed: " + message);
       }
     };
   }
@@ -147,18 +149,18 @@ export function registerMikroTikRoutes(app, { db, auth, id, audit, fail }) {
     }
   });
 
+  app.get("/api/v1/routers/:id/identity", auth,
+    read("mikrotik.identity.read"));
+  app.get("/api/v1/routers/:id/resource", auth,
+    read("mikrotik.resource.read"));
+  app.get("/api/v1/routers/:id/interfaces", auth,
+    read("mikrotik.interfaces.read"));
   app.get("/api/v1/routers/:id/pppoe/active", auth,
-    read(api => api.command("/ppp/active/print")));
-
+    read("mikrotik.pppoe.sessions.read"));
   app.get("/api/v1/routers/:id/pppoe/secrets", auth,
-    read(api => api.command("/ppp/secret/print", {
-      ".proplist": ".id,name,service,profile,disabled,comment"
-    })));
-
+    read("mikrotik.pppoe.secrets.read"));
   app.get("/api/v1/routers/:id/pppoe/profiles", auth,
-    read(api => api.command("/ppp/profile/print", {
-      ".proplist": ".id,name,rate-limit,local-address,remote-address"
-    })));
+    read("mikrotik.pppoe.profiles.read"));
 
   app.post("/api/v1/routers/:id/pppoe/secrets", auth, async (req, res) => {
     const body = req.body || {};
