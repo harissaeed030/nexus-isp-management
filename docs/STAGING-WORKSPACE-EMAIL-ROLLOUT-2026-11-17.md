@@ -16,7 +16,7 @@ NEXUS is multi-tenant. The prior global unique index `idx_users_email_global` pr
 - Target: `nexus-saas-staging-db` (`194f62e2-2766-48ab-be17-81248610c0cd`).
 - Production database and Worker were not modified.
 - Preflight: 177 users; zero duplicate case-insensitive email groups within an organization; global index present; migration 0020 absent.
-- A fresh D1-compatible export completed before the change. Export bookmark: `000000b2-00000000-00005126-b3e9c6ed9d5d9a888f38fcc97a3788e5`.
+- A fresh D1-compatible export completed before the change. Export bookmark: `000000b2-00000000-00005126-b3e9c6ed9d5d9a888f38fcc97a3788e5`. The export has not yet been restored into a disposable database; recoverability is not claimed.
 - Applied migration 0020: dropped `idx_users_email_global` and recorded migration ledger ID 20.
 - Postflight: global index absent; unique organization-scoped index present; migration 0020 recorded.
 - Synthetic test: same email inserted successfully in two separate test organizations; case-variant duplicate in the same organization was rejected by `idx_users_org_email_ci`.
