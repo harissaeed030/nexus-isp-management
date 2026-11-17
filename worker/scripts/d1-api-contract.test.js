@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload } from "../src/d1-api-worker.js";
+import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
 const customerMigration = await readFile(new URL("../../cloudflare/d1/migrations/0012_customer_workspace_compatibility.sql", import.meta.url), "utf8");
+const subscriptionMigration = await readFile(new URL("../../cloudflare/d1/migrations/0013_subscription_workspace_status.sql", import.meta.url), "utf8");
 
 test("D1 API Worker includes authenticated organization registration and login", () => {
   assert.match(source, /\/api\/auth\/register/);
@@ -115,4 +116,38 @@ test("package create and edit adapter maps camelCase fields and archive status",
     speed_down: "10", speed_up: "5", speed_mbps: 10,
     price: 1200, is_active: false
   });
+});
+
+
+test("subscription DTO maps D1 customer, package, date and lifecycle fields", () => {
+  assert.deepEqual(mapSubscriptionRow({
+    id: "s1", first_name: "Haris", last_name: "Qureshi", customer_code: "CUS-1",
+    package_name: "Home 10M", speed_mbps: 10, speed_down: "10", speed_up: "5",
+    price: 1200, start_date: "2026-11-01", end_date: "2026-12-01",
+    status: "suspended", workspace_status: "pending"
+  }), {
+    id: "s1", first_name: "Haris", last_name: "Qureshi", customer_code: "CUS-1",
+    package_name: "Home 10M", speed_mbps: 10, speed_down: "10", speed_up: "5",
+    price: 1200, start_date: "2026-11-01", end_date: "2026-12-01",
+    status: "pending", workspace_status: "pending", customer_name: "Haris Qureshi",
+    account_number: "CUS-1", speed_down_mbps: 10, speed_up_mbps: 5,
+    monthly_price_pkr: 1200, started_at: "2026-11-01", expires_at: "2026-12-01"
+  });
+});
+
+test("subscription request adapter maps dashboard camelCase fields", () => {
+  assert.deepEqual(normalizeSubscriptionPayload({
+    customerId: "c1", packageId: "p1", startedAt: "2026-11-17", expiresAt: "2026-12-17"
+  }), {
+    customerId: "c1", packageId: "p1", startedAt: "2026-11-17", expiresAt: "2026-12-17",
+    customer_id: "c1", package_id: "p1", start_date: "2026-11-17", end_date: "2026-12-17"
+  });
+});
+
+test("subscription renewal route and tenant-scoped history are implemented", () => {
+  assert.match(source, /\/api\/subscriptions\/\[\^\/\]\+\/renew/);
+  assert.match(source, /renew_subscription/);
+  assert.match(source, /subscription_history/);
+  assert.match(subscriptionMigration, /workspace_status TEXT NOT NULL DEFAULT 'active'/);
+  assert.match(subscriptionMigration, /idx_subscriptions_org_workspace_status/);
 });
