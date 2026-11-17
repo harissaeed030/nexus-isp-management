@@ -1,3 +1,4 @@
+import { NETWORK_READ_CAPABILITIES, validateNetworkConnectorName, isNetworkConnectorToken, validateNetworkJobRequest, redactNetworkResult } from "./network-connector-contract.js";
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 function uuid(){return crypto.randomUUID()}
@@ -835,20 +836,7 @@ async function delPppoe(env,path,oid,uid,ip){
  await audit(env,oid,uid,'delete_pppoe','PPPoE:'+id,ip);return json({success:true})
 }
 
-const NETWORK_READ_CAPABILITIES = new Set([
- 'mikrotik.identity.read',
- 'mikrotik.resource.read',
- 'mikrotik.interfaces.read',
- 'mikrotik.pppoe.sessions.read'
-]);
-const NETWORK_SECRET_KEY = /(password|passphrase|secret|token|community|string|private.?key|authorization|credential|api.?key|psk)/i;
-function redactNetworkResult(value,depth=0){
- if(depth>6)return '[TRUNCATED]';
- if(Array.isArray(value))return value.slice(0,100).map(x=>redactNetworkResult(x,depth+1));
- if(!value||typeof value!=='object')return typeof value==='string'?value.slice(0,2000):value;
- const out={};for(const [key,item] of Object.entries(value).slice(0,100))out[key]=NETWORK_SECRET_KEY.test(key)?'[REDACTED]':redactNetworkResult(item,depth+1);
- return out;
-}
+
 async function sha256Hex(value){
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
  return b2h(new Uint8Array(digest));
@@ -864,7 +852,7 @@ async function createNetworkConnector(request,env,oid,uid,ip){
  if(env.NETWORK_CONNECTOR_ENABLED!=='true')return json({error:'Network connector API is disabled until explicitly enabled for this environment'},503);
  const b=await parseBody(request);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
  const name=s(b.name||'');
- if(typeof name!=='string'||name.length<2||name.length>80)return json({error:'Connector name must be 2-80 characters'},400);
+ if(!validateNetworkConnectorName(name))return json({error:'Connector name must be 2-80 characters'},400);
  const token='nxc_'+b64u(crypto.getRandomValues(new Uint8Array(32))),tokenHash=await sha256Hex(token),id=uuid();
  const capabilities=Array.isArray(b.capabilities)?[...new Set(b.capabilities)]:[...NETWORK_READ_CAPABILITIES];
  if(!capabilities.length||capabilities.some(x=>!NETWORK_READ_CAPABILITIES.has(x)))return json({error:'Only supported MikroTik read-only capabilities may be registered'},400);
@@ -889,8 +877,9 @@ async function disableNetworkConnector(env,path,oid,uid,ip){
 async function createNetworkJob(request,env,oid,uid,ip){
  if(env.NETWORK_CONNECTOR_ENABLED!=='true')return json({error:'Network connector API is disabled'},503);
  const b=await parseBody(request);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
- const connectorId=s(b.connector_id||''),deviceId=s(b.device_id||''),capability=s(b.capability||''),key=s(b.idempotency_key||'');
- if(!connectorId||!deviceId||!NETWORK_READ_CAPABILITIES.has(capability)||!/^[A-Za-z0-9._-]{8,128}$/.test(key))return json({error:'Connector, MikroTik device, supported read capability and 8-128 character idempotency_key are required'},400);
+ let validated;
+ try{validated=validateNetworkJobRequest(b)}catch(e){return json({error:e.message},400)}
+ const{connectorId,deviceId,capability,idempotencyKey:key}=validated;
  const [connector,device]=await Promise.all([
   env.DB.prepare("SELECT id,capabilities_json FROM network_connectors WHERE id=? AND organization_id=? AND status='active'").bind(connectorId,oid).first(),
   env.DB.prepare("SELECT id,name FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik' AND status='active'").bind(deviceId,oid).first()
@@ -929,7 +918,7 @@ async function authenticateNetworkConnector(request,env){
  const header=request.headers.get('Authorization')||'';
  if(!header.startsWith('Connector '))return null;
  const token=header.slice(10);
- if(!/^nxc_[A-Za-z0-9_-]{40,80}$/.test(token))return null;
+ if(!isNetworkConnectorToken(token))return null;
  const tokenHash=await sha256Hex(token);
  return await env.DB.prepare("SELECT id,organization_id,name,capabilities_json,created_by FROM network_connectors WHERE token_hash=? AND status='active'").bind(tokenHash).first();
 }
