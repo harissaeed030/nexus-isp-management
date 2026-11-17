@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-sql=Path(__file__).resolve().parents[1]/"cloudflare"/"d1"/"migrations"/"0013_security_hardening.sql"
+sql=Path(__file__).resolve().parents[2]/"cloudflare"/"d1"/"migrations"/"0013_security_hardening.sql"
 db=sqlite3.connect(":memory:")
 db.executescript("""
 CREATE TABLE users(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL);
