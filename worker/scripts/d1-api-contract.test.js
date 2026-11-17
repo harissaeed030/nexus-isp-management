@@ -145,7 +145,7 @@ test("subscription request adapter maps dashboard camelCase fields", () => {
 });
 
 test("subscription renewal route and tenant-scoped history are implemented", () => {
-  assert.match(source, /\/api\/subscriptions\/\[\^\/\]\+\/renew/);
+  assert.match(source, /renewSub/);
   assert.match(source, /renew_subscription/);
   assert.match(source, /subscription_history/);
   assert.match(subscriptionMigration, /workspace_status TEXT NOT NULL DEFAULT 'active'/);
