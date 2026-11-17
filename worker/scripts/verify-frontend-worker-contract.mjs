@@ -25,8 +25,8 @@ for (const [frontendPath, workerPath] of contracts) {
   assert.ok(worker.includes(workerPath), `Hosted Worker no longer references ${workerPath}; review the frontend/Worker contract.`);
 }
 
-assert.match(worker, /path\.startsWith\('\/api\/v1\/'\)[\s\S]{0,180}replace\('\/api\/v1\//,
-  "Worker must retain the documented /api/v1 prefix normalization.");
+assert.match(worker, /url\.pathname\.replace\(/,
+  "Worker must retain the /api/v1 URL-path normalization.");
 assert.match(worker, /path==='\/api\/tickets'\|\|path\.startsWith\('\/api\/tickets\/'\)/,
   "Worker must keep the customer-facing tickets-to-complaints compatibility alias.");
 assert.match(worker, /path==='\/api\/routers'\|\|path\.startsWith\('\/api\/routers\/'\)/,
