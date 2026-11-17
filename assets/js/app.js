@@ -12,9 +12,9 @@ function showCustomerPanel(title,body){content.querySelector("#nxCustomerPanel")
 function page(title,sub,body){content.innerHTML='<div class="page-heading"><div><p class="eyebrow">NEXUS WORKSPACE</p><h1>'+title+'</h1><p class="subheading">'+sub+'</p></div><button class="nx-btn" id="nxRefresh">Refresh</button></div>'+body;$("#nxRefresh").onclick=()=>load(view)}
 async function load(v){view=v;try{
 if(v==="dashboard"){
- const settled=await Promise.allSettled([call("/api/v1/dashboard"),call("/api/v1/reports/summary"),call("/api/v1/subscriptions"),call("/api/v1/invoices"),call("/api/v1/payments"),call("/api/v1/tickets")]);
+ const settled=await Promise.allSettled([call("/api/v1/dashboard/stats"),call("/api/v1/reports/summary"),call("/api/v1/subscriptions"),call("/api/v1/invoices"),call("/api/v1/payments"),call("/api/v1/tickets")]);
  if(settled[0].status!=="fulfilled") throw settled[0].reason;
- const stats=settled[0].value.stats;
+ const rawStats=settled[0].value.stats||settled[0].value;const stats={...rawStats,revenuePkr:rawStats.revenuePkr??rawStats.totalRevenue??0};
  const report=settled[1].status==="fulfilled"?settled[1].value.data:{monthlyRevenue:[],outstandingPkr:0};
  const subscriptions=settled[2].status==="fulfilled"?settled[2].value.data:[];
  const invoices=settled[3].status==="fulfilled"?settled[3].value.data:[];
@@ -91,7 +91,7 @@ if(v==="customers"){
    $("#nxCustomerEdit").onsubmit=async e=>{e.preventDefault();try{await call("/api/v1/customers/"+id,{method:"PATCH",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});msg("Customer profile updated");$("#nxCustomerPanel")?.remove();renderCustomers(currentPage)}catch(err){msg(err.message)}};
   }catch(e){msg(e.message)}
  };
- $("#nxCustomerRegister").onsubmit=async e=>{e.preventDefault();try{const d=await call("/api/v1/customers",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});msg("Customer registered · "+d.data.account_number);e.currentTarget.reset();renderCustomers(1)}catch(err){msg(err.message)}};
+ $("#nxCustomerRegister").onsubmit=async e=>{e.preventDefault();try{const d=await call("/api/v1/customers",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});msg("Customer registered · "+((d.data||d).account_number||(d.data||d).customer_code||"saved"));e.currentTarget.reset();renderCustomers(1)}catch(err){msg(err.message)}};
  renderCustomers(1);
 }
 if(v==="packages"){
@@ -111,6 +111,7 @@ if(v==="subscriptions"){
 }
 if(v==="billing"){let z=await Promise.all([call("/api/v1/invoices"),call("/api/v1/customers"),call("/api/v1/payments")]),i=z[0].data,c=z[1].data,p=z[2].data;page("Billing & payments","Invoices and payment ledger.",'<form id="nxAdd" class="nx-panel nx-row"><select name="customerId" required><option value="">Customer</option>'+c.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+'</option>').join("")+'</select><input name="amountPkr" type="number" min="0" required placeholder="Amount PKR"><input name="dueDate" type="date"><button class="nx-btn">Create invoice</button></form><form id="nxPay" class="nx-panel nx-row"><select name="invoiceId" required><option value="">Unpaid invoice</option>'+i.filter(x=>x.status!=="paid").map(x=>'<option value="'+esc(x.id)+'">'+esc(x.invoice_number)+' - '+esc(x.customer_name)+'</option>').join("")+'</select><input name="amountPkr" type="number" min="1" required placeholder="Payment PKR"><select name="method"><option>cash</option><option>bank</option><option>jazzcash</option><option>easypaisa</option><option>other</option></select><button class="nx-btn">Record payment</button></form>'+table(["INVOICE","CUSTOMER","AMOUNT","DUE","STATUS"],i.map(x=>'<tr><td>'+esc(x.invoice_number)+'</td><td>'+esc(x.customer_name)+'</td><td>'+money(x.amount_pkr)+'</td><td>'+esc(x.due_date||"—")+'</td><td>'+esc(x.status)+'</td></tr>').join(""))+'<div class="nx-panel"><b>Payments</b>'+p.map(x=>'<p>'+esc(x.customer_name)+' - '+money(x.amount_pkr)+' - '+esc(x.method)+'</p>').join("")+'</div>')}
 
+if(v==="promises"&&api.includes("workers.dev")){page("Payment promises & dues","This feature is not yet implemented in the hosted Cloudflare Worker. No demo records or false balances are shown.",'<div class="nx-panel"><b>Hosted implementation pending</b><p>Payment promises need a tenant-scoped D1 table, CRUD endpoints, audit history and overdue aging calculations. The offline Node/SQLite workflow remains separate.</p></div>');return}
 if(v==="promises"){
  const results=await Promise.allSettled([call("/api/v1/operations/payment-promises"),call("/api/v1/customers"),call("/api/v1/financial/aging")]);
  if(results[0].status!=="fulfilled")throw results[0].reason;
@@ -129,6 +130,7 @@ if(v==="promises"){
  $("#nxPromiseAdd").onsubmit=async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));data.amountPkr=Number(data.amountPkr);try{await call("/api/v1/operations/payment-promises",{method:"POST",body:JSON.stringify(data)});msg("Payment promise saved");load("promises")}catch(error){msg(error.message)}};
  content.querySelectorAll("[data-promise-save]").forEach(button=>button.onclick=async()=>{const id=button.dataset.promiseSave,status=content.querySelector('[data-promise-status="'+id+'"]').value;try{await call("/api/v1/operations/payment-promises/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({status})});msg("Promise status updated");load("promises")}catch(error){msg(error.message)}});
 }
+if(v==="routers"&&api.includes("workers.dev")){const d=(await call("/api/v1/network/devices")).data||[];const rows=d.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.device_type)+'</td><td>'+esc(x.host||"—")+'</td><td>'+esc(x.port||"—")+'</td><td>'+esc(x.model||"—")+'</td><td>'+esc(x.status)+'</td></tr>').join("");page("Network device inventory","Hosted D1 inventory only. Live RouterOS commands and credential storage are not enabled in this Worker.",'<form id="nxAdd" class="nx-panel nx-row"><input name="name" required placeholder="Device name"><select name="device_type"><option value="mikrotik">MikroTik</option><option value="olt">OLT</option><option value="acs">ACS</option><option value="other">Other</option></select><input name="host" placeholder="Management IP / hostname"><input name="port" type="number" min="1" max="65535" placeholder="Management port"><input name="model" placeholder="Model"><input name="management_protocol" placeholder="Protocol"><input name="notes" placeholder="Location / notes"><button class="nx-btn">Save inventory record</button></form>'+table(["NAME","TYPE","HOST","PORT","MODEL","STATUS"],rows));return}
 if(v==="routers"){
  let d=(await call("/api/v1/routers")).data;
  const row=x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.host)+'</td><td>'+x.apiPort+'</td><td>'+esc(x.location||"—")+'</td><td>'+esc(x.status)+'</td><td><button class="nx-btn" data-router-action="test" data-id="'+esc(x.id)+'">Test</button> <button class="nx-btn" data-router-action="active" data-id="'+esc(x.id)+'">Active PPPoE</button> <button class="nx-btn" data-router-action="secrets" data-id="'+esc(x.id)+'">Secrets</button> <button class="nx-btn" data-router-action="profiles" data-id="'+esc(x.id)+'">Profiles</button> <button class="nx-btn" data-router-action="sync" data-id="'+esc(x.id)+'">Sync</button> <button class="nx-btn" data-router-action="delete" data-id="'+esc(x.id)+'">Delete</button></td></tr>';
@@ -185,6 +187,7 @@ if(v==="staff"){
  };
  content.querySelectorAll("[data-staff-permissions]").forEach(button=>button.onclick=()=>editPermissions(button.dataset.staffPermissions,button.dataset.staffName));
 }
+if(v==="tr069"&&api.includes("workers.dev")){page("TR-069 / ACS","The hosted Worker does not yet expose ACS connection, device synchronization or configuration endpoints.",'<div class="nx-panel"><b>Hosted TR-069 integration pending</b><p>The existing local GenieACS adapter is a separate runtime. Do not enter ACS credentials into this hosted page until encrypted tenant-scoped storage and audited device-control endpoints are implemented.</p></div>');return}
 if(v==="tr069"){
  const [connections,devices,auditRows]=await Promise.all([call("/api/v1/acs/connections"),call("/api/v1/tr069/devices"),call("/api/v1/tr069/audit-logs")]);
  const conns=connections.data,devs=devices.data;
@@ -209,7 +212,7 @@ if(v==="tickets"){
  content.querySelectorAll("[data-ticket-save]").forEach(button=>button.onclick=async()=>{const id=button.dataset.ticketSave,status=content.querySelector('[data-ticket-status="'+id+'"]').value;try{await call("/api/v1/tickets/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({status})});msg("Ticket status updated");load("tickets")}catch(error){msg(error.message)}});
 }
 if(v==="audit"){let d=(await call("/api/v1/audit-logs")).data;page("Activity log","Recent workspace actions.",table(["ACTION","TYPE","RECORD","DATE"],d.map(x=>'<tr><td>'+esc(x.action)+'</td><td>'+esc(x.resource_type)+'</td><td>'+esc(x.resource_id)+'</td><td>'+esc(x.created_at)+'</td></tr>').join("")))}
-$("#nxAdd")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget)),paths={customers:"/api/v1/customers",packages:"/api/v1/packages",subscriptions:"/api/v1/subscriptions",billing:"/api/v1/invoices",tickets:"/api/v1/tickets",routers:"/api/v1/routers",staff:"/api/v1/staff"};try{await call(paths[view],{method:"POST",body:JSON.stringify(b)});msg("Saved successfully");load(view)}catch(x){msg(x.message)}});
+$("#nxAdd")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget)),paths={customers:"/api/v1/customers",packages:"/api/v1/packages",subscriptions:"/api/v1/subscriptions",billing:"/api/v1/invoices",tickets:"/api/v1/tickets",routers:api.includes("workers.dev")?"/api/v1/network/devices":"/api/v1/routers",staff:"/api/v1/staff"};try{await call(paths[view],{method:"POST",body:JSON.stringify(b)});msg("Saved successfully");load(view)}catch(x){msg(x.message)}});
 $("#nxGenerate")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{let d=await call("/api/v1/billing/generate",{method:"POST",body:JSON.stringify(b)});msg(d.invoicesCreated+" invoices generated");load("billing")}catch(x){msg(x.message)}});
 $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{await call("/api/v1/payments",{method:"POST",body:JSON.stringify(b)});msg("Payment recorded");load("billing")}catch(x){msg(x.message)}});
 }catch(e){page("Could not load",e.message,'<div class="nx-panel" style="color:#b64e3b">'+esc(e.message)+'</div>')}}
