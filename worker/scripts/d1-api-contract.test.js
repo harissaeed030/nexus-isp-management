@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeWorkspaceLoginSlug, normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload } from "../src/d1-api-worker.js";
+import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
@@ -17,6 +17,13 @@ test("D1 API Worker includes authenticated organization registration and login",
   assert.match(source, /\/api\/auth\/login/);
   assert.match(source, /verifyJWT/);
   assert.match(source, /tokenVersion/);
+});
+
+test("dashboard workspace registration URL is normalized to the D1 auth registration handler", () => {
+  assert.equal(normalizeApiPath("/api/v1/tenants/register"), "/api/auth/register");
+  assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
+  assert.equal(normalizeApiPath("/api/v1/customers"), "/api/customers");
+  assert.match(dashboardSource, /\/api\/v1\/tenants\/register/);
 });
 
 test("D1 API Worker includes core ISP billing and customer modules", () => {
