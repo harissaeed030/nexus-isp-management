@@ -12,26 +12,6 @@ CREATE INDEX IF NOT EXISTS idx_registration_attempts_ip_time
  ON registration_attempts(ip_address,attempted_at);
 CREATE INDEX IF NOT EXISTS idx_registration_attempts_email_time
  ON registration_attempts(email,attempted_at);
-CREATE TRIGGER IF NOT EXISTS trg_payment_promises_customer_tenant_insert
- BEFORE INSERT ON payment_promises BEGIN
- SELECT CASE WHEN NOT EXISTS(
-  SELECT 1 FROM customers
-  WHERE id=NEW.customer_id AND organization_id=NEW.organization_id
- ) THEN RAISE(ABORT,'payment promise customer tenant mismatch') END;
-END;
-CREATE TRIGGER IF NOT EXISTS trg_payment_promises_creator_tenant_insert
- BEFORE INSERT ON payment_promises BEGIN
- SELECT CASE WHEN NOT EXISTS(
-  SELECT 1 FROM users
-  WHERE id=NEW.created_by AND organization_id=NEW.organization_id
- ) THEN RAISE(ABORT,'payment promise creator tenant mismatch') END;
-END;
-CREATE TRIGGER IF NOT EXISTS trg_payment_promises_tenant_update
- BEFORE UPDATE OF organization_id,customer_id,created_by ON payment_promises BEGIN
- SELECT CASE WHEN NOT EXISTS(
-  SELECT 1 FROM customers
-  WHERE id=NEW.customer_id AND organization_id=NEW.organization_id
- ) THEN RAISE(ABORT,'payment promise customer tenant mismatch') END;
  SELECT CASE WHEN NOT EXISTS(
   SELECT 1 FROM users
   WHERE id=NEW.created_by AND organization_id=NEW.organization_id
