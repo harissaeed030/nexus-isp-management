@@ -247,3 +247,16 @@ A further live schema audit found that staging's `users.password_hash` column wa
 - Live negative tests confirmed that INSERT with a NULL password hash and UPDATE to a NULL password hash are both rejected. The temporary synthetic test user was removed; user count remained 177 and the test ID was absent.
 - GitHub Actions passed on commit `130ce526d81e293fedd536b9059d45f308ef64d4`: D1 API Worker syntax/contract tests, backend verification, and backend checks. The subsequent documentation commit `b0d370b7f0f19d22a46175a8243d1cc3f4ce3bdf` also passed backend verification and checks.
 - No production D1 schema or Worker was changed.
+
+
+## D1 migration-ledger and guard reconciliation — 2026-11-17
+
+A fresh read-only comparison of staging and production confirmed the following:
+
+- Staging PPPoE metadata columns and the three migration-0010 indexes already existed, but its router insert/update triggers were weaker than the canonical migration: they did not require `network_devices.device_type='mikrotik'`; the update trigger also fired on every update.
+- Production had the stricter router guards matching migration 0010.
+- Both databases had the migration-0011 sync tables. Production had the full `idx_sync_operations_org_entity(organization_id,entity_type,entity_id)` index; staging's same-named index covered only `organization_id,entity_type`.
+- Staging ledger ID 10 was absent; ID 11 was recorded under the historical name `0011_sync_staging_with_production`. Production recorded ID 10 and had no ID 11 row. Migration 0011 itself does not insert a ledger record, so ID 11 is not force-normalized.
+- No production database operation was performed.
+
+A corrective, additive migration `0018_reconcile_pppoe_and_sync_guards.sql` has been committed to the development branch. It replaces only the two staging PPPoE router triggers, recreates the sync index with the full three-column key, records the already-present migration-0010 schema as applied, and records migration 0018. It does not rebuild tables, change business rows, remove legacy `sync_state`, or alter production. A contract test and migration registry entry were added. The migration has **not yet been applied**: first run CI, take a fresh staging export, and re-check preconditions.
