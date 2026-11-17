@@ -243,6 +243,7 @@ async function runMigrations(env){
  ['invoices.number_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id,invoice_number)'],
  ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"],
 
+ ['users.rebuild','SPECIAL'],
  ['ops.geo_locations',"CREATE TABLE IF NOT EXISTS geo_locations(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,parent_id TEXT,type TEXT NOT NULL CHECK(type IN('country','city','locality','street')),name TEXT NOT NULL,postal_code TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(parent_id) REFERENCES geo_locations(id) ON DELETE SET NULL)"],
  ['ops.coverage_areas',"CREATE TABLE IF NOT EXISTS coverage_areas(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,name TEXT NOT NULL,code TEXT,description TEXT,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN('active','inactive')),created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,name),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"],
  ['ops.connection_applications',"CREATE TABLE IF NOT EXISTS connection_applications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,application_no TEXT NOT NULL,full_name TEXT NOT NULL,phone TEXT NOT NULL,address TEXT NOT NULL,coverage_area_id TEXT,package_id TEXT,notes TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN('pending','approved','rejected','installed','cancelled')),created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,application_no),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(coverage_area_id) REFERENCES coverage_areas(id),FOREIGN KEY(package_id) REFERENCES packages(id))"],
@@ -261,7 +262,7 @@ async function runMigrations(env){
  ['ops.index_inventory','CREATE INDEX IF NOT EXISTS idx_ops_inventory_org ON inventory_items(organization_id,name)'],
  ['ops.index_ledger','CREATE INDEX IF NOT EXISTS idx_ops_ledger_customer ON customer_ledger_entries(organization_id,customer_id,created_at)']
 
- ['users.rebuild','SPECIAL']
+
  ];
  const results=[];
  for(const[name,sql]of migrations){
