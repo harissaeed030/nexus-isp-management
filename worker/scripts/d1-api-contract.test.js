@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeApiMethod } from "../src/d1-api-worker.js";
+import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
@@ -38,4 +38,12 @@ test("D1 API accepts dashboard PATCH updates through the existing PUT handlers",
   assert.equal(normalizeApiMethod("PUT"), "PUT");
   assert.equal(normalizeApiMethod("GET"), "GET");
   assert.match(source, /new Request\(request,\{method:'PUT'\}\)/);
+});
+
+test("dashboard compatibility routes and ticket adapter are present", () => {
+  assert.match(source, /path==='\/api\/dashboard'/);
+  assert.match(source, /path==='\/api\/reports\/summary'/);
+  assert.match(source, /if\(path==='\/api\/tickets'\)path='\/api\/complaints'/);
+  assert.deepEqual(mapTicketRow({first_name:"Ali",last_name:"Khan",priority:null}), {first_name:"Ali",last_name:"Khan",priority:"normal",customer_name:"Ali Khan",customer_id:null});
+  assert.equal(normalizeTicketPayload({customerId:"c1",subject:"Line down"}).customer_id,"c1");
 });
