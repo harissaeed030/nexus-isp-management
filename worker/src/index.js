@@ -2,7 +2,7 @@ const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta na
 
 function uuid(){return crypto.randomUUID()}
 function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
-function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
+function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Cache-Control':'no-store','Pragma':'no-cache','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
