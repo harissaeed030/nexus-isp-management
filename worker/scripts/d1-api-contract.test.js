@@ -442,3 +442,8 @@ test("D1 Worker AI endpoint keeps Gemini credentials server-side and validates b
   assert.match(source, /path==='\/api\/ai\/chat'&&m==='POST'/);
   assert.match(source, /The latest message must be from you/);
 });
+
+
+test("D1 Worker AI defaults to the same Gemini model as the local backend", () => {
+  assert.match(source, /GEMINI_MODEL\|\|'gemini-2\.5-flash'/);
+});
