@@ -15,7 +15,7 @@ const workerFiles = [
 
 for (const file of workerFiles) {
   const source = await readFile(file, "utf8");
-  const hashFn = source.match(/async function hashPw\(pw,salt\)\{[\s\S]*?\n\}/)?.[0];
+  const hashFn = source.match(/async function hashPw\(pw,salt\)\{[\s\S]*?(?=\nasync function verifyPw\()/)?.[0];
   assert.ok(hashFn, `hashPw function missing in ${file}`);
   assert.match(hashFn, /name:'PBKDF2'/);
   assert.match(hashFn, /hash:'SHA-256'/);
