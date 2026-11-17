@@ -561,8 +561,9 @@ async function authReg(r,env,ip){
 async function authLogin(r,env,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.email||!b.password)return json({error:'Email and password required'},400);
 const email=String(b.email).trim().toLowerCase();if(await loginRateLimited(env,ip,email))return json({error:'Too many login attempts. Try again in 15 minutes.'},429);
 let u=null;
-if(b.workspace!==undefined&&b.workspace!==null&&String(b.workspace).trim()!==''){
- const workspace=String(b.workspace).trim().toLowerCase();
+const requestedWorkspace=b.workspace??b.tenantSlug??b.tenant_slug;
+if(requestedWorkspace!==undefined&&requestedWorkspace!==null&&String(requestedWorkspace).trim()!==''){
+ const workspace=String(requestedWorkspace).trim().toLowerCase();
  u=await env.DB.prepare("SELECT users.* FROM users JOIN organizations ON organizations.id=users.organization_id WHERE users.email=? AND lower(organizations.slug)=? AND users.status='active'").bind(email,workspace).first();
 }else{
  const matches=await env.DB.prepare("SELECT users.* FROM users JOIN organizations ON organizations.id=users.organization_id WHERE users.email=? AND users.status='active' ORDER BY users.id LIMIT 2").bind(email).all();
