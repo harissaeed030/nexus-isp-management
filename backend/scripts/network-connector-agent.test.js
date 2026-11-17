@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { NetworkConnectorAgent } from "../src/services/network-connector-agent.js";
+process.env.ROUTER_CREDENTIAL_KEY = "11".repeat(32);
+const { credentialCrypto } = await import("../src/routes/mikrotik.routes.js");
+const { NetworkConnectorAgent } = await import("../src/services/network-connector-agent.js");
+const encryptedUsername = credentialCrypto.encrypt("operator");
+const encryptedPassword = credentialCrypto.encrypt("router-password");
 
 const token = "nxc_" + "A".repeat(43);
 const base = {
@@ -9,8 +13,8 @@ const base = {
   deviceMap: { "hosted-router-1": "local-router-1" },
   loadRouter: async id => id === "local-router-1" ? {
     id, host: "192.0.2.1", api_port: 8729,
-    credential_username: "encrypted-user",
-    credential_password: "encrypted-password"
+    credential_username: encryptedUsername,
+    credential_password: encryptedPassword
   } : null
 };
 
@@ -70,7 +74,7 @@ test("refuses plaintext RouterOS API before opening a socket", async () => {
   const agent = new NetworkConnectorAgent({
     ...base,
     loadRouter: async id => ({ id, host: "192.0.2.1", api_port: 8728,
-      credential_username: "x", credential_password: "y" }),
+      credential_username: encryptedUsername, credential_password: encryptedPassword }),
     fetchImpl: async (_url, options) => options.method === "POST"
       ? (reportBody = options.body, { ok: true, status: 200, json: async () => ({ success: true }) })
       : { ok: true, status: 200, json: async () => ({ job: {
