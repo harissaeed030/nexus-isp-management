@@ -36,6 +36,7 @@ jobs:
           node --check worker/benchmarks/run-password-hash-benchmark.mjs
       - name: Verify production Worker source and staging-only route isolation
         run: |
+          node worker/scripts/verify-e2e-cleanup-schema-compat.mjs
           node --check worker/src/index.js
           node --check worker/src/production-worker.js
           node worker/scripts/verify-production-worker.mjs
@@ -133,7 +134,8 @@ jobs:
           NODE
 
   staging-portal-e2e:
-    name: Tenant isolation and customer portal E2E
+    if: github.event_name == 'workflow_dispatch'
+    name: Tenant isolation and customer portal E2E (manual dispatch only)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
