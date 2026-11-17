@@ -6,6 +6,8 @@ compatibility_date = "2026-11-16"
 ENVIRONMENT = "staging"
 # Set ALLOWED_ORIGINS and secrets in Cloudflare Worker settings.
 # Required secret: JWT_SECRET
+# Optional AI secret: GEMINI_API_KEY (enables /api/v1/ai/chat)
+# Optional AI model variable: GEMINI_MODEL (defaults to gemini-2.0-flash)
 # Optional/feature secrets: TURNSTILE_SECRET_KEY
 
 [[d1_databases]]
