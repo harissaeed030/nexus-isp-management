@@ -61,6 +61,16 @@ OLT/ONU inventory exists, but live PON status, optical levels, alarms and provis
 - Verify that audit logs never persist passwords or sensitive parameter values.
 - Test with a dedicated lab ONU before any customer device.
 
+## New foundation added on `feat/network-automation-foundation`
+
+- `backend/src/services/network-adapter-contract.js` defines contract v1.0.0, tenant ownership checks, read-capability checks, metadata-only dry-run plans and recursive credential redaction.
+- `backend/src/services/mikrotik-readonly-adapter.js` exposes six explicit read capabilities and filters RouterOS responses to an allow-listed property set.
+- Existing MikroTik identity/resource/interface/PPPoE read routes now use the read-only adapter.
+- `backend/src/lib/network-write-guard.js` locks MikroTik PPPoE create/update/suspend/restore and TR-069 diagnostics/reboot/Wi-Fi write routes by default. Unlock requires both `NEXUS_NETWORK_WRITE_ENABLED=true` and a matching `X-Nexus-Network-Approval` token backed by a 32+ character local environment secret. Neither is configured by this change.
+- Focused GitHub Actions workflow `.github/workflows/network-safety.yml` passed on the feature branch, including syntax checks and all 16 focused adapter/safety tests.
+
+These changes are local Node/SQLite backend code only. They do not add hosted Worker/D1 network-control endpoints and do not connect to any real device.
+
 ## Immediate implementation recommendation
 
 1. Build a common versioned adapter contract and mock test suite without network sockets.
