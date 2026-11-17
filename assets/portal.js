@@ -106,7 +106,7 @@
         " <span class='pill'>" + esc(ticket.status) + "</span></b><p>" +
         esc(ticket.description || "") + "</p><small>" +
         esc(ticket.created_at || "") + " · " + esc(ticket.priority || "medium") +
-        "</small><p><button type='button' data-ticket-conversation='" + esc(ticket.id) + "'>View conversation / reply</button></p><div id='portal-thread-" + esc(ticket.id) + "'></div></div>"
+        "</small>" + (apiBase.includes("workers.dev") ? "<p><button type='button' data-ticket-conversation='" + esc(ticket.id) + "'>View conversation / reply</button></p><div id='portal-thread-" + esc(ticket.id) + "'></div>" : "") + "</div>"
       ).join("") || "<p class='muted'>No complaints submitted.</p>";
       $("#complaints").querySelectorAll("[data-ticket-conversation]").forEach((button) => {
         button.addEventListener("click", async () => {
