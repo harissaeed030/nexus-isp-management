@@ -176,7 +176,7 @@ test("invoice and payment dashboard payloads are normalized to D1 fields", () =>
     customerId:"c1",amountPkr:"1200",dueDate:"2026-12-01",customer_id:"c1",amount:"1200",due_date:"2026-12-01"
   });
   assert.deepEqual(normalizePaymentPayload({invoiceId:"i1",amountPkr:"500",method:"cash"}), {
-    invoiceId:"i1",amountPkr:500,method:"cash",invoice_id:"i1",amount:500
+    invoiceId:"i1",amountPkr:"500",method:"cash",invoice_id:"i1",amount:500
   });
 });
 
