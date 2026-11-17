@@ -3,6 +3,12 @@ name: Network safety and adapter contract
 on:
   pull_request:
     paths:
+      - "worker/src/index.js"
+      - "worker/src/network-connector-contract.js"
+      - "worker/scripts/network-connector-contract.test.js"
+      - "worker/scripts/network-connector-migration.test.js"
+      - "backend/src/services/network-connector-agent.js"
+      - "backend/scripts/network-connector-agent.test.js"
       - "backend/src/lib/network-write-guard.js"
       - "backend/src/services/network-adapter-contract.js"
       - "backend/scripts/network-write-guard.test.js"
@@ -13,6 +19,7 @@ on:
       - "worker/src/index.js"
       - "worker/src/network-connector-contract.js"
       - "worker/scripts/network-connector-contract.test.js"
+      - "worker/scripts/network-connector-migration.test.js"
       - "backend/src/services/network-connector-agent.js"
       - "backend/scripts/network-connector-agent.test.js"
       - "backend/src/app.js"
@@ -77,5 +84,8 @@ jobs:
           node --check worker/src/index.js
           node --check worker/src/network-connector-contract.js
           node --check worker/scripts/network-connector-contract.test.js
+          node --check worker/scripts/network-connector-migration.test.js
       - name: Run hosted connector contract tests
         run: node --test worker/scripts/network-connector-contract.test.js
+      - name: Run hosted connector migration tests
+        run: node --test worker/scripts/network-connector-migration.test.js
