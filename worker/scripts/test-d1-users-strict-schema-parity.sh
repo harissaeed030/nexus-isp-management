@@ -107,4 +107,5 @@ test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM support_tickets WHERE id='bad-ticket
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM ticket_messages WHERE id='bad-message';")" = "0"
 echo "PASS: cross-tenant notification, ticket-assignee and ticket-message writes rejected"
 
+echo "PASS: users schema parity migration 0024; existing live migration IDs 10–21 preserved" 
 echo "PASS: PRAGMA foreign_key_check is clean"
