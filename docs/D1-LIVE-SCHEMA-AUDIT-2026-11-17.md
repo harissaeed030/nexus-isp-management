@@ -22,9 +22,12 @@ The production ledger contains IDs 1–10, 12, 13 and 100. The staging ledger co
 | 13 | `0013_subscription_workspace_status` | `0013_subscription_workspace_status` |
 | 14 | Not recorded | `0014_router_credential_cipher` |
 | 15–21 | Not recorded | Additional staging-only migrations through `0021_field_operations` |
+| 22 | Not recorded | Not recorded at audit time | Reserved by development security-hardening migration |
+| 23 | Not recorded | Not recorded at audit time | Reserved by development payment-promises migration |
+| 24 | Not recorded | Not recorded at audit time | Reserved for manual users-schema parity candidate; staging-only and approval-gated |
 | 100 | `sync_ledger_and_failures_tables` | `sync_ledger_and_failures_tables` |
 
-**Resolved source-level migration collision:** the first security-hardening draft used migration ID 14, which conflicts with staging's existing `0014_router_credential_cipher`. That draft was not applied to either live database. The development migration has now been moved to ID 22 (`0022_security_hardening`), which was not present in either inspected ledger. Its SQL, test fixture, and source-contract guard have been updated together. This is a source correction only; it does not mean migration 0022 has been applied.
+**Resolved source-level migration collisions:** the initial security-hardening draft used ID 14, which conflicts with staging's `0014_router_credential_cipher`; it was moved to ID 22. The payment-promises draft used ID 10, which conflicts with live `0010_pppoe_connection_metadata`; it was moved to ID 23. The users-schema parity manual draft used ID 12, which conflicts with live `0012_customer_workspace_compatibility`; it was moved to ID 24. None of these drafts was applied to either live database. SQL, tests, preflight checks and docs have been corrected together. These are source corrections only, not live D1 migrations.
 
 ## Schema object differences observed
 
