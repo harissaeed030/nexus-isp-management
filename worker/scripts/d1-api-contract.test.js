@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload } from "../src/d1-api-worker.js";
+import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
@@ -157,4 +157,41 @@ test("inactive or blocked customer accounts cannot use the customer portal", () 
   assert.match(source, /customer_account_status!=='active'/);
   assert.match(source, /Activate the customer account before enabling portal access/);
   assert.match(source, /account_status='active'/);
+});
+
+
+test("invoice DTO maps totals and customer display fields for the billing dashboard", () => {
+  assert.deepEqual(mapInvoiceRow({
+    id: "i1", first_name: "Haris", last_name: "Qureshi", total: 1500,
+    status: "pending", display_status: "partial"
+  }), {
+    id: "i1", first_name: "Haris", last_name: "Qureshi", total: 1500,
+    status: "partial", display_status: "partial", customer_name: "Haris Qureshi",
+    amount_pkr: 1500
+  });
+});
+
+test("invoice and payment dashboard payloads are normalized to D1 fields", () => {
+  assert.deepEqual(normalizeInvoicePayload({customerId:"c1",amountPkr:"1200",dueDate:"2026-12-01"}), {
+    customerId:"c1",amountPkr:"1200",dueDate:"2026-12-01",customer_id:"c1",amount:"1200",due_date:"2026-12-01"
+  });
+  assert.deepEqual(normalizePaymentPayload({invoiceId:"i1",amountPkr:"500",method:"cash"}), {
+    invoiceId:"i1",amountPkr:500,method:"cash",invoice_id:"i1",amount:500
+  });
+});
+
+test("payment DTO returns dashboard amount, method and receipt date", () => {
+  assert.deepEqual(mapPaymentRow({
+    id:"pay1", first_name:"Haris", last_name:"Qureshi", amount:500,
+    payment_method:"bank_transfer", paid_at:"2026-11-17", notes:null
+  }), {
+    id:"pay1", first_name:"Haris", last_name:"Qureshi", amount:500,
+    payment_method:"bank_transfer", paid_at:"2026-11-17", notes:null,
+    customer_name:"Haris Qureshi", amount_pkr:500, method:"bank", received_at:"2026-11-17"
+  });
+});
+
+test("dashboard payment collection endpoint is permission-mapped and routed", () => {
+  assert.match(source, /path==='\/api\/payments'\)return v==='GET'\?'billing.read':v==='POST'\?'payments.create'/);
+  assert.match(source, /path==='\/api\/payments'&&m==='POST'/);
 });
