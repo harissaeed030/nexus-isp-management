@@ -14,7 +14,7 @@ for(const [name,source] of [["staging",staging],["production",production]]){
  assert.match(source,/NEXUS-PPPOE-PASSWORD-ENCRYPTION'/,name+" legacy v1 HKDF compatibility");
 }
 assert.match(migration,/CREATE TABLE IF NOT EXISTS registration_attempts/);
-assert.match(migration,/VALUES\\(22,'0022_security_hardening'/);
+assert.match(migration,/VALUES\(22,'0022_security_hardening'/);
 assert.doesNotMatch(migration,/trg_payment_promises_/,"security migration must not reference payment_promises before its table migration");
-assert.doesNotMatch(migration,/VALUES\\((1[0-9]|2[01]),/,"migration ID must not collide with observed live IDs");
+assert.doesNotMatch(migration,/VALUES\((1[0-9]|2[01]),/,"migration ID must not collide with observed live IDs");
 console.log("Security hardening source contracts passed; D1 migration uses unused version 0022.");
