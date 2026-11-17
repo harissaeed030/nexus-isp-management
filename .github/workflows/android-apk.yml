@@ -74,6 +74,9 @@ jobs:
       - name: Generate native Android project
         run: npx cap add android
 
+      - name: Bundle complete offline web application
+        run: npm run mobile:prepare
+
       - name: Sync web application
         run: npx cap sync android
 
