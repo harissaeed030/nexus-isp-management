@@ -827,6 +827,131 @@ async function delPppoe(env,path,oid,uid,ip){
  if(!r.meta?.changes)return json({error:'Not found'},404);
  await audit(env,oid,uid,'delete_pppoe','PPPoE:'+id,ip);return json({success:true})
 }
+
+const NETWORK_READ_CAPABILITIES = new Set([
+ 'mikrotik.identity.read',
+ 'mikrotik.resource.read',
+ 'mikrotik.interfaces.read',
+ 'mikrotik.pppoe.sessions.read'
+]);
+const NETWORK_SECRET_KEY = /(password|passphrase|secret|token|community|string|private.?key|authorization|credential|api.?key|psk)/i;
+function redactNetworkResult(value,depth=0){
+ if(depth>6)return '[TRUNCATED]';
+ if(Array.isArray(value))return value.slice(0,100).map(x=>redactNetworkResult(x,depth+1));
+ if(!value||typeof value!=='object')return typeof value==='string'?value.slice(0,2000):value;
+ const out={};for(const [key,item] of Object.entries(value).slice(0,100))out[key]=NETWORK_SECRET_KEY.test(key)?'[REDACTED]':redactNetworkResult(item,depth+1);
+ return out;
+}
+async function sha256Hex(value){
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
+ return b2h(new Uint8Array(digest));
+}
+function connectorPublic(row){
+ return {id:row.id,name:row.name,status:row.status,capabilities:JSON.parse(row.capabilities_json||'[]'),last_seen_at:row.last_seen_at,created_at:row.created_at,updated_at:row.updated_at};
+}
+async function listNetworkConnectors(env,oid){
+ const rows=await env.DB.prepare('SELECT id,name,status,capabilities_json,last_seen_at,created_at,updated_at FROM network_connectors WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();
+ return json({data:(rows.results||[]).map(connectorPublic)});
+}
+async function createNetworkConnector(request,env,oid,uid,ip){
+ if(env.NETWORK_CONNECTOR_ENABLED!=='true')return json({error:'Network connector API is disabled until explicitly enabled for this environment'},503);
+ const b=await parseBody(request);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const name=s(b.name||'');
+ if(typeof name!=='string'||name.length<2||name.length>80)return json({error:'Connector name must be 2-80 characters'},400);
+ const token='nxc_'+b64u(crypto.getRandomValues(new Uint8Array(32))),tokenHash=await sha256Hex(token),id=uuid();
+ const capabilities=Array.isArray(b.capabilities)?[...new Set(b.capabilities)]:[...NETWORK_READ_CAPABILITIES];
+ if(!capabilities.length||capabilities.some(x=>!NETWORK_READ_CAPABILITIES.has(x)))return json({error:'Only supported MikroTik read-only capabilities may be registered'},400);
+ try{
+  await env.DB.prepare('INSERT INTO network_connectors(id,organization_id,name,token_hash,status,capabilities_json,created_by)VALUES(?,?,?,?,?,?,?)').bind(id,oid,name,tokenHash,'active',JSON.stringify(capabilities),uid).run();
+ }catch(e){if(/unique|constraint/i.test(String(e.message)))return json({error:'Connector name already exists in this workspace'},409);throw e}
+ await audit(env,oid,uid,'create_network_connector','Connector:'+name,ip);
+ const row=await env.DB.prepare('SELECT id,name,status,capabilities_json,last_seen_at,created_at,updated_at FROM network_connectors WHERE id=? AND organization_id=?').bind(id,oid).first();
+ return json({connector:connectorPublic(row),token,token_notice:'Copy this token now. It is stored only as a SHA-256 hash and cannot be shown again.'},201);
+}
+async function disableNetworkConnector(env,path,oid,uid,ip){
+ if(env.NETWORK_CONNECTOR_ENABLED!=='true')return json({error:'Network connector API is disabled'},503);
+ const id=path.split('/')[4],row=await env.DB.prepare('SELECT id,name FROM network_connectors WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!row)return json({error:'Connector not found'},404);
+ await env.DB.batch([
+  env.DB.prepare("UPDATE network_connectors SET status='disabled',updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid),
+  env.DB.prepare("UPDATE network_jobs SET status='cancelled',completed_at=datetime('now'),lease_expires_at=NULL WHERE connector_id=? AND organization_id=? AND status IN ('pending','claimed')").bind(id,oid)
+ ]);
+ await audit(env,oid,uid,'disable_network_connector','Connector:'+row.name,ip);
+ return json({success:true});
+}
+async function createNetworkJob(request,env,oid,uid,ip){
+ if(env.NETWORK_CONNECTOR_ENABLED!=='true')return json({error:'Network connector API is disabled'},503);
+ const b=await parseBody(request);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const connectorId=s(b.connector_id||''),deviceId=s(b.device_id||''),capability=s(b.capability||''),key=s(b.idempotency_key||'');
+ if(!connectorId||!deviceId||!NETWORK_READ_CAPABILITIES.has(capability)||!/^[A-Za-z0-9._-]{8,128}$/.test(key))return json({error:'Connector, MikroTik device, supported read capability and 8-128 character idempotency_key are required'},400);
+ const [connector,device]=await Promise.all([
+  env.DB.prepare("SELECT id,capabilities_json FROM network_connectors WHERE id=? AND organization_id=? AND status='active'").bind(connectorId,oid).first(),
+  env.DB.prepare("SELECT id,name FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik' AND status='active'").bind(deviceId,oid).first()
+ ]);
+ if(!connector)return json({error:'Active connector not found'},404);
+ if(!device)return json({error:'Active MikroTik inventory device not found'},404);
+ if(!JSON.parse(connector.capabilities_json||'[]').includes(capability))return json({error:'Connector does not advertise this capability'},409);
+ const existing=await env.DB.prepare('SELECT id,device_id,capability,status FROM network_jobs WHERE organization_id=? AND idempotency_key=?').bind(oid,key).first();
+ if(existing){
+  if(existing.device_id!==deviceId||existing.capability!==capability)return json({error:'Idempotency key was already used for a different operation'},409);
+  return json({data:existing,reused:true});
+ }
+ const id=uuid();
+ try{
+  await env.DB.prepare("INSERT INTO network_jobs(id,organization_id,connector_id,device_id,capability,payload_json,idempotency_key,status,created_by)VALUES(?,?,?,?,?,'{}',?,'pending',?)").bind(id,oid,connectorId,deviceId,capability,key,uid).run();
+ }catch(e){if(/unique|constraint/i.test(String(e.message)))return json({error:'Network job conflicts with an existing record'},409);throw e}
+ await audit(env,oid,uid,'queue_network_job',capability+':'+device.name,ip);
+ return json({data:await env.DB.prepare('SELECT id,connector_id,device_id,capability,status,attempts,idempotency_key,created_at FROM network_jobs WHERE id=? AND organization_id=?').bind(id,oid).first()},201);
+}
+async function listNetworkJobs(env,url,oid){
+ const{page,pp,off}=pg(url,30),status=url.searchParams.get('status')||'';
+ let where='WHERE j.organization_id=?',params=[oid];
+ if(status){if(!['pending','claimed','completed','failed','cancelled'].includes(status))return json({error:'Invalid job status'},400);where+=' AND j.status=?';params.push(status)}
+ const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_jobs j '+where).bind(...params).first();
+ const rows=await env.DB.prepare('SELECT j.id,j.connector_id,j.device_id,j.capability,j.status,j.attempts,j.error_code,j.created_at,j.claimed_at,j.completed_at,c.name connector_name,d.name device_name FROM network_jobs j JOIN network_connectors c ON c.id=j.connector_id AND c.organization_id=j.organization_id JOIN network_devices d ON d.id=j.device_id AND d.organization_id=j.organization_id '+where+' ORDER BY j.created_at DESC LIMIT ? OFFSET ?').bind(...params,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:count.n,total_pages:Math.ceil(count.n/pp)}});
+}
+async function getNetworkJob(env,path,oid){
+ const id=path.split('/')[4],row=await env.DB.prepare('SELECT j.id,j.connector_id,j.device_id,j.capability,j.status,j.attempts,j.error_code,j.result_json,j.created_at,j.claimed_at,j.completed_at,c.name connector_name,d.name device_name FROM network_jobs j JOIN network_connectors c ON c.id=j.connector_id AND c.organization_id=j.organization_id JOIN network_devices d ON d.id=j.device_id AND d.organization_id=j.organization_id WHERE j.id=? AND j.organization_id=?').bind(id,oid).first();
+ if(!row)return json({error:'Network job not found'},404);
+ let result=null;try{result=row.result_json?JSON.parse(row.result_json):null}catch{}
+ return json({data:{...row,result}});
+}
+async function authenticateNetworkConnector(request,env){
+ if(env.NETWORK_CONNECTOR_ENABLED!=='true')return null;
+ const header=request.headers.get('Authorization')||'';
+ if(!header.startsWith('Connector '))return null;
+ const token=header.slice(10);
+ if(!/^nxc_[A-Za-z0-9_-]{40,80}$/.test(token))return null;
+ const tokenHash=await sha256Hex(token);
+ return await env.DB.prepare("SELECT id,organization_id,name,capabilities_json,created_by FROM network_connectors WHERE token_hash=? AND status='active'").bind(tokenHash).first();
+}
+async function handleNetworkConnectorAgent(request,env,path,m,ip){
+ const connector=await authenticateNetworkConnector(request,env);
+ if(!connector)return json({error:'Valid active connector token required'},401);
+ await env.DB.prepare("UPDATE network_connectors SET last_seen_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(connector.id,connector.organization_id).run();
+ if(path==='/api/network/agent/jobs/next'&&m==='GET'){
+  await env.DB.prepare("UPDATE network_jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,error_code=CASE WHEN attempts>=3 THEN 'CONNECTOR_LEASE_EXPIRED' ELSE error_code END,claimed_at=NULL,lease_expires_at=NULL,completed_at=CASE WHEN attempts>=3 THEN datetime('now') ELSE completed_at END WHERE connector_id=? AND organization_id=? AND status='claimed' AND lease_expires_at<=datetime('now')").bind(connector.id,connector.organization_id).run();
+  const next=await env.DB.prepare("SELECT id,device_id,capability,payload_json,attempts FROM network_jobs WHERE connector_id=? AND organization_id=? AND status='pending' ORDER BY created_at LIMIT 1").bind(connector.id,connector.organization_id).first();
+  if(!next)return json({job:null});
+  const claimed=await env.DB.prepare("UPDATE network_jobs SET status='claimed',claimed_at=datetime('now'),lease_expires_at=datetime('now','+60 seconds'),attempts=attempts+1 WHERE id=? AND connector_id=? AND organization_id=? AND status='pending'").bind(next.id,connector.id,connector.organization_id).run();
+  if(!claimed.meta?.changes)return json({job:null,retry_after_seconds:2});
+  return json({job:{id:next.id,device_id:next.device_id,capability:next.capability,payload:JSON.parse(next.payload_json||'{}'),attempt:next.attempts+1,lease_seconds:60}});
+ }
+ const resultMatch=path.match(/^\/api\/network\/agent\/jobs\/([^/]+)\/result$/);
+ if(resultMatch&&m==='POST'){
+  const body=await parseBody(request);if(!body||!['completed','failed'].includes(body.status))return json({error:'status must be completed or failed'},400);
+  const safeResult=redactNetworkResult(body.result??{}),encoded=JSON.stringify(safeResult);
+  if(encoded.length>16384)return json({error:'Result payload exceeds 16 KB'},413);
+  const errorCode=body.status==='failed'?String(body.error_code||'CONNECTOR_OPERATION_FAILED').replace(/[^A-Z0-9_-]/gi,'').slice(0,80):null;
+  const updated=await env.DB.prepare("UPDATE network_jobs SET status=?,result_json=?,error_code=?,completed_at=datetime('now'),lease_expires_at=NULL WHERE id=? AND connector_id=? AND organization_id=? AND status='claimed'").bind(body.status,encoded,errorCode,resultMatch[1],connector.id,connector.organization_id).run();
+  if(!updated.meta?.changes)return json({error:'Claimed job not found or lease no longer active'},409);
+  await audit(env,connector.organization_id,connector.created_by,'network_job_'+body.status,'Job:'+resultMatch[1],ip);
+  return json({success:true});
+ }
+ return json({error:'Not found'},404);
+}
+
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
  const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
