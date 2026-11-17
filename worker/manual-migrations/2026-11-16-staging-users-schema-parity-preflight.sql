@@ -40,4 +40,4 @@ FROM ticket_messages m LEFT JOIN users u ON u.id = m.user_id
 WHERE m.user_id IS NOT NULL AND u.id IS NULL
 UNION ALL
 SELECT 'existing_schema_migration_10_rows', COUNT(*)
-FROM schema_migrations WHERE id = 11 OR name = '0011_users_strict_schema_parity';
+FROM schema_migrations WHERE id = 24 OR name = '0024_users_strict_schema_parity';
