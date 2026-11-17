@@ -5,7 +5,7 @@ const production=readFileSync(new URL("../src/production-worker.js",import.meta.
 const migration=readFileSync(new URL("../../cloudflare/d1/migrations/0013_security_hardening.sql",import.meta.url),"utf8");
 for(const [name,source] of [["staging",staging],["production",production]]){
  assert.match(source,/PASSWORD_HASH_ITERATIONS=600000/,name+" PBKDF2 iterations");
- assert.match(source,/pbkdf2-sha256\$/,name+" versioned hash");
+ assert.match(source,/HASH_SEPARATOR=String.fromCharCode\(36\)/,name+" versioned hash separator");
  assert.doesNotMatch(source,/if\(!salt\)return pw===h/,name+" plaintext fallback");
  assert.match(source,/registrationRateLimited\(env,ip,attemptEmail\)/,name+" registration throttle");
  assert.match(source,/PPPOE_ENCRYPTION_KEY/,name+" separate PPPoE secret");
