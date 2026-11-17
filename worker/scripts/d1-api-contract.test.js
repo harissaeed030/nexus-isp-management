@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { normalizeApiMethod } from "../src/d1-api-worker.js";
 import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
@@ -30,4 +31,11 @@ test("candidate config is isolated from production D1", () => {
   assert.match(config, /database_name = "nexus-saas-staging-db"/);
   assert.match(config, /194f62e2-2766-48ab-be17-81248610c0cd/);
   assert.doesNotMatch(config, /ce88098b-bff4-4d06-a0df-7bf29622a085/);
+});
+
+test("D1 API accepts dashboard PATCH updates through the existing PUT handlers", () => {
+  assert.equal(normalizeApiMethod("PATCH"), "PUT");
+  assert.equal(normalizeApiMethod("PUT"), "PUT");
+  assert.equal(normalizeApiMethod("GET"), "GET");
+  assert.match(source, /new Request\\(request,\\{method:'PUT'\\}\\)/);
 });
