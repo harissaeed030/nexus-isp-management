@@ -151,3 +151,10 @@ test("subscription renewal route and tenant-scoped history are implemented", () 
   assert.match(subscriptionMigration, /workspace_status TEXT NOT NULL DEFAULT 'active'/);
   assert.match(subscriptionMigration, /idx_subscriptions_org_workspace_status/);
 });
+
+
+test("inactive or blocked customer accounts cannot use the customer portal", () => {
+  assert.match(source, /customer_account_status!=='active'/);
+  assert.match(source, /Activate the customer account before enabling portal access/);
+  assert.match(source, /account_status='active'/);
+});
