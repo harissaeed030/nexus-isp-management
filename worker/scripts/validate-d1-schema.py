@@ -183,15 +183,22 @@ strict.close()
 # independent live migration history; security hardening is 22 and billing is 23.
 migration_22 = (root / "cloudflare" / "d1" / "migrations" / "0022_security_hardening.sql").read_text()
 migration_23 = (root / "cloudflare" / "d1" / "migrations" / "0023_payment_promises.sql").read_text()
+# Model the live shared ledger: IDs 10-21 are already occupied in staging.
+for version in range(10, 22):
+    fresh.execute(
+        "INSERT INTO schema_migrations(id,name,applied_at) VALUES(?,?,datetime('now'))",
+        (version, f"existing_live_migration_{version:04d}"),
+    )
 for _ in range(2):
     fresh.executescript(migration_22)
 assert fresh.execute("SELECT name FROM schema_migrations WHERE id=22").fetchone()[0] == "0022_security_hardening"
 for _ in range(2):
     fresh.executescript(migration_23)
 assert fresh.execute("SELECT name FROM schema_migrations WHERE id=23").fetchone()[0] == "0023_payment_promises"
-assert fresh.execute("SELECT name FROM schema_migrations WHERE id=10").fetchone() is None
-assert fresh.execute("SELECT name FROM schema_migrations WHERE id=11").fetchone() is None
-assert fresh.execute("SELECT name FROM schema_migrations WHERE id=12").fetchone() is None
+assert fresh.execute("SELECT name FROM schema_migrations WHERE id=10").fetchone()[0] == "existing_live_migration_0010"
+assert fresh.execute("SELECT name FROM schema_migrations WHERE id=11").fetchone()[0] == "existing_live_migration_0011"
+assert fresh.execute("SELECT name FROM schema_migrations WHERE id=12").fetchone()[0] == "existing_live_migration_0012"
+assert fresh.execute("SELECT name FROM schema_migrations WHERE id=21").fetchone()[0] == "existing_live_migration_0021"
 
 payment_promise_tables = {
     row[0] for row in fresh.execute("SELECT name FROM sqlite_master WHERE type='table'")
