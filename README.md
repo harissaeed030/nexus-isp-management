@@ -141,6 +141,8 @@ All rights reserved until a license is added. Do not assume this project is open
 
 ## Shared SQLite + Cloudflare D1 persistence
 
+Live production/staging D1 drift and the safe reconciliation gates are documented in [Production and Staging D1 Reconciliation](docs/PRODUCTION-STAGING-D1-RECONCILIATION-2026-11-17.md).
+
 The shared asynchronous database adapter and tenant-scoped repository are implemented in `shared/database/`. The local SQLite runtime exports it as `repository`, and the isolated SQLite-to-D1 sync Worker uses the shared D1 repository for tenant-scoped record reads.
 
 See [Shared database architecture](docs/SHARED-DATABASE-ARCHITECTURE.md) for the adapter contract, schema mappings, safety guarantees, migration boundaries and current integration limitations.
