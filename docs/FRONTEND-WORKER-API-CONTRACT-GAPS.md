@@ -76,3 +76,6 @@ The following hosted implementation work has now been committed on `work/core-fe
 ### Safety and verification boundary
 
 These changes are source changes on the feature branch only. They have not been deployed to Pages or the production Worker, and no production/staging D1 records or secrets have been changed. GitHub Actions source/backend checks are being used for code feedback; live production endpoint smoke failures must be investigated separately and are not represented as passed.
+
+
+- Added tenant-checked staff and customer-portal ticket conversation endpoints using the existing `ticket_messages` table; the hosted admin and customer portal UIs now support replies. The local SQLite UI does not display these hosted-only controls.
