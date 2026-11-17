@@ -68,7 +68,7 @@ test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM ticket_messages WHERE id='message-a'
 test -z "$(sqlite3 "$DB" "PRAGMA foreign_key_check;")"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_d1_%';")" = "6"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('idx_users_organization','idx_users_email_global','idx_users_org_email_ci');")" = "3"
-test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM schema_migrations WHERE id=10 AND name='0010_users_strict_schema_parity';")" = "1"
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM schema_migrations WHERE id=11 AND name='0011_users_strict_schema_parity';")" = "1"
 
 # Production-compatible constraints: missing password hash rejected; role defaults to staff.
 if sqlite3 "$DB" "INSERT INTO users(id,organization_id,email,role) VALUES('bad-null-hash','org-a','nullhash@example.test','staff');" >/dev/null 2>&1; then
