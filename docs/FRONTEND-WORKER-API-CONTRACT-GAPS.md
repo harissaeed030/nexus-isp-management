@@ -92,8 +92,19 @@ These changes are source changes on the feature branch only. They have not been 
 
 ## Staging E2E cleanup compatibility follow-up — 2026-11-17
 
-- Latest PR workflow run confirmed the portal E2E journey itself passed, but teardown failed because the currently deployed staging D1 did not contain the optional `payment_promises` table.
-- The staging-only teardown now checks `sqlite_master` before attempting that optional delete. All tenant cleanup statements remain organization-scoped and run as one D1 batch.
-- Added a regression guard that requires this schema check and confirms the destructive teardown route remains absent from the production Worker bundle.
-- Changed the staging tenant-creating E2E job to manual `workflow_dispatch` only. Ordinary pushes and pull requests no longer create staging tenants automatically; this prevents repeated test data accumulation while staging schema/deployment parity is unresolved.
-- This is source/CI-only remediation. It does not delete existing staging rows or deploy a Worker. The failed run may have left its two synthetic tenants in staging; confirm their exact ownership before any manual cleanup.
+- An earlier PR workflow attempt confirmed the portal E2E journey itself passed, but teardown failed because the deployed staging D1 did not contain the optional `payment_promises` table.
+- The staging-only teardown checks `sqlite_master` before attempting that optional delete. All tenant cleanup statements remain organization-scoped and run as one D1 batch.
+- A regression guard requires this schema check and confirms the destructive teardown route remains absent from the production Worker bundle.
+- The staging tenant-creating E2E job is manual `workflow_dispatch` only. Ordinary pushes and pull requests do not create staging tenants automatically.
+- Follow-up deployment and E2E evidence is recorded below.
+
+
+## Staging deployment and portal E2E close-out — 2026-11-17
+
+- Synchronized the staging Worker `nexus-saas-api-staging` with the already-reviewed feature-branch source containing the schema-aware optional `payment_promises` cleanup guard. The deployment retained the existing Worker configuration and bindings.
+- Staging deployment version: `ff7c7574-96cf-4cf9-9641-cd382e1a9449` (deployment ID `ff7c757496cf4c9f9641cd382a1e9449`).
+- GitHub Actions run `44019142496`, job `133827464947` (Tenant isolation and customer portal E2E), completed with conclusion **success**.
+- The job log confirms tenant isolation, portal provisioning, login, profile, dashboard, tickets and logout passed.
+- The two synthetic tenants created by this successful attempt (`nexus-stage-44019142496-3-a` and `nexus-stage-44019142496-3-b`) were both cleaned by the test teardown.
+- This evidence applies to the staging Worker and this E2E run only. It does not certify production, prove that historical failed attempts left no test rows, or replace independent security review, Android acceptance, database restore verification or real-device testing.
+- No production Worker, production D1, production secrets, or physical network devices were changed.
