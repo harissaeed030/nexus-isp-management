@@ -108,3 +108,17 @@ The development branch now contains a first customer-management compatibility sl
 - Contract tests cover the DTOs, route expectations, linked-record protection and migration tenant guards. GitHub Actions D1 Worker and backend verification workflows passed on `55703f4a7d2b02e475114941e5fa3b2d9bbcfb6f`; the backend checks workflow was still running at the time of this note.
 
 No Cloudflare D1 schema was changed and no Worker was deployed. Production and staging remain untouched. Customer compatibility is not yet end-to-end verified; package, subscription, billing, network and operations adapters remain open.
+
+
+## Package and subscription compatibility work — 2026-11-17
+
+A second dashboard compatibility slice is committed:
+
+- Package list/create/update/get now map dashboard `speedDownMbps`, `speedUpMbps`, `monthlyPricePkr` and Active/Archived fields to the existing D1 package columns and back.
+- Subscription list/create/update/get map dashboard camelCase customer/package/date fields, expose customer and package display fields, and return dashboard pagination.
+- Subscription renewal endpoint `POST /api/subscriptions/:id/renew` is implemented with a bounded 1–365 day interval, expiry extension and an audit/history entry.
+- Subscription lifecycle status is represented by an additive `workspace_status` column so the dashboard's `pending` state does not violate the legacy D1 status CHECK constraint. A pending subscription is stored as legacy `suspended` as a fail-closed compatibility value.
+- New additive D1 migration: `cloudflare/d1/migrations/0013_subscription_workspace_status.sql`. Apply only after migration 0012. Neither migration has been applied to staging or production.
+- Contract tests cover customer, package and subscription DTOs and the renewal route. The D1 Worker workflow passed on `240e3815076f9da9b1fe1ab3c110d86b7de8cfbd`; backend checks and verification were still running when this note was prepared.
+
+The code is committed to the development branch only. No Worker deployment, D1 migration execution, production data change, secret operation or live router action was performed. End-to-end staging acceptance remains outstanding.
