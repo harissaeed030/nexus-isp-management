@@ -226,7 +226,7 @@ if(path==='/api/e2e/tenant'&&m==='DELETE'){
  if(url.hostname!=='nexus-saas-api-staging.harissaeed030.workers.dev')return json({error:'Not Found'},404);
  if(role!=='owner'||!String(currentUser.email||'').toLowerCase().endsWith('@e2e.invalid'))return json({error:'Owner access required'},403);
  const body=await parseBody(request),org=await env.DB.prepare('SELECT id,slug FROM organizations WHERE id=?').bind(orgId).first();
- if(!org||typeof body?.slug!=='string'||org.slug!==body.slug||!/^nexus-stage-\\d+-\\d+-[a-z0-9-]+$/.test(org.slug))return json({error:'Not Found'},404);
+ if(!org||typeof body?.slug!=='string'||org.slug!==body.slug||!/^nexus-stage-[0-9]+-[0-9]+-[a-z0-9-]+$/.test(org.slug))return json({error:'Not Found'},404);
  const statements=[
   env.DB.prepare('DELETE FROM login_attempts WHERE email IN (SELECT email FROM users WHERE organization_id=?) OR email IN (SELECT email FROM customer_portal_accounts WHERE organization_id=?)').bind(orgId,orgId),
   env.DB.prepare('DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE organization_id=?)').bind(orgId),
