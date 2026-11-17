@@ -1,0 +1,23 @@
+{
+  "name": "NEXUS ISP Management",
+  "short_name": "NEXUS",
+  "description": "Mobile-first ISP operations platform for Vancom Networks.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#edf5f9",
+  "theme_color": "#0b3b58",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "assets/icons/nexus-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
