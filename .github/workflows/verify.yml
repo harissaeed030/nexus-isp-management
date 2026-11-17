@@ -60,6 +60,8 @@ jobs:
           import assert from "node:assert/strict";
 
           const origin = process.env.FRONTEND_URL;
+          // Probe only deployed service endpoints. Cloudflare version-preview URLs
+          // are not stable Worker routes (previews are disabled on this account).
           const targets = [
             ["production", process.env.PRODUCTION_API],
             ["staging", process.env.STAGING_API],
