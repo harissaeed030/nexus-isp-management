@@ -23,7 +23,7 @@ for (const file of workerFiles) {
     "New password hashes must use the reviewed 600,000-iteration setting.");
   assert.match(hashFn, /iterations:PASSWORD_HASH_ITERATIONS/);
   const verifyStart = source.indexOf("async function verifyPw(");
-  const verifyEnd = source.indexOf("\\nfunction b2h(", verifyStart);
+  const verifyEnd = source.indexOf(String.fromCharCode(10) + "function b2h(", verifyStart);
   const verifyFn = verifyStart >= 0 && verifyEnd > verifyStart
     ? source.slice(verifyStart, verifyEnd)
     : null;
