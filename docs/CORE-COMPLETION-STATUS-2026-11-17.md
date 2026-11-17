@@ -260,3 +260,14 @@ A fresh read-only comparison of staging and production confirmed the following:
 - No production database operation was performed.
 
 A corrective, additive migration `0018_reconcile_pppoe_and_sync_guards.sql` has been committed to the development branch. It replaces only the two staging PPPoE router triggers, recreates the sync index with the full three-column key, records the already-present migration-0010 schema as applied, and records migration 0018. It does not rebuild tables, change business rows, remove legacy `sync_state`, or alter production. A contract test and migration registry entry were added. The migration has **not yet been applied**: first run CI, take a fresh staging export, and re-check preconditions.
+
+
+### Migration 0018 staging execution result — 2026-11-17 07:11 UTC
+
+- A fresh SQL export of staging D1 completed immediately before migration 0018; bookmark: `000000b0-00000000-00005126-7dbc8ec81f66faffd77e244676125512`. The export is a completed backup artifact, not a restore-rehearsal result.
+- Preflight confirmed all four PPPoE metadata columns, the three migration-0010 indexes, both sync tables, and the expected parent tables. Migration 0018 was absent.
+- Applied `0018_reconcile_pppoe_and_sync_guards.sql` to staging only.
+- Postflight confirmed ledger IDs 10 and 18, retained historical ID 11 name, both router triggers now require same-organization `device_type='mikrotik'`, the update trigger is limited to organization/router changes, and the sync index now covers `organization_id,entity_type,entity_id`.
+- Organization/customer/network-device counts remained 178/181/1; `PRAGMA foreign_key_check` returned zero rows.
+- GitHub Actions on branch head `8848ef5f9a246de6530ce2415cb0df7bede21151`: backend verification and backend checks succeeded. The D1 Worker syntax/contract workflow succeeded on `e4033c26ba9b182e2eb358a7c4928cd37241959f`, including `node --check worker/src/d1-api-worker.js` and `node --test worker/scripts/d1-api-contract.test.js`.
+- No production D1 operation, Worker deployment, secret access, customer billing operation, or live network-device operation occurred. Restore rehearsal, public staging HTTP/E2E and production DDL reconciliation remain open.
