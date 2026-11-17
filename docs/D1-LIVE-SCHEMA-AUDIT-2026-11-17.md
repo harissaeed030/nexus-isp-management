@@ -24,7 +24,7 @@ The production ledger contains IDs 1–10, 12, 13 and 100. The staging ledger co
 | 15–21 | Not recorded | Additional staging-only migrations through `0021_field_operations` |
 | 100 | `sync_ledger_and_failures_tables` | `sync_ledger_and_failures_tables` |
 
-**Critical migration-ID collision:** the current development change `cloudflare/d1/migrations/0014_security_hardening.sql` also claims D1 migration ID 14. Staging already records ID 14 as `0014_router_credential_cipher`. Do not apply the security-hardening migration to staging under ID 14, and do not assume an `INSERT OR IGNORE` ledger write proves that migration was recorded. A new globally unused migration ID and a reviewed upgrade path are required.
+**Resolved source-level migration collision:** the first security-hardening draft used migration ID 14, which conflicts with staging's existing `0014_router_credential_cipher`. That draft was not applied to either live database. The development migration has now been moved to ID 22 (`0022_security_hardening`), which was not present in either inspected ledger. Its SQL, test fixture, and source-contract guard have been updated together. This is a source correction only; it does not mean migration 0022 has been applied.
 
 ## Schema object differences observed
 
@@ -39,11 +39,11 @@ Production and staging therefore do not currently have feature/schema parity. Th
 ## Required safe follow-up
 
 1. Treat the production and staging migration ledgers as separate histories; do not copy a ledger or schema snapshot between them.
-2. Assign security hardening a migration ID that is unused in both environments, then update the migration registry, SQL, fixtures, and CI checks together.
+2. Keep migration 0022 as the security-hardening version; do not reuse IDs 14–21, which already exist in staging.
 3. Build a production-specific additive migration plan for any required network/field modules. Reconcile every table and column against the actual production schema before writing SQL.
 4. Take and verify fresh backups before any staging or production D1 mutation.
 5. Apply to staging only after a separate migration rehearsal and explicit deployment approval; production remains untouched until staging acceptance and a fresh production preflight pass.
 
 ## Safety boundary
 
-This document records a read-only audit. It does not authorize or perform D1 writes, Worker/Pages deployment, secret changes, customer-data changes, or live network-device operations.
+This document records a read-only audit and a source-level migration renumbering. It does not authorize or perform D1 writes, Worker/Pages deployment, secret changes, customer-data changes, or live network-device operations.
