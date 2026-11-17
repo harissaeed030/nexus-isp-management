@@ -1,4 +1,5 @@
 (() => {
+// Hosted network connector management uses the tenant-scoped Worker API; device writes remain unavailable in this UI.
 const $=(s,r=document)=>r.querySelector(s),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let api=(()=>{const local=["localhost","127.0.0.1"].includes(location.hostname),saved=sessionStorage.getItem("nexus_api");if(saved&&(local||!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/i.test(saved)))return saved;if(saved&&!local)sessionStorage.removeItem("nexus_api");return location.port==="4000"?location.origin:(local?"http://127.0.0.1:4000":"https://nexus-saas-api.harissaeed030.workers.dev")})(),token=sessionStorage.getItem("nexus_token")||"",view="dashboard";
 const shell=$(".app-shell"),content=$(".content"),toast=$("#toast");
