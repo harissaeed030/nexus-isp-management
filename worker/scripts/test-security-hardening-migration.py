@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-sql=Path(__file__).resolve().parents[2]/"cloudflare"/"d1"/"migrations"/"0014_security_hardening.sql"
+sql=Path(__file__).resolve().parents[2]/"cloudflare"/"d1"/"migrations"/"0022_security_hardening.sql"
 db=sqlite3.connect(":memory:")
 db.executescript("""
 CREATE TABLE schema_migrations(id INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL);
@@ -23,6 +23,6 @@ for row in [("bad-customer","a","cb","ua"),("bad-creator","a","ca","ub")]:
 try:db.execute("UPDATE payment_promises SET created_by='ub' WHERE id='ok'")
 except sqlite3.IntegrityError:pass
 else:raise AssertionError("cross-tenant update accepted")
-assert db.execute("SELECT id,name FROM schema_migrations").fetchall()==[(14,"0014_security_hardening")]
+assert db.execute("SELECT id,name FROM schema_migrations").fetchall()==[(22,"0022_security_hardening")]
 assert db.execute("SELECT COUNT(*) FROM registration_attempts").fetchone()[0]==0
-print("Security migration 0014 idempotency, ledger and tenant-guard tests passed.")
+print("Security migration 0022 idempotency, ledger and tenant-guard tests passed.")
