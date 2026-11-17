@@ -19,10 +19,19 @@ for (const file of workerFiles) {
   assert.ok(hashFn, `hashPw function missing in ${file}`);
   assert.match(hashFn, /name:'PBKDF2'/);
   assert.match(hashFn, /hash:'SHA-256'/);
-  assert.match(hashFn, /iterations:100000/);
-  assert.match(source, /async function verifyPw\(pw,h,salt\)\{if\(!h\)return false;if\(!salt\)return pw===h;const\{hash\}=await hashPw\(pw,salt\);return hash===h\}/);
+  assert.match(source, /const PASSWORD_HASH_ITERATIONS=600000;/,
+    "New password hashes must use the reviewed 600,000-iteration setting.");
+  assert.match(hashFn, /iterations:PASSWORD_HASH_ITERATIONS/);
+  const verifyFn = source.match(/async function verifyPw\(pw,h,salt\)\{[\\s\\S]*?(?=\\nfunction b2h\()/)?.[0];
+  assert.ok(verifyFn, `verifyPw function missing in ${file}`);
+  assert.match(verifyFn, /let iterations=100000/,
+    "Existing 100,000-iteration hashes must remain verifiable.");
+  assert.match(verifyFn, /iterations<100000\|\|iterations>1000000/,
+    "Versioned legacy/current hash iteration bounds must be enforced.");
+  assert.match(verifyFn, /typeof salt!=='string'/,
+    "Malformed or missing salts must fail closed.");
 }
-console.log("Source check: staging and production Worker both currently use PBKDF2-HMAC-SHA256 / 100,000 iterations.");
+console.log("Source check: staging and production Worker create PBKDF2-HMAC-SHA256 / 600,000-iteration hashes and retain bounded legacy-hash verification.");
 
 const config = resolve(here, "wrangler.password-benchmark.toml");
 const child = spawn("npx", [
