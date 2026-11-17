@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload } from "../src/d1-api-worker.js";
+import { normalizeWorkspaceLoginSlug, normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
@@ -382,9 +382,13 @@ test("D1 migration 0019 restores case-insensitive organization-scoped user email
   assert.match(userEmailParityMigration, /VALUES\(19,'0019_restore_case_insensitive_user_email_uniqueness'/);
 });
 
-test("workspace login accepts the tenantSlug field sent by the dashboard", () => {
-  assert.match(source, /const requestedWorkspace=b\.workspace\?\?b\.tenantSlug\?\?b\.tenant_slug/);
-  assert.match(source, /String\(requestedWorkspace\)\.trim\(\)\.toLowerCase\(\)/);
+test("workspace login normalizes all supported workspace slug aliases", () => {
+  assert.equal(normalizeWorkspaceLoginSlug({ workspace: "  VanCom-ISP " }), "vancom-isp");
+  assert.equal(normalizeWorkspaceLoginSlug({ tenantSlug: "VanCom-ISP" }), "vancom-isp");
+  assert.equal(normalizeWorkspaceLoginSlug({ tenant_slug: "VanCom-ISP" }), "vancom-isp");
+  assert.equal(normalizeWorkspaceLoginSlug({ tenantSlug: "  " }), null);
+  assert.equal(normalizeWorkspaceLoginSlug({}), null);
+  assert.match(source, /if\(rows\.length>1\)return json\(/);
 });
 
 test("D1 migration 0020 removes global email uniqueness while retaining workspace-scoped uniqueness", () => {
