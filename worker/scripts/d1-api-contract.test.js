@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload } from "../src/d1-api-worker.js";
+import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
@@ -232,4 +232,24 @@ test("OLT inventory routes are tenant scoped and do not accept plaintext credent
   assert.match(source, /liveTelemetry:false/);
   assert.match(source, /mapOnuRow/);
   assert.match(source, /map_onu_customer/);
+});
+
+
+test("RouterOS inventory DTO never exposes encrypted credential material", () => {
+  assert.deepEqual(mapRouterRow({
+    id:"r1",name:"Edge Router",host:"192.0.2.1",port:8729,username:"nexus-api",
+    notes:"Unit 8",status:"inactive",device_type:"mikrotik",
+    credential_password_cipher:"enc:v1:secret"
+  }), {
+    id:"r1",name:"Edge Router",host:"192.0.2.1",apiPort:8729,location:"Unit 8",
+    status:"inactive",username:"nexus-api",device_type:"mikrotik"
+  });
+});
+
+test("RouterOS credential storage is encrypted and live commands fail closed", () => {
+  assert.match(source, /encryptPppoePassword\(password,env\)/);
+  assert.match(source, /credential_password_cipher/);
+  assert.match(source, /Live RouterOS API-SSL adapter is not configured/);
+  assert.match(source, /async function createRouter/);
+  assert.match(source, /async function updateRouter/);
 });
