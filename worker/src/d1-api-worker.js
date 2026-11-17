@@ -111,6 +111,8 @@ function permissionForRoute(path,method){
  if(path==='/api/audit-logs')return v==='GET'?'audit.read':null;
  if(match('/api/notifications'))return ['GET','PUT'].includes(v)?'notifications.read':null;
  if(match('/api/refunds'))return v==='GET'?'refunds.read':['POST','PUT'].includes(v)?'refunds.manage':null;
+ if(match('/api/operations/collections')||match('/api/operations/payment-promises')||match('/api/operations/customer-ledger'))return v==='GET'?'billing.read':v==='POST'?'payments.create':v==='PUT'?'payments.create':null;
+ if(match('/api/operations'))return v==='GET'?'routers.read':['POST','PUT'].includes(v)?'routers.manage':null;
  return null;
 }
 async function roleAllowedWithOverrides(env,orgId,userId,role,path,method){
@@ -240,6 +242,20 @@ async function runMigrations(env){
  ['onu_devices.index','CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id,status)'],
  ['invoices.number_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id,invoice_number)'],
  ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"],
+
+ ['ops.geo_locations',"CREATE TABLE IF NOT EXISTS geo_locations(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,parent_id TEXT,type TEXT NOT NULL CHECK(type IN('country','city','locality','street')),name TEXT NOT NULL,postal_code TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(parent_id) REFERENCES geo_locations(id) ON DELETE SET NULL)"],
+ ['ops.coverage_areas',"CREATE TABLE IF NOT EXISTS coverage_areas(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,name TEXT NOT NULL,code TEXT,description TEXT,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN('active','inactive')),created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,name),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"],
+ ['ops.connection_applications',"CREATE TABLE IF NOT EXISTS connection_applications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,application_no TEXT NOT NULL,full_name TEXT NOT NULL,phone TEXT NOT NULL,address TEXT NOT NULL,coverage_area_id TEXT,package_id TEXT,notes TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN('pending','approved','rejected','installed','cancelled')),created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,application_no),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(coverage_area_id) REFERENCES coverage_areas(id),FOREIGN KEY(package_id) REFERENCES packages(id))"],
+ ['ops.business_partners',"CREATE TABLE IF NOT EXISTS business_partners(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,parent_partner_id TEXT,type TEXT NOT NULL DEFAULT 'dealer' CHECK(type IN('dealer','sub_dealer')),name TEXT NOT NULL,phone TEXT,address TEXT,commission_percent REAL NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',created_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,name),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(parent_partner_id) REFERENCES business_partners(id))"],
+ ['ops.recovery_officers',"CREATE TABLE IF NOT EXISTS recovery_officers(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,name TEXT NOT NULL,phone TEXT,area_id TEXT,status TEXT NOT NULL DEFAULT 'active',created_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,user_id),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id),FOREIGN KEY(area_id) REFERENCES coverage_areas(id))"],
+ ['ops.field_assignments',"CREATE TABLE IF NOT EXISTS field_assignments(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,application_id TEXT,customer_id TEXT,technician_user_id TEXT NOT NULL,scheduled_at TEXT,notes TEXT,status TEXT NOT NULL DEFAULT 'assigned' CHECK(status IN('assigned','in_progress','completed','cancelled')),created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(application_id) REFERENCES connection_applications(id),FOREIGN KEY(customer_id) REFERENCES customers(id),FOREIGN KEY(technician_user_id) REFERENCES users(id))"],
+ ['ops.cash_collections',"CREATE TABLE IF NOT EXISTS cash_collections(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL CHECK(amount_pkr>0),method TEXT NOT NULL DEFAULT 'cash' CHECK(method IN('cash','bank','jazzcash','easypaisa','other')),operator_user_id TEXT NOT NULL,recovery_officer_id TEXT,partner_id TEXT,reference TEXT,notes TEXT,received_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id),FOREIGN KEY(operator_user_id) REFERENCES users(id),FOREIGN KEY(recovery_officer_id) REFERENCES recovery_officers(id),FOREIGN KEY(partner_id) REFERENCES business_partners(id))"],
+ ['ops.payment_promises',"CREATE TABLE IF NOT EXISTS payment_promises(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL CHECK(amount_pkr>0),promise_date TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN('open','kept','broken','cancelled')),notes TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id),FOREIGN KEY(created_by) REFERENCES users(id))"],
+ ['ops.inventory_items',"CREATE TABLE IF NOT EXISTS inventory_items(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,sku TEXT,name TEXT NOT NULL,category TEXT NOT NULL DEFAULT 'other' CHECK(category IN('onu','media_box','router','fiber','splitter','other')),unit TEXT NOT NULL DEFAULT 'pcs',quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity>=0),reorder_level INTEGER NOT NULL DEFAULT 0 CHECK(reorder_level>=0),location TEXT,serial_number TEXT,status TEXT NOT NULL DEFAULT 'available',created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,sku),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"],
+ ['ops.inventory_movements',"CREATE TABLE IF NOT EXISTS inventory_movements(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,item_id TEXT NOT NULL,quantity INTEGER NOT NULL,movement_type TEXT NOT NULL CHECK(movement_type IN('stock_in','stock_out','adjustment','assigned')),reference TEXT,notes TEXT,actor_user_id TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(item_id) REFERENCES inventory_items(id),FOREIGN KEY(actor_user_id) REFERENCES users(id))"],
+ ['ops.customer_ledger_entries',"CREATE TABLE IF NOT EXISTS customer_ledger_entries(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,entry_type TEXT NOT NULL CHECK(entry_type IN('credit','debit')),amount_pkr INTEGER NOT NULL CHECK(amount_pkr>0),description TEXT NOT NULL,reference_type TEXT,reference_id TEXT,actor_user_id TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id),FOREIGN KEY(actor_user_id) REFERENCES users(id))"],
+ ['ops.indexes',"CREATE INDEX IF NOT EXISTS idx_ops_assignments_org ON field_assignments(organization_id,status,scheduled_at); CREATE INDEX IF NOT EXISTS idx_ops_applications_org ON connection_applications(organization_id,status,created_at); CREATE INDEX IF NOT EXISTS idx_ops_collections_org ON cash_collections(organization_id,received_at); CREATE INDEX IF NOT EXISTS idx_ops_promises_org ON payment_promises(organization_id,promise_date,status); CREATE INDEX IF NOT EXISTS idx_ops_inventory_org ON inventory_items(organization_id,name); CREATE INDEX IF NOT EXISTS idx_ops_ledger_customer ON customer_ledger_entries(organization_id,customer_id,created_at)"]
+
  ['users.rebuild','SPECIAL']
  ];
  const results=[];
@@ -258,6 +274,132 @@ if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 
 if(path.startsWith('/api/'))return withCors(await handleApi(apiRequest,env,url,path,m),request,env);
 return new Response(FRONTEND_HTML,{headers:{'Content-Type':'text/html;charset=utf-8'}})}};
 
+
+async function handleOperations(request,env,path,m,orgId,userId,ip){
+ const db=env.DB,body=await parseBody(request)||{},id=uuid();
+ const all=async(sql,...v)=>(await db.prepare(sql).bind(...v).all()).results||[];
+ const one=async(sql,...v)=>db.prepare(sql).bind(...v).first();
+ const run=async(sql,...v)=>db.prepare(sql).bind(...v).run();
+ const ok=async(data,status=200)=>json({success:true,data},status);
+ const bad=(message,status=400)=>json({success:false,error:message},status);
+ const auditOp=async(action,kind,ref)=>audit(env,orgId,userId,action,kind+':'+ref,ip);
+ const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;
+ let match;
+ if(path==='/api/operations/locations'&&m==='GET')return ok(await all("SELECT g.*,p.name parent_name FROM geo_locations g LEFT JOIN geo_locations p ON p.id=g.parent_id AND p.organization_id=g.organization_id WHERE g.organization_id=? ORDER BY g.type,g.name",orgId));
+ if(path==='/api/operations/locations'&&m==='POST'){
+  const name=String(body.name||'').trim(),type=body.type,expected={country:null,city:'country',locality:'city',street:'locality'};
+  if(!name||name.length>160||!(type in expected))return bad('Valid location name and type are required.');
+  const parent=body.parentId?await one('SELECT id,type FROM geo_locations WHERE id=? AND organization_id=?',body.parentId,orgId):null;
+  if((expected[type]===null&&body.parentId)||(expected[type]!==null&&(!parent||parent.type!==expected[type])))return bad('Choose a parent of the required location type.');
+  try{await run('INSERT INTO geo_locations(id,organization_id,parent_id,type,name,postal_code) VALUES(?,?,?,?,?,?)',id,orgId,body.parentId||null,type,name,String(body.postalCode||'').trim()||null)}catch(e){if(/UNIQUE/i.test(String(e.message)))return bad('This location already exists under the selected parent.',409);throw e}
+  await auditOp('create','geo_location',id);return ok(await one('SELECT * FROM geo_locations WHERE id=? AND organization_id=?',id,orgId),201);
+ }
+ if(path==='/api/operations/assignments'&&m==='GET')return ok(await all("SELECT f.*,u.name technician_name,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) customer_name,a.application_no FROM field_assignments f JOIN users u ON u.id=f.technician_user_id AND u.organization_id=f.organization_id LEFT JOIN customers c ON c.id=f.customer_id AND c.organization_id=f.organization_id LEFT JOIN connection_applications a ON a.id=f.application_id AND a.organization_id=f.organization_id WHERE f.organization_id=? ORDER BY f.scheduled_at DESC,f.created_at DESC",orgId));
+ if(path==='/api/operations/assignments'&&m==='POST'){
+  const uid=String(body.technicianUserId||'').trim(),staff=uid?await one("SELECT id,role FROM users WHERE id=? AND organization_id=? AND status='active'",uid,orgId):null;
+  if(!staff)return bad('Active technician staff account not found in this workspace.',404);
+  if(!body.customerId&&!body.applicationId)return bad('A customer or connection application is required.');
+  if(body.customerId&&!await one('SELECT id FROM customers WHERE id=? AND organization_id=?',body.customerId,orgId))return bad('Customer not found.',404);
+  if(body.applicationId&&!await one('SELECT id FROM connection_applications WHERE id=? AND organization_id=?',body.applicationId,orgId))return bad('Connection application not found.',404);
+  await run('INSERT INTO field_assignments(id,organization_id,application_id,customer_id,technician_user_id,scheduled_at,notes) VALUES(?,?,?,?,?,?,?)',id,orgId,body.applicationId||null,body.customerId||null,uid,String(body.scheduledAt||'').trim()||null,String(body.notes||'').trim()||null);
+  await auditOp('create','field_assignment',id);return ok(await one('SELECT * FROM field_assignments WHERE id=? AND organization_id=?',id,orgId),201);
+ }
+ if((match=path.match(/^\/api\/operations\/assignments\/([^/]+)$/))&&m==='PUT'){
+  const x=await one('SELECT * FROM field_assignments WHERE id=? AND organization_id=?',decodeURIComponent(match[1]),orgId);if(!x)return bad('Field assignment not found.',404);
+  const status=body.status??x.status;if(!['assigned','in_progress','completed','cancelled'].includes(status))return bad('Invalid assignment status.');
+  await run("UPDATE field_assignments SET status=?,notes=?,scheduled_at=?,updated_at=datetime('now') WHERE id=? AND organization_id=?",status,body.notes??x.notes,body.scheduledAt??x.scheduled_at,x.id,orgId);
+  await auditOp('update','field_assignment',x.id);return ok(await one('SELECT * FROM field_assignments WHERE id=? AND organization_id=?',x.id,orgId));
+ }
+ if(path==='/api/operations/coverage-areas'&&m==='GET')return ok(await all('SELECT * FROM coverage_areas WHERE organization_id=? ORDER BY name',orgId));
+ if(path==='/api/operations/coverage-areas'&&m==='POST'){
+  const name=String(body.name||'').trim();if(!name||name.length>120)return bad('Coverage area name is required.');
+  try{await run('INSERT INTO coverage_areas(id,organization_id,name,code,description) VALUES(?,?,?,?,?)',id,orgId,name,String(body.code||'').trim()||null,String(body.description||'').trim()||null)}catch(e){if(/UNIQUE/i.test(String(e.message)))return bad('Coverage area already exists.',409);throw e}
+  await auditOp('create','coverage_area',id);return ok(await one('SELECT * FROM coverage_areas WHERE id=? AND organization_id=?',id,orgId),201);
+ }
+ if((match=path.match(/^\/api\/operations\/coverage-areas\/([^/]+)$/))&&m==='PUT'){
+  const x=await one('SELECT * FROM coverage_areas WHERE id=? AND organization_id=?',decodeURIComponent(match[1]),orgId);if(!x)return bad('Coverage area not found.',404);
+  const name=String(body.name??x.name).trim(),status=body.status??x.status;if(!name||!['active','inactive'].includes(status))return bad('Invalid area details.');
+  await run('UPDATE coverage_areas SET name=?,code=?,description=?,status=?,updated_at=datetime(\'now\') WHERE id=? AND organization_id=?',name,body.code??x.code,body.description??x.description,status,x.id,orgId);
+  await auditOp('update','coverage_area',x.id);return ok(await one('SELECT * FROM coverage_areas WHERE id=? AND organization_id=?',x.id,orgId));
+ }
+ if(path==='/api/operations/applications'&&m==='GET')return ok(await all('SELECT a.*,c.name coverage_area,p.name package_name FROM connection_applications a LEFT JOIN coverage_areas c ON c.id=a.coverage_area_id AND c.organization_id=a.organization_id LEFT JOIN packages p ON p.id=a.package_id AND p.organization_id=a.organization_id WHERE a.organization_id=? ORDER BY a.created_at DESC',orgId));
+ if(path==='/api/operations/applications'&&m==='POST'){
+  const name=String(body.fullName||'').trim(),phone=String(body.phone||'').trim(),address=String(body.address||'').trim();
+  if(!name||!phone||!address)return bad('Applicant name, phone and address are required.');
+  if(body.coverageAreaId&&!await one('SELECT id FROM coverage_areas WHERE id=? AND organization_id=?',body.coverageAreaId,orgId))return bad('Coverage area not found.',404);
+  if(body.packageId&&!await one('SELECT id FROM packages WHERE id=? AND organization_id=?',body.packageId,orgId))return bad('Package not found.',404);
+  const no='APP-'+Date.now().toString(36).toUpperCase();await run('INSERT INTO connection_applications(id,organization_id,application_no,full_name,phone,address,coverage_area_id,package_id,notes) VALUES(?,?,?,?,?,?,?,?,?)',id,orgId,no,name,phone,address,body.coverageAreaId||null,body.packageId||null,String(body.notes||'').trim()||null);
+  await auditOp('create','connection_application',id);return ok(await one('SELECT * FROM connection_applications WHERE id=? AND organization_id=?',id,orgId),201);
+ }
+ if((match=path.match(/^\/api\/operations\/applications\/([^/]+)$/))&&m==='PUT'){
+  const x=await one('SELECT * FROM connection_applications WHERE id=? AND organization_id=?',decodeURIComponent(match[1]),orgId);if(!x)return bad('Application not found.',404);
+  const status=body.status??x.status;if(!['pending','approved','rejected','installed','cancelled'].includes(status))return bad('Invalid application status.');
+  await run("UPDATE connection_applications SET status=?,notes=?,updated_at=datetime('now') WHERE id=? AND organization_id=?",status,body.notes??x.notes,x.id,orgId);
+  await auditOp('update','connection_application',x.id);return ok(await one('SELECT * FROM connection_applications WHERE id=? AND organization_id=?',x.id,orgId));
+ }
+ if(path==='/api/operations/partners'&&m==='GET')return ok(await all('SELECT * FROM business_partners WHERE organization_id=? ORDER BY name',orgId));
+ if(path==='/api/operations/partners'&&m==='POST'){
+  const name=String(body.name||'').trim(),type=body.type||'dealer',commission=Number(body.commissionPercent||0);
+  if(!name||!['dealer','sub_dealer'].includes(type)||!Number.isFinite(commission)||commission<0||commission>100)return bad('Valid partner name, type and commission are required.');
+  if(body.parentPartnerId&&!await one("SELECT id FROM business_partners WHERE id=? AND organization_id=? AND type='dealer'",body.parentPartnerId,orgId))return bad('Parent dealer not found.',404);
+  try{await run('INSERT INTO business_partners(id,organization_id,parent_partner_id,type,name,phone,address,commission_percent) VALUES(?,?,?,?,?,?,?,?,?)',id,orgId,body.parentPartnerId||null,type,name,String(body.phone||'').trim()||null,String(body.address||'').trim()||null,commission)}catch(e){if(/UNIQUE/i.test(String(e.message)))return bad('Partner name already exists.',409);throw e}
+  await auditOp('create','business_partner',id);return ok(await one('SELECT * FROM business_partners WHERE id=? AND organization_id=?',id,orgId),201);
+ }
+ if(path==='/api/operations/recovery-officers'&&m==='GET')return ok(await all('SELECT o.*,a.name area_name,u.name staff_name FROM recovery_officers o LEFT JOIN coverage_areas a ON a.id=o.area_id AND a.organization_id=o.organization_id LEFT JOIN users u ON u.id=o.user_id AND u.organization_id=o.organization_id WHERE o.organization_id=? ORDER BY o.name',orgId));
+ if(path==='/api/operations/recovery-officers'&&m==='POST'){
+  const name=String(body.name||'').trim();if(!name)return bad('Officer name is required.');
+  if(body.userId&&!await one('SELECT id FROM users WHERE id=? AND organization_id=?',body.userId,orgId))return bad('Staff user not found.',404);
+  if(body.areaId&&!await one('SELECT id FROM coverage_areas WHERE id=? AND organization_id=?',body.areaId,orgId))return bad('Coverage area not found.',404);
+  try{await run('INSERT INTO recovery_officers(id,organization_id,user_id,name,phone,area_id) VALUES(?,?,?,?,?,?)',id,orgId,body.userId||null,name,String(body.phone||'').trim()||null,body.areaId||null)}catch(e){if(/UNIQUE/i.test(String(e.message)))return bad('This staff member is already assigned as a recovery officer.',409);throw e}
+  await auditOp('create','recovery_officer',id);return ok(await one('SELECT * FROM recovery_officers WHERE id=? AND organization_id=?',id,orgId),201);
+ }
+ if(path==='/api/operations/collections'&&m==='GET')return ok(await all("SELECT c.*,u.name operator_name,o.name officer_name,p.name partner_name,trim(COALESCE(x.first_name,'')||' '||COALESCE(x.last_name,'')) customer_name,x.account_number FROM cash_collections c JOIN customers x ON x.id=c.customer_id AND x.organization_id=c.organization_id LEFT JOIN users u ON u.id=c.operator_user_id AND u.organization_id=c.organization_id LEFT JOIN recovery_officers o ON o.id=c.recovery_officer_id AND o.organization_id=c.organization_id LEFT JOIN business_partners p ON p.id=c.partner_id AND p.organization_id=c.organization_id WHERE c.organization_id=? ORDER BY c.received_at DESC LIMIT 500",orgId));
+ if(path==='/api/operations/collections'&&m==='POST'){
+  const amount=Number(body.amountPkr),method=body.method||'cash';if(typeof body.customerId!=='string'||!body.customerId||!Number.isSafeInteger(amount)||amount<=0||!['cash','bank','jazzcash','easypaisa','other'].includes(method))return bad('Customer, positive amount and valid payment method are required.');
+  if(!await one('SELECT id FROM customers WHERE id=? AND organization_id=?',body.customerId,orgId))return bad('Customer not found.',404);
+  if(body.recoveryOfficerId&&!await one('SELECT id FROM recovery_officers WHERE id=? AND organization_id=?',body.recoveryOfficerId,orgId))return bad('Recovery officer not found.',404);
+  if(body.partnerId&&!await one('SELECT id FROM business_partners WHERE id=? AND organization_id=?',body.partnerId,orgId))return bad('Partner not found.',404);
+  const amountId=id(),ledgerId=uuid();
+  await db.batch([db.prepare('INSERT INTO cash_collections(id,organization_id,customer_id,amount_pkr,method,operator_user_id,recovery_officer_id,partner_id,reference,notes) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(amountId,orgId,body.customerId,amount,method,userId,body.recoveryOfficerId||null,body.partnerId||null,String(body.reference||'').trim()||null,String(body.notes||'').trim()||null),db.prepare("INSERT INTO customer_ledger_entries(id,organization_id,customer_id,entry_type,amount_pkr,description,reference_type,reference_id,actor_user_id) VALUES(?,?,?,'credit',?,?,?,?,?)").bind(ledgerId,orgId,body.customerId,amount,'Cash collection · '+method,'cash_collection',amountId,userId)]);
+  await auditOp('create','cash_collection',amountId);return ok(await one('SELECT * FROM cash_collections WHERE id=? AND organization_id=?',amountId,orgId),201);
+ }
+ if(path==='/api/operations/payment-promises'&&m==='GET')return ok(await all("SELECT p.*,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) customer_name,c.account_number FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.promise_date,p.created_at DESC",orgId));
+ if(path==='/api/operations/payment-promises'&&m==='POST'){
+  const amount=Number(body.amountPkr),date=String(body.promiseDate||'');if(typeof body.customerId!=='string'||!body.customerId||!Number.isSafeInteger(amount)||amount<=0||!validDate(date))return bad('Customer, positive amount and valid promise date (YYYY-MM-DD) are required.');
+  if(!await one('SELECT id FROM customers WHERE id=? AND organization_id=?',body.customerId,orgId))return bad('Customer not found.',404);
+  await run('INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,notes,created_by) VALUES(?,?,?,?,?,?,?)',id,orgId,body.customerId,amount,date,String(body.notes||'').trim()||null,userId);
+  await auditOp('create','payment_promise',id);return ok(await one('SELECT * FROM payment_promises WHERE id=? AND organization_id=?',id,orgId),201);
+ }
+ if((match=path.match(/^\/api\/operations\/payment-promises\/([^/]+)$/))&&m==='PUT'){
+  const x=await one('SELECT * FROM payment_promises WHERE id=? AND organization_id=?',decodeURIComponent(match[1]),orgId);if(!x)return bad('Payment promise not found.',404);
+  const status=body.status??x.status;if(!['open','kept','broken','cancelled'].includes(status))return bad('Invalid promise status.');
+  await run("UPDATE payment_promises SET status=?,notes=?,updated_at=datetime('now') WHERE id=? AND organization_id=?",status,body.notes??x.notes,x.id,orgId);
+  await auditOp('update','payment_promise',x.id);return ok(await one('SELECT * FROM payment_promises WHERE id=? AND organization_id=?',x.id,orgId));
+ }
+ if(path==='/api/operations/inventory'&&m==='GET')return ok(await all('SELECT * FROM inventory_items WHERE organization_id=? ORDER BY name',orgId));
+ if(path==='/api/operations/inventory'&&m==='POST'){
+  const name=String(body.name||'').trim(),category=body.category||'other',qty=Number(body.quantity??0),reorder=Number(body.reorderLevel??0);
+  if(!name||!['onu','media_box','router','fiber','splitter','other'].includes(category)||!Number.isSafeInteger(qty)||qty<0||!Number.isSafeInteger(reorder)||reorder<0)return bad('Valid item name, category and non-negative quantities are required.');
+  try{
+   await run("INSERT INTO inventory_items(id,organization_id,sku,name,category,unit,quantity,reorder_level,location,serial_number,status) VALUES(?,?,?,?,?,?,0,?,?,?,'available')",id,orgId,String(body.sku||'').trim()||null,name,category,String(body.unit||'pcs'),reorder,String(body.location||'').trim()||null,String(body.serialNumber||'').trim()||null);
+   if(qty>0){await run("INSERT INTO inventory_movements(id,organization_id,item_id,quantity,movement_type,notes,actor_user_id) VALUES(?,?,?,?,'stock_in','Opening stock',?)",uuid(),orgId,id,qty,userId);await run("UPDATE inventory_items SET quantity=?,status=?,updated_at=datetime('now') WHERE id=? AND organization_id=?",qty,qty<=reorder?'low_stock':'available',id,orgId)}
+  }catch(e){if(/UNIQUE/i.test(String(e.message)))return bad('Inventory SKU already exists.',409);throw e}
+  await auditOp('create','inventory_item',id);return ok(await one('SELECT * FROM inventory_items WHERE id=? AND organization_id=?',id,orgId),201);
+ }
+ if((match=path.match(/^\/api\/operations\/inventory\/([^/]+)\/movements$/))&&m==='POST'){
+  const item=await one('SELECT * FROM inventory_items WHERE id=? AND organization_id=?',decodeURIComponent(match[1]),orgId);if(!item)return bad('Inventory item not found.',404);
+  const qty=Number(body.quantity),type=body.movementType;if(!Number.isSafeInteger(qty)||qty<=0||!['stock_in','stock_out','adjustment','assigned'].includes(type))return bad('Positive quantity and valid movement type are required.');
+  const delta=type==='stock_in'?qty:type==='adjustment'?Number(body.delta):-qty;if(!Number.isSafeInteger(delta)||delta===0||item.quantity+delta<0)return bad('Movement must change stock and cannot make the quantity negative; provide a valid adjustment delta.');
+  await db.batch([db.prepare('INSERT INTO inventory_movements(id,organization_id,item_id,quantity,movement_type,reference,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)').bind(uuid(),orgId,item.id,delta,type,String(body.reference||'').trim()||null,String(body.notes||'').trim()||null,userId),db.prepare("UPDATE inventory_items SET quantity=?,status=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(item.quantity+delta,item.quantity+delta<=item.reorder_level?'low_stock':'available',item.id,orgId)]);
+  await auditOp('stock_movement','inventory_item',item.id);return ok(await one('SELECT * FROM inventory_items WHERE id=? AND organization_id=?',item.id,orgId));
+ }
+ if((match=path.match(/^\/api\/operations\/customer-ledger\/([^/]+)$/))&&m==='GET'){
+  if(!await one('SELECT id FROM customers WHERE id=? AND organization_id=?',decodeURIComponent(match[1]),orgId))return bad('Customer not found.',404);
+  return ok(await all('SELECT * FROM customer_ledger_entries WHERE organization_id=? AND customer_id=? ORDER BY created_at DESC',orgId,decodeURIComponent(match[1])));
+ }
+ return bad('Operations endpoint not found.',404);
+}
+
 async function handleApi(request,env,url,path,m){if(path.startsWith('/api/customer-portal/')){path='/api/portal'+path.slice('/api/customer-portal'.length);if(path==='/api/portal/login')path='/api/portal/auth/login';if(path==='/api/portal/logout')path='/api/portal/auth/logout';if(path==='/api/portal/complaints')path='/api/portal/tickets';}const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
@@ -272,6 +414,7 @@ if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.sp
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='POST')return await savePortalAccount(request,env,path,orgId,userId,role,ip);
 if(path==='/api/auth/me'&&m==='GET')return await authMe(env,auth);
 if(path==='/api/auth/logout'&&m==='POST'){await env.DB.prepare('UPDATE users SET token_version=COALESCE(token_version,0)+1,updated_at=datetime(\'now\') WHERE id=? AND organization_id=?').bind(userId,orgId).run();return json({success:true})}
+if(path.startsWith('/api/operations/'))return await handleOperations(request,env,path,m,orgId,userId,ip);
 if(path==='/api/dashboard'&&m==='GET'){const raw=await (await dashStats(env,orgId)).json();return json({stats:{...raw,revenuePkr:raw.totalRevenue||0},data:raw})}
 if(path==='/api/reports/summary'&&m==='GET'){const [rawStats,rawRevenue]=await Promise.all([dashStats(env,orgId),repRev(env,url,orgId)]);const stats=await rawStats.json(),rev=await rawRevenue.json();return json({data:{monthlyRevenue:(rev.data||[]).map(x=>({month:x.m,revenue:x.t,count:x.c})),outstandingPkr:stats.pendingAmount||0}})}
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
