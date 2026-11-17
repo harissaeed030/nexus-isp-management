@@ -273,3 +273,12 @@ A corrective, additive migration `0018_reconcile_pppoe_and_sync_guards.sql` has 
 - No production D1 operation, Worker deployment, secret access, customer billing operation, or live network-device operation occurred. Restore rehearsal, public staging HTTP/E2E and production DDL reconciliation remain open.
 
 - A live negative staging test attempted a PPPoE account insert referencing a nonexistent router. The corrected trigger rejected it with `SQLITE_CONSTRAINT_TRIGGER`; a follow-up count confirmed zero probe rows. No real PPPoE account or credential was created.
+
+
+## Staging/production schema parity review — 2026-11-17
+
+A full `sqlite_master` inventory shows staging has newer network-automation/TR-069 objects absent from production (ACS connections, network connectors/jobs, router-customer mappings, TR-069 devices/audit logs and related indexes). Production retains a legacy `sync_state` table and a subscription-history trigger absent from staging. In addition, several shared-table definitions and indexes differ. This is not a safe blanket schema-copy or table-rebuild exercise; production may simply be on an older application generation. No attempt was made to force staging or production to match wholesale.
+
+A specific migration-0008 regression was identified: staging's `idx_users_org_email_ci` exists as a **non-unique** index on `(organization_id,email COLLATE NOCASE)`, while migration 0008 and production require a **UNIQUE** index on `(organization_id,lower(email)`. Staging preflight returned 177 users, zero NULL/blank password hashes, zero case-insensitive duplicate email groups, and zero exact duplicate email groups. Migration `0019_restore_case_insensitive_user_email_uniqueness.sql` was added with a temporary unique guard index before replacing the drifted index. It will be applied only after CI passes and a fresh staging export is complete.
+
+Restore rehearsal remains blocked: the D1 export endpoint confirms a complete D1-compatible SQL export and returns a time-limited signed download URL, but the available execution environment cannot retrieve that R2 object. Therefore no restore test is claimed. The backup artifact is evidence of export completion, not proof of recoverability.
