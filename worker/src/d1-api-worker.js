@@ -319,6 +319,8 @@ if(path.startsWith('/api/tr069/devices/')&&path.endsWith('/diagnostics')&&m==='P
 if(path.startsWith('/api/tr069/devices/')&&path.endsWith('/reboot')&&m==='POST')return await tr069Task(env,path,orgId,userId,'reboot');
 if(path.startsWith('/api/tr069/devices/')&&path.endsWith('/wifi')&&m==='POST')return await configureTr069Wifi(request,env,path,orgId,userId);
 
+if(path.match(/^\/api\/routers\/[^/]+\/customers\/[^/]+\/pppoe$/)&&m==='POST')return await mapRouterCustomer(request,env,path,orgId,userId,ip);
+if(path.match(/^\/api\/routers\/[^/]+\/customers$/)&&m==='GET')return await listRouterCustomerMappings(env,path,orgId);
 if(path==='/api/routers'&&m==='GET')return await listRouters(env,url,orgId);
 if(path==='/api/routers'&&m==='POST')return await createRouter(request,env,orgId,userId,ip);
 if(path.startsWith('/api/routers/')&&path.split('/').length===4&&['PUT','DELETE'].includes(m)){if(m==='PUT')return await updateRouter(request,env,path,orgId,userId,ip);return await delNetworkDevice(env,'/api/network/devices/'+path.split('/')[3],orgId,userId,ip)}
