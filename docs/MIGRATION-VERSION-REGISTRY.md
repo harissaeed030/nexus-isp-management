@@ -49,12 +49,7 @@ The D1 Worker schema has a separate numeric migration ledger; these IDs are not 
 | 0016 | `0016_router_customer_pppoe_mappings.sql` | Tenant-scoped RouterOS PPPoE username-to-customer mappings |
 | 0017 | `0017_users_password_hash_guard.sql` | Enforce non-empty password hashes on user insert/update in legacy nullable schemas |
 | 0018 | `0018_reconcile_pppoe_and_sync_guards.sql` | Correct PPPoE router type/tenant guards and sync operation index; reconcile verified 0010 ledger |
-| 0012 | `0012_customer_workspace_compatibility.sql` | Customer workspace compatibility |
-| 0013 | `0013_subscription_workspace_status.sql` | Subscription workspace status |
-| 0014 | `0014_router_credential_cipher.sql` | Encrypted RouterOS credential storage |
-| 0015 | `0015_genieacs_tr069_inventory.sql` | Tenant-scoped ACS connections, TR-069 devices and audit records |
-| 0016 | `0016_router_customer_pppoe_mappings.sql` | Tenant-scoped RouterOS PPPoE username-to-customer mappings |
-| 0017 | `0017_users_password_hash_guard.sql` | Enforce non-empty password hashes on user insert/update in legacy nullable schemas |
+
 
 Apply D1 migrations only after a verified backup, checking the live `schema_migrations` ledger and the exact production/staging schema. The development branch does not automatically apply these files to either database.
 
