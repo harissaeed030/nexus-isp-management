@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 const source = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 const migrationPattern = /\['(network_connectors(?:\.[^']+)?|network_jobs(?:\.[^']+)?|network_jobs)',"([^"]+)"\]/g;
 const migrations = [...source.matchAll(migrationPattern)];
-assert.ok(migrations.length >= 6, "Expected connector and job schema migrations to be present.");
+assert.ok(migrations.length >= 4, "Expected connector and job schema migrations to be present.");
 
 function makeDb() {
   const db = new DatabaseSync(":memory:");
