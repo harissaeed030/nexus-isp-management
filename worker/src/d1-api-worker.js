@@ -75,7 +75,8 @@ const ROLE_PERMISSIONS={
 function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
 function permissionForRoute(path,method){
  const v=String(method||'GET').toUpperCase(),match=base=>path===base||path.startsWith(base+'/');
- if(path==='/api/dashboard/stats')return v==='GET'?'dashboard.read':null;
+ if(path==='/api/dashboard'||path==='/api/dashboard/stats')return v==='GET'?'dashboard.read':null;
+ if(path==='/api/reports/summary')return v==='GET'?'reports.read':null;
  if(match('/api/customers'))return ({GET:'customers.read',POST:'customers.create',PUT:'customers.update',DELETE:'customers.delete'})[v]||null;
  if(match('/api/packages'))return v==='GET'?'packages.read':['POST','PUT','DELETE'].includes(v)?'packages.manage':null;
  if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
@@ -261,7 +262,7 @@ if(path==='/api/refunds'&&m==='GET')return await listRefunds(env,url,orgId);
 if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId,userId,ip);
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
 if(path==='/api/complaints'&&m==='GET'){const response=await listComp(env,url,orgId),body=await response.json();return json({...body,data:(body.data||[]).map(mapTicketRow),pagination:body.pagination?{...body.pagination,pageSize:body.pagination.pp}:undefined})}
-if(path==='/api/complaints'&&m==='POST'){const body=normalizeTicketPayload(await parseBody(request)||{});const adapted=new Request(request,{body:JSON.stringify(body),headers:request.headers});return await createComp(adapted,env,orgId,userId,ip)}
+if(path==='/api/complaints'&&m==='POST'){const body=normalizeTicketPayload(await parseBody(request)||{});const headers=new Headers(request.headers);headers.delete('content-length');const adapted=new Request(request.url,{method:'POST',headers,body:JSON.stringify(body)});return await createComp(adapted,env,orgId,userId,ip)}
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
