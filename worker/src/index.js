@@ -231,7 +231,6 @@ if(path==='/api/e2e/tenant'&&m==='DELETE'){
   env.DB.prepare('DELETE FROM login_attempts WHERE email IN (SELECT email FROM users WHERE organization_id=?) OR email IN (SELECT email FROM customer_portal_accounts WHERE organization_id=?)').bind(orgId,orgId),
   env.DB.prepare('DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE organization_id=?)').bind(orgId),
   env.DB.prepare('DELETE FROM refunds WHERE organization_id=?').bind(orgId),
-  env.DB.prepare('DELETE FROM payment_promises WHERE organization_id=?').bind(orgId),
   env.DB.prepare('DELETE FROM payments WHERE organization_id=?').bind(orgId),
   env.DB.prepare('DELETE FROM invoices WHERE organization_id=?').bind(orgId),
   env.DB.prepare('DELETE FROM subscriptions WHERE organization_id=?').bind(orgId),
@@ -252,6 +251,8 @@ if(path==='/api/e2e/tenant'&&m==='DELETE'){
   env.DB.prepare('DELETE FROM users WHERE organization_id=?').bind(orgId),
   env.DB.prepare('DELETE FROM organizations WHERE id=? AND slug=?').bind(orgId,org.slug)
  ];
+ const paymentPromisesTable=await env.DB.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='payment_promises'").first();
+ if(paymentPromisesTable)statements.splice(3,0,env.DB.prepare('DELETE FROM payment_promises WHERE organization_id=?').bind(orgId));
  await env.DB.batch(statements);
  return json({success:true,deletedTenant:org.slug})
 }
