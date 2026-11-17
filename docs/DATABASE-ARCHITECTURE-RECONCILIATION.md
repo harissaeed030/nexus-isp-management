@@ -98,9 +98,9 @@ Until those controls exist, use each runtime only for its declared purpose and e
 
 ## Feature-branch addition — 2026-11-17
 
-The hosted billing implementation adds `cloudflare/d1/migrations/0010_payment_promises.sql` for tenant-scoped payment commitments. The Worker also has an idempotent `CREATE TABLE IF NOT EXISTS` migration entry so a future reviewed deployment can initialize the feature safely.
+The hosted billing implementation adds `cloudflare/d1/migrations/0023_payment_promises.sql` for tenant-scoped payment commitments. Live production and staging already assign ID 10 to `0010_pppoe_connection_metadata`, and staging has assigned IDs 11–21 to other migrations. The earlier payment-promises file at ID 10 was therefore a collision and has been removed. Migration 0023 adds the table, index and tenant-integrity triggers; it is committed to the development branch only and has **not** been applied to either live database.
 
-This migration is committed to the feature branch only. It has **not** been applied to production or staging D1. The canonical schema snapshot remains the verified v7 baseline; migration 0010 is intentionally kept separate from that baseline.
+Security hardening is separately numbered 0022 and does not depend on the payment-promises table. The canonical schema snapshot remains the verified v7 baseline; migrations 0022 and 0023 remain incremental additions.
 
 
 ## Users-schema parity migration safety gate (2026-11-17)
@@ -118,4 +118,4 @@ The local parity regression script now also asserts that cross-tenant notificati
 
 ### D1 migration-number allocation correction (2026-11-17)
 
-Migration identifiers are globally unique within the shared `schema_migrations` ledger. The hosted payment-promises feature owns **0010** (`0010_payment_promises`). The separate manual users-table parity operation is therefore numbered **0011** (`0011_users_strict_schema_parity`) in both its staging migration ledger entry and production ledger-only SQL. Do not record both operations as version 10. The users-parity operation remains staging-only for the rebuild; production receives only its reviewed ledger record because its users table already has the target definition. Neither operation has been applied to live D1 by this feature branch.
+Migration identifiers are globally unique within the shared `schema_migrations` ledger. A read-only audit of live staging found IDs 10–21 already assigned, including ID 10 `0010_pppoe_connection_metadata`, ID 11 `0011_sync_staging_with_production`, ID 12 `0012_customer_workspace_compatibility`, and IDs 14–21 for router/network/field features. Consequently, the former payment-promises ID 10 and the former users-parity ID 12 both collided with live history and must never be applied. The corrected development sequence is ID 22 `0022_security_hardening`, ID 23 `0023_payment_promises`, and ID 24 `0024_users_strict_schema_parity`. ID 24 remains a manual staging-only candidate requiring the complete backup/restore rehearsal and explicit owner approval; no live D1 migration was applied by these source corrections.
