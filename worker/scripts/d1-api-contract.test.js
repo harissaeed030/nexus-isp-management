@@ -10,6 +10,7 @@ const customerMigration = await readFile(new URL("../../cloudflare/d1/migrations
 const subscriptionMigration = await readFile(new URL("../../cloudflare/d1/migrations/0013_subscription_workspace_status.sql", import.meta.url), "utf8");
 const acsMigration = await readFile(new URL("../../cloudflare/d1/migrations/0015_genieacs_tr069_inventory.sql", import.meta.url), "utf8");
 const routerMappingMigration = await readFile(new URL("../../cloudflare/d1/migrations/0016_router_customer_pppoe_mappings.sql", import.meta.url), "utf8");
+const userPasswordGuardMigration = await readFile(new URL("../../cloudflare/d1/migrations/0017_users_password_hash_guard.sql", import.meta.url), "utf8");
 
 test("D1 API Worker includes authenticated organization registration and login", () => {
   assert.match(source, /\/api\/auth\/register/);
@@ -348,4 +349,13 @@ test("TR-069 dashboard supports ACS enable, disable and delete actions", () => {
   assert.match(dashboardSource,/data-acs-delete/);
   assert.match(dashboardSource,/method:"PATCH",body:JSON\.stringify\(\{enabled:/);
   assert.match(dashboardSource,/method:"DELETE"/);
+});
+
+
+test("D1 users require a non-empty password hash on insert and update", () => {
+  assert.match(userPasswordGuardMigration, /BEFORE INSERT ON users/);
+  assert.match(userPasswordGuardMigration, /NEW\.password_hash IS NULL/);
+  assert.match(userPasswordGuardMigration, /BEFORE UPDATE OF password_hash ON users/);
+  assert.match(userPasswordGuardMigration, /users\.password_hash is required/);
+  assert.match(userPasswordGuardMigration, /VALUES \(17, '0017_users_password_hash_guard'/);
 });
