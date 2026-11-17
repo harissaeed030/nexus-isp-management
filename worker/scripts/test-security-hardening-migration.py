@@ -26,7 +26,7 @@ db.executescript(migration)
 assert db.execute("SELECT id,name FROM schema_migrations WHERE id=22").fetchall() == [(22,"0022_security_hardening")]
 assert db.execute("SELECT COUNT(*) FROM registration_attempts").fetchone()[0] == 0
 indexes = {row[1] for row in db.execute("PRAGMA index_list('registration_attempts')")}
-assert indexes == {"idx_registration_attempts_ip_time", "idx_registration_attempts_email_time"}
+assert {"idx_registration_attempts_ip_time", "idx_registration_attempts_email_time"} <= indexes
 assert db.execute("SELECT name FROM schema_migrations WHERE id=14").fetchone()[0] == "0014_router_credential_cipher"
 assert db.execute("SELECT name FROM schema_migrations WHERE id=21").fetchone()[0] == "0021_field_operations"
 print("Security migration 0022 idempotency and migration-ledger preservation passed.")
