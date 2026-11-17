@@ -359,3 +359,14 @@ test("D1 users require a non-empty password hash on insert and update", () => {
   assert.match(userPasswordGuardMigration, /users\.password_hash is required/);
   assert.match(userPasswordGuardMigration, /VALUES \(17, '0017_users_password_hash_guard'/);
 });
+
+const reconciliationMigration = await readFile(new URL("../../cloudflare/d1/migrations/0018_reconcile_pppoe_and_sync_guards.sql", import.meta.url), "utf8");
+
+test("D1 migration 0018 tightens PPPoE router tenant/type guards and sync idempotency index", () => {
+  assert.match(reconciliationMigration, /DROP TRIGGER IF EXISTS trg_d1_pppoe_router_org_i/);
+  assert.match(reconciliationMigration, /device_type = 'mikrotik'/);
+  assert.match(reconciliationMigration, /BEFORE UPDATE OF organization_id, router_id ON pppoe_accounts/);
+  assert.match(reconciliationMigration, /ON sync_operations\(organization_id, entity_type, entity_id\)/);
+  assert.match(reconciliationMigration, /VALUES \(10, '0010_pppoe_connection_metadata'/);
+  assert.match(reconciliationMigration, /VALUES \(18, '0018_reconcile_pppoe_and_sync_guards'/);
+});
