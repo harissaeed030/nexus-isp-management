@@ -101,3 +101,16 @@ Until those controls exist, use each runtime only for its declared purpose and e
 The hosted billing implementation adds `cloudflare/d1/migrations/0010_payment_promises.sql` for tenant-scoped payment commitments. The Worker also has an idempotent `CREATE TABLE IF NOT EXISTS` migration entry so a future reviewed deployment can initialize the feature safely.
 
 This migration is committed to the feature branch only. It has **not** been applied to production or staging D1. The canonical schema snapshot remains the verified v7 baseline; migration 0010 is intentionally kept separate from that baseline.
+
+
+## Users-schema parity migration safety gate (2026-11-17)
+
+The proposed strict users-table rebuild remains a **staging-only manual migration** and is not approved for execution merely because its SQL exists. Before any staging rehearsal:
+
+1. Export the exact staging D1 database and verify the export can be restored to a disposable D1 with matching table/row counts and zero foreign-key violations.
+2. Run the read-only report `worker/manual-migrations/2026-11-16-staging-users-schema-parity-preflight.sql` against staging. Every `issue_count` must be zero. In particular, a single NULL `password_hash` blocks the rebuild because the target production-compatible users table requires `password_hash NOT NULL`.
+3. Review duplicate exact emails, case-insensitive per-organization email collisions, missing organization references and every user-dependent relationship before proceeding. Do not delete, normalize or silently repair rows to make the preflight pass.
+4. Rehearse the migration against the disposable restored copy, compare every preserved dependent row, verify all six tenant-integrity triggers and required indexes, and require an empty `PRAGMA foreign_key_check`.
+5. Only after independent review and explicit owner approval may a separate staging change be considered. Production requires its own fresh export, restore rehearsal, review and explicit approval; this staging SQL must never be pointed at production.
+
+The local parity regression script now also asserts that cross-tenant notification, ticket-assignee and ticket-message writes are rejected after the rebuild. These are local SQLite-backed migration tests, not proof that a live D1 migration has run. No production or staging D1 database was changed by this documentation or test update.
