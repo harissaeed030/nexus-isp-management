@@ -2,9 +2,9 @@ name: Nexus backend verification
 
 on:
   push:
-    branches: [main, build/nexus-isp-core]
+    branches: [main, build/nexus-isp-core, work/core-feature-completion, fix/security-migration-0014-after-live-0013]
   pull_request:
-    branches: [main, build/nexus-isp-core]
+    branches: [main, build/nexus-isp-core, work/core-feature-completion]
   workflow_dispatch:
 
 permissions:
@@ -28,14 +28,25 @@ jobs:
       - name: Verify backend and dashboard
         working-directory: backend
         run: npm run verify
+      - name: Verify hosted frontend and Worker route contract
+        run: node worker/scripts/verify-frontend-worker-contract.mjs
+      - name: Syntax-check local password-hash benchmark harness (no benchmark/deploy)
+        run: |
+          node --check worker/benchmarks/password-hash-benchmark-worker.mjs
+          node --check worker/benchmarks/run-password-hash-benchmark.mjs
       - name: Verify production Worker source and staging-only route isolation
         run: |
+          node worker/scripts/verify-e2e-cleanup-schema-compat.mjs
           node --check worker/src/index.js
           node --check worker/src/production-worker.js
           node worker/scripts/verify-production-worker.mjs
-      - name: Validate D1 schema and migrations 0007–0009
+      - name: Validate D1 schema and migrations 0007–0009 plus 0022–0023
         run: python3 worker/scripts/validate-d1-schema.py
-      - name: Test staging users schema-parity migration with foreign keys enabled
+      - name: Verify security hardening source and tenant-guard migration
+        run: |
+          node worker/scripts/verify-security-hardening.mjs
+          python3 worker/scripts/test-security-hardening-migration.py
+      - name: Test staging users schema-parity migration 0024 with foreign keys enabled
         run: bash worker/scripts/test-d1-users-strict-schema-parity.sh
 
   live-smoke:
@@ -46,7 +57,6 @@ jobs:
       - name: Check production and staging Workers and Pages
         env:
           PRODUCTION_API: https://nexus-saas-api.harissaeed030.workers.dev
-          PRODUCTION_CANDIDATE_API: https://754901bc-nexus-saas-api.harissaeed030.workers.dev
           STAGING_API: https://nexus-saas-api-staging.harissaeed030.workers.dev
           FRONTEND_URL: https://nexus-isp-management.pages.dev
         run: |
@@ -54,9 +64,10 @@ jobs:
           import assert from "node:assert/strict";
 
           const origin = process.env.FRONTEND_URL;
+          // Probe only deployed service endpoints. Cloudflare version-preview URLs
+          // are not stable Worker routes (previews are disabled on this account).
           const targets = [
             ["production", process.env.PRODUCTION_API],
-            ["production-candidate", process.env.PRODUCTION_CANDIDATE_API],
             ["staging", process.env.STAGING_API],
           ];
 
@@ -129,7 +140,8 @@ jobs:
           NODE
 
   staging-portal-e2e:
-    name: Tenant isolation and customer portal E2E
+    if: github.event_name == 'workflow_dispatch'
+    name: Tenant isolation and customer portal E2E (manual dispatch only)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

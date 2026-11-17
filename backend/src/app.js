@@ -19,6 +19,7 @@ import { registerExportRoutes } from "./routes/exports.routes.js";
 import { registerAiRoutes } from "./routes/ai.routes.js";
 import { hasPermission, permissionFor } from "./lib/permissions.js";
 import { withTransaction } from "./lib/transactions.js";
+import { networkWriteGuard } from "./lib/network-write-guard.js";
 const app=express();app.disable("x-powered-by");app.use(helmet());
 const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../");
 app.use("/assets",express.static(resolve(projectRoot,"assets"),{fallthrough:false,maxAge:"1h"}));
@@ -52,6 +53,8 @@ app.post("/api/v1/auth/login",rateLimit({windowMs:15*60*1000,limit:10,standardHe
 app.get("/api/v1/auth/me",auth,(req,res)=>res.json({success:true,user:cleanUser(req.user),tenant:{id:req.user.tenant_id,name:db.prepare("SELECT name FROM tenants WHERE id=?").get(req.user.tenant_id).name}}));
 app.post("/api/v1/auth/logout",auth,(req,res)=>{db.prepare("DELETE FROM sessions WHERE token_hash=?").run(req.user.token_hash);res.json({success:true});});
 app.get("/api/v1/dashboard",auth,(req,res)=>{const t=req.user.tenant_id,c=sql=>db.prepare(sql).get(t).n;res.json({success:true,stats:{customers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=?"),activeCustomers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=? AND status='active'"),packages:c("SELECT COUNT(*) n FROM packages WHERE tenant_id=? AND status='active'"),unpaidInvoices:c("SELECT COUNT(*) n FROM invoices WHERE tenant_id=? AND status IN ('unpaid','partial')"),openTickets:c("SELECT COUNT(*) n FROM support_tickets WHERE tenant_id=? AND status IN ('open','in_progress')"),revenuePkr:db.prepare("SELECT COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE tenant_id=?),0)-COALESCE((SELECT SUM(amount_pkr) FROM payment_reversals WHERE tenant_id=?),0) n").get(t,t).n}});});
+// Device-affecting operations remain locked unless the local operator enables the feature flag and supplies a separate approval token.
+app.use(networkWriteGuard);
 registerCustomerRoutes(app,{db,auth,id,audit,fail});
 registerMikroTikRoutes(app,{db,auth,id,audit,fail});
 registerOltRoutes(app,{db,auth,id,audit,fail});

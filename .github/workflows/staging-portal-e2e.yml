@@ -2,8 +2,6 @@ name: NEXUS staging portal E2E
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "30 */6 * * *"
 
 permissions:
   contents: read
