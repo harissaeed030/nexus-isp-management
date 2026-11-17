@@ -55,6 +55,7 @@ The `sync_state` table difference may be legacy; the current checked-in SQLite-t
 
 ### P1 — complete platform integration
 
+- [ ] Resolve a confirmed dashboard/API contract mismatch before hosting the admin UI against D1: the dashboard submits/reads local-API fields such as `full_name`, `speedDownMbps` and `monthlyPricePkr`, while the D1 Worker currently reads/writes fields such as `first_name`, `speed_mbps` and `price`. The dashboard also calls `/api/v1/routers` and `/api/v1/acs/connections`, while the inspected D1 Worker exposes different network inventory/OLT/TR-069 routes and does not provide the local RouterOS route set. Add and test a deliberate compatibility/domain-mapping layer; do not assume path-prefix rewriting alone makes the APIs interchangeable.
 - [ ] Migrate remaining legacy SQLite route handlers to the shared async repository where appropriate; preserve SQLite compatibility and transaction semantics.
 - [ ] Expand database mapping/sync deliberately beyond the current five entities. Users, sessions, staff permissions, tickets, refunds, notifications, PPPoE credentials, routers, OLT/ONU and ACS data are not part of the current shared sync contract. Never sync passwords, session tokens or device secrets.
 - [ ] Define and test conflict, deletion, retry, reconciliation and recovery behavior before enabling broader synchronization. Financial ledger records must remain immutable.
