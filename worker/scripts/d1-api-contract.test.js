@@ -374,6 +374,7 @@ test("D1 migration 0018 tightens PPPoE router tenant/type guards and sync idempo
 const userEmailParityMigration = await readFile(new URL("../../cloudflare/d1/migrations/0019_restore_case_insensitive_user_email_uniqueness.sql", import.meta.url), "utf8");
 
 test("D1 migration 0019 restores case-insensitive organization-scoped user email uniqueness", () => {
+  assert.match(userEmailParityMigration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_users_org_email_ci_guard_0019/);
   assert.match(userEmailParityMigration, /DROP INDEX IF EXISTS idx_users_org_email_ci/);
   assert.match(userEmailParityMigration, /CREATE UNIQUE INDEX idx_users_org_email_ci/);
   assert.match(userEmailParityMigration, /ON users.*organization_id.*lower.*email/);
