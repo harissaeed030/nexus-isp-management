@@ -166,3 +166,13 @@ The Cloudflare D1 Worker now has a tenant-scoped ACS/TR-069 API contract matchin
 - GitHub Actions passed on code commit `b3e244ec8196db4ad8cda23f196e527cb9605a74`: D1 Worker syntax/contract tests, backend checks and backend verification.
 
 The checks are source-level only. No ACS endpoint was contacted, no credentials were added, no ONU task was sent, no migration was applied and no Worker was deployed. The configured NBI hostname must be the user's own trusted GenieACS instance. DNS/private-network egress policy and a staging NBI smoke test remain release gates.
+
+
+## Router PPPoE customer mapping — 2026-11-17
+
+- Added tenant-scoped D1 table `router_customer_mappings` through migration `0016_router_customer_pppoe_mappings.sql`.
+- Added Worker endpoints to save a router PPPoE username-to-customer mapping and list mappings for one router.
+- The mapping validates that both router and customer belong to the authenticated organization. It stores only the PPPoE username and mapping metadata, never a PPPoE password.
+- API response explicitly distinguishes a saved database mapping from a live RouterOS account: it does not create, change or verify any live PPPoE account.
+- Worker contract workflow passed on commit `55fa694979460967b6614a140e2123cdefe77f0e`.
+- No D1 migration applied, no Worker deployed, and no live MikroTik/PPPoE command sent.
