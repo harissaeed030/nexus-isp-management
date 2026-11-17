@@ -283,7 +283,7 @@ if(path==='/api/invoices'&&m==='POST')return await createInv(request,env,orgId,u
 if(path==='/api/payments'&&m==='POST'){const b=await parseBody(request);if(!b?.invoice_id)return json({error:'invoice_id is required'},400);const paymentPath='/api/invoices/'+encodeURIComponent(b.invoice_id)+'/payments';const paymentRequest=new Request(new URL(paymentPath,url),{method:'POST',headers:request.headers,body:JSON.stringify(b)});return await recPay(paymentRequest,env,paymentPath,orgId,userId,ip)}
 if(path==='/api/operations/payment-promises'&&m==='GET')return await listPaymentPromises(env,url,orgId);
 if(path==='/api/operations/payment-promises'&&m==='POST')return await createPaymentPromise(request,env,orgId,userId,ip);
-if(path.match(/^\\/api\\/operations\\/payment-promises\\/[^/]+$/)&&m==='PUT')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
+if(path.match(/^\/api\/operations\/payment-promises\/[^/]+$/)&&m==='PUT')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
 if(path==='/api/financial/aging'&&m==='GET')return await financialAging(env,orgId);
 if(path==='/api/billing/generate'&&m==='POST')return await generateBilling(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/invoices\/[^/]+$/)&&m==='GET')return await getInv(env,path,orgId);
