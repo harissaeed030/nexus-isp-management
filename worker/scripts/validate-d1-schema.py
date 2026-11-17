@@ -178,6 +178,63 @@ strict_fk_violations = strict.execute("PRAGMA foreign_key_check").fetchall()
 assert not strict_fk_violations, "Strict production-compatible users schema has FK violations"
 strict.close()
 
+
+# Migration 0010 is an additive hosted billing migration layered on top of
+# the canonical v7 snapshot. Exercise it separately so the baseline parity
+# comparison above remains anchored to migrations 0007-0009.
+migration_10 = (root / "cloudflare" / "d1" / "migrations" / "0010_payment_promises.sql").read_text()
+fresh.executescript(migration_10)
+fresh.executescript(migration_10)
+payment_promise_tables = {
+    row[0] for row in fresh.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )
+}
+assert "payment_promises" in payment_promise_tables, "Migration 0010 did not create payment_promises"
+payment_promise_indexes = {
+    row[1] for row in fresh.execute("PRAGMA index_list('payment_promises')")
+}
+assert "idx_payment_promises_org_date" in payment_promise_indexes, (
+    "Migration 0010 did not create the organization/date index"
+)
+
+fresh.execute(
+    "INSERT INTO organizations(id,name,slug) VALUES('billing-org','Billing Org','billing-org')"
+)
+fresh.execute(
+    "INSERT INTO customers(id,organization_id,first_name,last_name) "
+    "VALUES('billing-customer','billing-org','Billing','Customer')"
+)
+fresh.execute(
+    "INSERT INTO users(id,organization_id,email,role) "
+    "VALUES('billing-user','billing-org','billing-owner@example.invalid','owner')"
+)
+fresh.execute(
+    "INSERT INTO payment_promises(id,organization_id,customer_id,amount,promise_date,created_by) "
+    "VALUES('promise-valid','billing-org','billing-customer',1500,'2026-12-01','billing-user')"
+)
+for invalid_values in [
+    ("promise-zero", 0, "open"),
+    ("promise-negative", -1, "open"),
+    ("promise-bad-status", 1500, "pending"),
+]:
+    promise_id, amount, status = invalid_values
+    try:
+        fresh.execute(
+            "INSERT INTO payment_promises(id,organization_id,customer_id,amount,promise_date,status,created_by) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (promise_id, "billing-org", "billing-customer", amount, "2026-12-01", status, "billing-user"),
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise AssertionError("Payment promise accepted invalid amount/status: " + promise_id)
+
+fresh_fk_violations = fresh.execute("PRAGMA foreign_key_check").fetchall()
+assert not fresh_fk_violations, (
+    "Migration 0010 introduced foreign-key violations: " + repr(fresh_fk_violations)
+)
 fresh.close()
 
-print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0009, required indexes and foreign keys.")
+print("Payment-promises migration validation passed: idempotent table/index creation, valid inserts, amount/status constraints and foreign keys.")
+
