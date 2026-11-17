@@ -380,6 +380,7 @@ test("D1 migration 0018 tightens PPPoE router tenant/type guards and sync idempo
 
 const userEmailParityMigration = await readFile(new URL("../../cloudflare/d1/migrations/0019_restore_case_insensitive_user_email_uniqueness.sql", import.meta.url), "utf8");
 const workspaceEmailMigration = await readFile(new URL("../../cloudflare/d1/migrations/0020_allow_workspace_scoped_user_emails.sql", import.meta.url), "utf8");
+const fieldOperationsMigration = await readFile(new URL("../../cloudflare/d1/migrations/0021_field_operations.sql", import.meta.url), "utf8");
 
 test("D1 migration 0019 restores case-insensitive organization-scoped user email uniqueness", () => {
   assert.match(userEmailParityMigration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_users_org_email_ci_guard_0019/);
@@ -404,4 +405,24 @@ test("D1 migration 0020 removes global email uniqueness while retaining workspac
   assert.match(userEmailParityMigration, /CREATE UNIQUE INDEX idx_users_org_email_ci/);
   assert.match(source, /const workspace=normalizeWorkspaceLoginSlug\(b\)/);
   assert.match(source, /if\(rows\.length>1\)return json\(/);
+});
+
+
+test("D1 field operations APIs are tenant-isolated and cover the dashboard operations modules", () => {
+  for (const route of ["/api/operations/locations", "/api/operations/assignments", "/api/operations/coverage-areas", "/api/operations/applications", "/api/operations/partners", "/api/operations/recovery-officers", "/api/operations/collections", "/api/operations/payment-promises", "/api/operations/inventory", "/api/operations/customer-ledger"]) {
+    assert.ok(source.includes(route), "Missing field operations route: " + route);
+  }
+  assert.match(source, /async function handleOperations/);
+  assert.match(source, /WHERE id=\? AND organization_id=\?/);
+  assert.match(source, /idx_ops_ledger_customer/);
+});
+
+test("D1 migration 0021 creates the full tenant-scoped field operations schema", () => {
+  for (const table of ["geo_locations", "coverage_areas", "connection_applications", "business_partners", "recovery_officers", "field_assignments", "cash_collections", "payment_promises", "inventory_items", "inventory_movements", "customer_ledger_entries"]) {
+    assert.match(fieldOperationsMigration, new RegExp("CREATE TABLE IF NOT EXISTS " + table));
+  }
+  assert.match(fieldOperationsMigration, /organization_id TEXT NOT NULL/);
+  assert.match(fieldOperationsMigration, /VALUES\(21,'0021_field_operations'/);
+  assert.match(source, /ops\.geo_locations/);
+  assert.match(source, /ops\.index_ledger/);
 });
