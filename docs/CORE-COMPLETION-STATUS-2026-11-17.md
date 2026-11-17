@@ -185,3 +185,53 @@ The checks are source-level only. No ACS endpoint was contacted, no credentials 
 - TR-069 dashboard now supports enabling/disabling and deleting ACS connections. Deleting a connection removes its synchronized device inventory through the database cascade; the audit history remains.
 - Worker contract tests and backend checks/verification passed on commit `1fb31dc890b67b68d3d228654ebe15273eea87e2`.
 - No live ACS/RouterOS endpoint contacted, no device task sent, no migration applied, and no Worker deployed.
+
+## Live infrastructure execution update — 2026-11-17 07:06 UTC
+
+This section supersedes earlier statements in this document about the live status of migrations 0012–0016 and the staging Worker deployment. It records a fresh read-only audit followed by additive staging-only operations.
+
+### Repository and CI
+
+- Development branch head at audit start: `c877ffa6ce2c84e5671798c0b5840714ada2c790`.
+- The branch exists and has repository write permission.
+- GitHub compare reports `build/nexus-isp-core` is 417 commits ahead and 86 commits behind `main`; histories are diverged. No merge, rebase, force-push, or main-branch change was performed.
+- On the branch head, GitHub Actions `Nexus backend verification` run 613 and `Nexus backend checks` run 588 completed successfully.
+- The D1 API Worker contract/syntax workflow run 44 completed successfully on `1fb31dc890b67b68d3d228654ebe15273eea87e2`; the Worker source in that commit includes the RouterOS credential isolation change from `608becd86c00950ff4160ba07d1cb6f338865b8b`.
+
+### Live D1 reconciliation
+
+- The staging database is populated and must be treated as persistent data: pre-migration counts were 178 organizations, 181 customers, and 1 network device.
+- A D1 SQL export of `nexus-saas-staging-db` completed successfully before schema changes. This is an export backup; a separate restore rehearsal has not yet been verified.
+- Staging migration ledger already contained IDs 12 and 13, despite older notes in this document saying they were pending.
+- Staging migration 14 was absent and its target column was absent; migrations 15 and 16 and their target tables were absent. Preflight confirmed the required parent tables/columns existed.
+- Additive migrations 14, 15, and 16 were applied sequentially to staging only:
+  - `0014_router_credential_cipher`
+  - `0015_genieacs_tr069_inventory`
+  - `0016_router_customer_pppoe_mappings`
+- Postflight confirmed all three ledger entries, the credential cipher column, the ACS/TR-069 tables, the PPPoE mapping table, and the expected index.
+- Postflight counts remained 178 organizations, 181 customers, and 1 network device. `PRAGMA foreign_key_check` returned zero rows.
+- Production D1 was queried read-only and was not modified.
+
+### Migration ledger anomalies that remain
+
+- Staging has the PPPoE metadata columns from migration 0010, but no migration 10 ledger row. Do not rerun migration 0010 because its `ALTER TABLE` statements are not idempotent.
+- Production has migration 10 in its ledger and the corresponding columns.
+- Both databases have `sync_tenant_mappings` and `sync_operations`; staging records migration 11 under the name `0011_sync_staging_with_production`, while production has no migration 11 ledger row. Do not blindly rerun migration 11; compare its actual objects and historical deployment evidence first.
+- Production has a legacy `sync_state` table not present in staging. It has not been removed.
+- Staging and production `users` table DDL still differ, notably nullable versus NOT NULL `password_hash` and default ID/role shapes. This needs a reviewed compatibility plan; no rebuild was attempted.
+
+### Staging Worker deployment
+
+- The active `nexus-saas-api-staging` Worker was behind the latest branch Worker source: its previous deployment predated the RouterOS key-isolation and PPPoE customer-mapping route commits.
+- Uploaded the branch's current `worker/src/d1-api-worker.js` to the staging Worker only.
+- New active deployment: `69fcf223-82d3-4df7-8e56-fa6eab1caa3e`, created 2026-11-17 07:05:55 UTC.
+- Verified the active Worker still binds `DB` to `nexus-saas-staging-db`, keeps `ENVIRONMENT=staging`, keeps `NETWORK_CONNECTOR_ENABLED=false`, and retains the existing secret binding names without reading or changing their values.
+- Production Worker `nexus-saas-api` was not deployed or changed. The separate Green Fiber Net Workers were not accessed.
+
+### Remaining verification
+
+- A post-deployment live HTTP health/E2E request was not completed in this execution environment. The public Worker endpoint was inaccessible from the available network path.
+- The completed D1 export has not yet undergone a restore rehearsal.
+- No live MikroTik, HSGQ OLT, Huawei ONU, or GenieACS endpoint was contacted. Network integrations remain unverified against hardware.
+- No production schema, production Worker, secret value, financial transaction, or customer network configuration was changed.
+- The platform is not certified production-ready. Branch reconciliation, D1 ledger/DDL reconciliation, restore rehearsal, live staging E2E, independent security review, Android acceptance, and real-device verification remain release gates.
