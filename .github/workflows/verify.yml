@@ -2,9 +2,9 @@ name: Nexus backend verification
 
 on:
   push:
-    branches: [main, build/nexus-isp-core, work/core-feature-completion]
+    branches: [main, build/nexus-isp-core, work/core-feature-completion, fix/security-migration-0014-after-live-0013]
   pull_request:
-    branches: [main, build/nexus-isp-core]
+    branches: [main, build/nexus-isp-core, work/core-feature-completion]
   workflow_dispatch:
 
 permissions:
