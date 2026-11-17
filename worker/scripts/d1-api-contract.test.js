@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow } from "../src/d1-api-worker.js";
+import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
 const customerMigration = await readFile(new URL("../../cloudflare/d1/migrations/0012_customer_workspace_compatibility.sql", import.meta.url), "utf8");
 const subscriptionMigration = await readFile(new URL("../../cloudflare/d1/migrations/0013_subscription_workspace_status.sql", import.meta.url), "utf8");
+const acsMigration = await readFile(new URL("../../cloudflare/d1/migrations/0015_genieacs_tr069_inventory.sql", import.meta.url), "utf8");
 
 test("D1 API Worker includes authenticated organization registration and login", () => {
   assert.match(source, /\/api\/auth\/register/);
@@ -252,4 +253,66 @@ test("RouterOS credential storage is encrypted and live commands fail closed", (
   assert.match(source, /Live RouterOS API-SSL adapter is not configured/);
   assert.match(source, /async function createRouter/);
   assert.match(source, /async function updateRouter/);
+});
+
+
+test("ACS connection adapter accepts HTTPS public hostnames only", () => {
+  assert.equal(validateAcsBaseUrl("https://acs.example.com:7557"), true);
+  assert.equal(validateAcsBaseUrl("http://acs.example.com:7557"), false);
+  assert.equal(validateAcsBaseUrl("https://127.0.0.1:7557"), false);
+  assert.equal(validateAcsBaseUrl("https://router.local:7557"), false);
+  assert.equal(validateAcsBaseUrl("https://user:pass@acs.example.com"), false);
+  assert.deepEqual(normalizeAcsConnectionPayload({
+    name:" Main ACS ",baseUrl:"https://acs.example.com/",username:"api",password:"secret",
+    timeoutMs:90000
+  }), {
+    name:"Main ACS",baseUrl:"https://acs.example.com/",username:"api",password:"secret",
+    token:"",timeoutMs:30000
+  });
+});
+
+test("ACS connection and TR-069 device DTOs omit credentials and derive inform status", () => {
+  assert.deepEqual(mapAcsConnection({
+    id:"acs1",name:"Main ACS",base_url:"https://acs.example.com",enabled:1,
+    timeout_ms:8000,last_test_at:null,last_test_ok:null,last_error:null,
+    created_at:"now",updated_at:"now",password_cipher:"secret-cipher"
+  }), {
+    id:"acs1",name:"Main ACS",baseUrl:"https://acs.example.com",enabled:true,
+    timeoutMs:8000,lastTestAt:null,lastTestOk:null,lastError:null,createdAt:"now",updatedAt:"now"
+  });
+  const online=mapAcsDevice({
+    id:"dev1",device_id:"oui:product:serial",manufacturer:"Huawei",model:"HG8245",
+    last_inform_at:"2026-11-17T10:00:00.000Z",parameter_snapshot:"{}"
+  },Date.parse("2026-11-17T10:05:00.000Z"));
+  assert.equal(online.status,"online");
+  assert.equal(online.deviceId,"oui:product:serial");
+  assert.equal(mapAcsDevice({id:"dev2",device_id:"unknown",parameter_snapshot:"{}"},Date.now()).status,"unknown");
+});
+
+test("ACS parameter snapshots redact password-like values", () => {
+  const params=mapAcsParameters({
+    Device:{WiFi:{SSID:{_value:"HomeNet",_type:"xsd:string"},KeyPassphrase:{_value:"secret",_type:"xsd:string"}}}
+  });
+  assert.equal(params["Device.WiFi.SSID"].value,"HomeNet");
+  assert.equal(params["Device.WiFi.KeyPassphrase"].value,"[REDACTED]");
+});
+
+test("GenieACS D1 routes are tenant scoped, permission mapped and audit configuration changes", () => {
+  for(const route of ["/api/acs/connections","/api/tr069/devices","/api/tr069/audit-logs","/parameters","/diagnostics","/reboot","/wifi"])
+    assert.ok(source.includes(route)||source.includes("endsWith('"+route.slice(1)+"')"),"missing route "+route);
+  assert.match(source,/WHERE id=\? AND organization_id=\?/);
+  assert.match(source,/WHERE organization_id=\?/);
+  assert.match(source,/async function acsAudit/);
+  assert.match(source,/redirect:'error'/);
+  assert.match(source,/validateAcsBaseUrl/);
+  assert.match(source,/encryptAcsSecret/);
+});
+
+test("GenieACS D1 migration creates organization-isolated connection, device and audit tables", () => {
+  for(const table of ["acs_connections","tr069_devices","tr069_audit_logs"]) {
+    assert.match(acsMigration,new RegExp("CREATE TABLE IF NOT EXISTS "+table));
+    assert.match(acsMigration,/organization_id TEXT NOT NULL REFERENCES organizations\(id\)/);
+  }
+  assert.match(acsMigration,/UNIQUE\(organization_id,acs_connection_id,device_id\)/);
+  assert.match(acsMigration,/VALUES\(15,'0015_genieacs_tr069_inventory'/);
 });
