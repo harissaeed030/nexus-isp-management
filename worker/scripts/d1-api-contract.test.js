@@ -380,3 +380,8 @@ test("D1 migration 0019 restores case-insensitive organization-scoped user email
   assert.match(userEmailParityMigration, /ON users.*organization_id.*lower.*email/);
   assert.match(userEmailParityMigration, /VALUES\(19,'0019_restore_case_insensitive_user_email_uniqueness'/);
 });
+
+test("workspace login accepts the tenantSlug field sent by the dashboard", () => {
+  assert.match(source, /const requestedWorkspace=b\\.workspace\\?\\?b\\.tenantSlug\\?\\?b\\.tenant_slug/);
+  assert.match(source, /String\\(requestedWorkspace\\)\\.trim\\(\\)\\.toLowerCase\\(\\)/);
+});
