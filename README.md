@@ -101,7 +101,9 @@ All endpoints except health, root, initial setup and login require `Authorizatio
 - Notification console: `/notifications`; templates, queued messages, provider send/retry and delivery history under `/api/v1/notifications/*`
 - WhatsApp Cloud API uses Meta-approved template names and language codes for template sends (optional provider template name on each local template); without a provider template name, the API sends a free-form text message subject to Meta's 24-hour customer-care window. WhatsApp Cloud API secrets are server-only environment variables: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Configure the Meta webhook callback to `/api/v1/notifications/whatsapp/webhook`; the endpoint verifies the provider signature before accepting delivery updates.
 - ISP operations: `GET|POST /api/v1/operations/coverage-areas`, `PATCH /api/v1/operations/coverage-areas/:id`, `GET|POST /api/v1/operations/applications`, `PATCH /api/v1/operations/applications/:id`, `GET|POST /api/v1/operations/partners`, `GET|POST /api/v1/operations/recovery-officers`, `GET|POST /api/v1/operations/collections`, `GET|POST /api/v1/operations/payment-promises`, `PATCH /api/v1/operations/payment-promises/:id`, `GET|POST /api/v1/operations/locations`, `GET|POST /api/v1/operations/assignments`, `PATCH /api/v1/operations/assignments/:id`, `GET|POST /api/v1/operations/inventory`, `POST /api/v1/operations/inventory/:id/movements`, `GET /api/v1/operations/customer-ledger/:customerId`.
-- AI assistant: `POST /api/v1/ai/chat` (server-side Gemini proxy; requires `ai.chat`).\n- CSV exports: `GET /api/v1/exports/customers.csv`, `GET /api/v1/exports/invoices.csv`, `GET /api/v1/exports/payments.csv`, `GET /api/v1/exports/tickets.csv` (optional `from` and `to` date filters in `YYYY-MM-DD`; tenant-scoped and permission-checked).\n- CSV exports: `GET /api/v1/exports/customers.csv`, `GET /api/v1/exports/invoices.csv`, `GET /api/v1/exports/payments.csv`, `GET /api/v1/exports/tickets.csv` (optional `from` and `to` date filters in `YYYY-MM-DD`; tenant-scoped and permission-checked).\n- `GET /api/v1/audit-logs`
+- AI assistant: `POST /api/v1/ai/chat` (server-side Gemini proxy; requires `ai.chat`).
+- CSV exports: `GET /api/v1/exports/customers.csv`, `GET /api/v1/exports/invoices.csv`, `GET /api/v1/exports/payments.csv`, `GET /api/v1/exports/tickets.csv` (optional `from` and `to` date filters in `YYYY-MM-DD`; tenant-scoped and permission-checked).
+- `GET /api/v1/audit-logs`
 - `GET|POST /api/v1/staff`, `PATCH /api/v1/staff/:id` (owner/admin only)
 - `GET|POST /api/v1/olts`, `PATCH|DELETE /api/v1/olts/:id`, `GET /api/v1/olts/:id/capabilities`
 - `GET /api/v1/olts/:id/pons`, `PATCH /api/v1/pons/:id`
@@ -121,16 +123,29 @@ Staff roles have safe defaults (owner, admin, billing, NOC, support, technician 
 - Keep tenant scoping enforced in API queries.
 - Use HTTPS, proper role permissions, backups and security review before production use.
 
-## Roadmap
+## Roadmap and release gates
 
-1. Local SQLite API and data model.
-2. Connect dashboard UI to authentication and CRUD modules.
-3. Complete subscriptions, invoices, payment receipts and reports.
-4. Add staff roles, permissions, tests and backup/restore.
-5. Add MikroTik adapter and equipment inventory.
-6. Add vendor-specific OLT/ONU and GenieACS/TR-069 adapters.
-7. Review deployment architecture and production migration.
+The local SQLite build has the broadest implemented feature set. Hosted Cloudflare Worker/D1 parity is incomplete; the two environments must not be treated as interchangeable.
 
+Completed in the development branch:
+- Local SQLite owner authentication, tenant-scoped customer/package/subscription/billing/support/staff and ISP operations APIs.
+- Local backup/restore utilities, CSV exports, audit logging and automated verification suite.
+- Local MikroTik RouterOS API-SSL adapter and credential encryption, subject to lab acceptance.
+- OLT/ONU inventory and GenieACS/TR-069 adapter scaffolding with unsupported live HSGQ operations explicitly disabled.
+- Shared SQLite/D1 adapter foundation for a limited set of entities; legacy route migration and full schema parity are not complete.
+
+Still required before production:
+1. Reconcile production/staging D1 schema drift using the documented read-only audit and separately reviewed, additive migrations. Do not infer safety from migration numbers alone.
+2. Complete hosted Worker API and dashboard contract integration; the current Worker source on this branch is not a full hosted replacement for the local Express API.
+3. Port and review the network connector/agent foundation from its separate development branch as a focused integration; do not merge the divergent integration branch wholesale.
+4. Complete staging-only migration rehearsal, disposable database backup/restore drill and authenticated end-to-end tests.
+5. Profile Worker password hashing and CPU use on staging; configure secrets and exact CORS origins without exposing secret values.
+6. Perform independent security review, Android Chrome acceptance, operational monitoring and rollback rehearsal.
+7. Verify MikroTik RB750Gr3 / RouterOS 7 in a lab. Do not run commands against live customer routers without a separate change window and explicit authorization.
+8. Obtain official HSGQ-G04R firmware-specific management documentation before enabling OLT telemetry, optical levels, alarms or ONU provisioning. Hosted TR-069/GenieACS integration also remains a separate implementation.
+9. Only after the above gates pass, approve a production release and deploy through a reviewed release workflow.
+
+**Release status: NO-GO.** This repository is an active development build, not a production-ready SaaS release. No live customer service, payment collection or network control should rely on it as the sole system of record until the release gates are closed.
 ## HSGQ-G04R hardware integration
 See [docs/HSGQ-G04R-INTEGRATION.md](docs/HSGQ-G04R-INTEGRATION.md) for verified management methods, adapter limitations, credential encryption and the vendor documentation required before enabling live telemetry.
 
