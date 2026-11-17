@@ -2,11 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b3b58">
 <meta name="description" content="Nexus ISP Management — subscriber, billing and fiber operations dashboard.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NEXUS">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./assets/icons/nexus-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./assets/icons/nexus-icon.svg">
 <title>Nexus | ISP Management</title>
 <link rel="stylesheet" href="assets/css/styles.css?v=nexus-admin-dashboard-v2-20261117">
+<link rel="stylesheet" href="assets/css/mobile.css?v=nexus-android-pwa-v1">
 </head>
 <body>
 <div class="app-shell">
@@ -41,7 +49,7 @@
     <header class="topbar">
       <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
       <div class="crumb">Workspace <span>/</span> <b>Dashboard</b></div>
-      <div class="top-actions"><span class="demo-pill"><i></i> NEXUS WORKSPACE</span><div class="avatar small-avatar">VN</div></div>
+      <div class="top-actions"><button class="primary-btn" id="installApp" type="button" hidden>Install NEXUS</button><span class="demo-pill"><i></i> NEXUS WORKSPACE</span><div class="avatar small-avatar">VN</div></div>
     </header>
     <section class="content" aria-live="polite">
       <div class="page-heading"><div><p class="eyebrow">NEXUS ISP MANAGEMENT</p><h1>Dashboard</h1><p class="subheading">Your ISP operations at a glance.</p></div><button class="primary-btn" id="addCustomer">＋ Add customer</button></div>
@@ -51,5 +59,6 @@
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="assets/js/app.js?v=nexus-payment-promises-v1-20261116"></script>
+<script src="assets/js/pwa.js?v=nexus-android-pwa-v1"></script>
 </body>
 </html>
