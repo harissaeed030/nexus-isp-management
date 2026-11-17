@@ -382,6 +382,6 @@ test("D1 migration 0019 restores case-insensitive organization-scoped user email
 });
 
 test("workspace login accepts the tenantSlug field sent by the dashboard", () => {
-  assert.match(source, /const requestedWorkspace=b\\.workspace\\?\\?b\\.tenantSlug\\?\\?b\\.tenant_slug/);
-  assert.match(source, /String\\(requestedWorkspace\\)\\.trim\\(\\)\\.toLowerCase\\(\\)/);
+  assert.match(source, /const requestedWorkspace=b\.workspace\?\?b\.tenantSlug\?\?b\.tenant_slug/);
+  assert.match(source, /String\(requestedWorkspace\)\.trim\(\)\.toLowerCase\(\)/);
 });
