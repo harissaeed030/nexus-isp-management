@@ -149,3 +149,20 @@ The dashboard network inventory path has been advanced on the development branch
 - Contract tests cover OLT/ONU and RouterOS DTOs, encryption-path presence, and fail-closed behavior. D1 Worker tests and backend checks passed on `e2b3e3772a148cadc0699dadf51e9a96501495b4`. Dashboard form wiring is on the later UI commit and its verification was still running at the time of this note.
 
 No migrations were executed, no Worker deployed, no production/staging data changed, and no router/OLT/ONU hardware was contacted.
+
+
+## GenieACS / TR-069 D1 implementation — 2026-11-17
+
+The Cloudflare D1 Worker now has a tenant-scoped ACS/TR-069 API contract matching the existing dashboard:
+
+- ACS connection create/list/update/delete, connection test and device synchronization.
+- ACS credentials are encrypted with AES-GCM using a dedicated HKDF salt/info domain derived from the Worker secret. API DTOs never return credential ciphertext.
+- ACS endpoints require HTTPS and a hostname (not an IP literal, localhost or local/internal suffix); redirects are rejected and outbound requests have bounded timeouts.
+- Device inventory exposes manufacturer, model, serial, device ID, last inform, derived online/offline/unknown state and last sync time.
+- Parameter snapshots redact password/secret/private-key/PSK-like paths. Wi-Fi configuration accepts only parameter paths present in the discovered snapshot; password values are never written to audit logs.
+- Connection request, reboot and Wi-Fi configuration task endpoints are present. They submit NBI tasks only when an authenticated user explicitly invokes them; a queued response is not proof of CPE completion.
+- Audit entries cover connection configuration/test, sync, parameter reads, connection requests, reboot and Wi-Fi task submissions.
+- New D1 migration: `0015_genieacs_tr069_inventory.sql`, creating organization-scoped `acs_connections`, `tr069_devices` and `tr069_audit_logs` tables.
+- GitHub Actions passed on code commit `b3e244ec8196db4ad8cda23f196e527cb9605a74`: D1 Worker syntax/contract tests, backend checks and backend verification.
+
+The checks are source-level only. No ACS endpoint was contacted, no credentials were added, no ONU task was sent, no migration was applied and no Worker was deployed. The configured NBI hostname must be the user's own trusted GenieACS instance. DNS/private-network egress policy and a staging NBI smoke test remain release gates.
