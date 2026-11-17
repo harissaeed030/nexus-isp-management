@@ -2,6 +2,8 @@
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 export function normalizeApiMethod(method){return method==='PATCH'?'PUT':method}
+export function mapTicketRow(row){return {...row,customer_name:[row.first_name,row.last_name].filter(Boolean).join(' ')||row.customer_name||'',customer_id:row.customer_id||null,priority:row.priority||'normal'}}
+export function normalizeTicketPayload(body){return {...body,customer_id:body.customer_id??body.customerId??null,subject:body.subject,description:body.description||null}}
 function uuid(){return crypto.randomUUID()}
 function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
 function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
@@ -224,12 +226,15 @@ if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
 const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status,token_version FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
+if(path==='/api/tickets')path='/api/complaints';
 // Staging-only E2E teardown. This route is unreachable on production hostnames.
 if(!await roleAllowedWithOverrides(env,orgId,userId,role,path,m))return json({error:'Forbidden',message:'Your role does not have permission for this action'},403);
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='GET')return await getPortalAccount(env,path,orgId,role);
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='POST')return await savePortalAccount(request,env,path,orgId,userId,role,ip);
 if(path==='/api/auth/me'&&m==='GET')return await authMe(env,auth);
 if(path==='/api/auth/logout'&&m==='POST'){await env.DB.prepare('UPDATE users SET token_version=COALESCE(token_version,0)+1,updated_at=datetime(\'now\') WHERE id=? AND organization_id=?').bind(userId,orgId).run();return json({success:true})}
+if(path==='/api/dashboard'&&m==='GET'){const raw=await (await dashStats(env,orgId)).json();return json({stats:{...raw,revenuePkr:raw.totalRevenue||0},data:raw})}
+if(path==='/api/reports/summary'&&m==='GET'){const [rawStats,rawRevenue]=await Promise.all([dashStats(env,orgId),repRev(env,url,orgId)]);const stats=await rawStats.json(),rev=await rawRevenue.json();return json({data:{monthlyRevenue:(rev.data||[]).map(x=>({month:x.m,revenue:x.t,count:x.c})),outstandingPkr:stats.pendingAmount||0}})}
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
 if(path==='/api/customers'&&m==='GET')return await listCust(env,url,orgId);
 if(path==='/api/customers'&&m==='POST')return await createCust(request,env,orgId,userId,ip);
@@ -255,8 +260,8 @@ if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
 if(path==='/api/refunds'&&m==='GET')return await listRefunds(env,url,orgId);
 if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId,userId,ip);
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
-if(path==='/api/complaints'&&m==='GET')return await listComp(env,url,orgId);
-if(path==='/api/complaints'&&m==='POST')return await createComp(request,env,orgId,userId,ip);
+if(path==='/api/complaints'&&m==='GET'){const response=await listComp(env,url,orgId),body=await response.json();return json({...body,data:(body.data||[]).map(mapTicketRow),pagination:body.pagination?{...body.pagination,pageSize:body.pagination.pp}:undefined})}
+if(path==='/api/complaints'&&m==='POST'){const body=normalizeTicketPayload(await parseBody(request)||{});const adapted=new Request(request,{body:JSON.stringify(body),headers:request.headers});return await createComp(adapted,env,orgId,userId,ip)}
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
