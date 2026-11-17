@@ -372,6 +372,7 @@ test("D1 migration 0018 tightens PPPoE router tenant/type guards and sync idempo
 });
 
 const userEmailParityMigration = await readFile(new URL("../../cloudflare/d1/migrations/0019_restore_case_insensitive_user_email_uniqueness.sql", import.meta.url), "utf8");
+const workspaceEmailMigration = await readFile(new URL("../../cloudflare/d1/migrations/0020_allow_workspace_scoped_user_emails.sql", import.meta.url), "utf8");
 
 test("D1 migration 0019 restores case-insensitive organization-scoped user email uniqueness", () => {
   assert.match(userEmailParityMigration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_users_org_email_ci_guard_0019/);
@@ -384,4 +385,12 @@ test("D1 migration 0019 restores case-insensitive organization-scoped user email
 test("workspace login accepts the tenantSlug field sent by the dashboard", () => {
   assert.match(source, /const requestedWorkspace=b\.workspace\?\?b\.tenantSlug\?\?b\.tenant_slug/);
   assert.match(source, /String\(requestedWorkspace\)\.trim\(\)\.toLowerCase\(\)/);
+});
+
+test("D1 migration 0020 removes global email uniqueness while retaining workspace-scoped uniqueness", () => {
+  assert.match(workspaceEmailMigration, /DROP INDEX IF EXISTS idx_users_email_global/);
+  assert.match(workspaceEmailMigration, /VALUES\(20,'0020_allow_workspace_scoped_user_emails'/);
+  assert.match(userEmailParityMigration, /CREATE UNIQUE INDEX idx_users_org_email_ci/);
+  assert.match(source, /requestedWorkspace=b\\.workspace\\?\\?b\\.tenantSlug\\?\\?b\\.tenant_slug/);
+  assert.match(source, /if\(rows\.length>1\)return json\(/);
 });
