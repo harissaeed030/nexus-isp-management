@@ -13,6 +13,10 @@ The Worker migration runner automatically applies additive schema migrations on 
 - Do not change Cloudflare secrets or production D1 records as part of this setup.
 - Do not run the local agent until the operator explicitly approves a read-only connection to the named lab router.
 
+## Dashboard access
+
+After the hosted Worker branch is reviewed and deployed to the chosen non-production environment, sign in to the NEXUS hosted dashboard and open **Fiber Network → Network Connectors & Jobs**. The page can register a connector, display its one-time token once, list connectors/jobs, disable a connector and queue only the four supported read-only MikroTik operations. It does not expose device write controls.
+
 ## Hosted API flow
 
 All user routes require an authenticated owner/admin session unless a narrower role permission is granted.
