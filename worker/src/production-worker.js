@@ -253,8 +253,18 @@ if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
 if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
-const{orgId,userId}=auth;request=await adaptHostedBody(request,path);const currentUser=await env.DB.prepare('SELECT role,status,token_version FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
-// Staging-only E2E teardown. This route is unreachable on production hostnames.
+const{orgId,userId}=auth;request=await adaptHostedBody(request,path);const currentUser=await env.DB.prepare('SELECT role,status,token_version,email FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
+// Synthetic tenant teardown is available only on the dedicated staging Worker.
+if(path==='/api/e2e/tenant'&&m==='DELETE'){
+ if(env.ENVIRONMENT!=='staging')return json({error:'Not Found',path},404);
+ if(role!=='owner'||!String(currentUser.email||'').toLowerCase().endsWith('@e2e.invalid'))return json({error:'Forbidden'},403);
+ const body=await parseBody(request),slug=typeof body?.slug==='string'?body.slug.trim():'';
+ if(!/^nexus-stage-\\d+-\\d+-[a-z0-9-]+$/.test(slug))return json({error:'A valid synthetic staging tenant slug is required'},400);
+ const tenant=await env.DB.prepare('SELECT id FROM organizations WHERE id=? AND slug=?').bind(orgId,slug).first();
+ if(!tenant)return json({error:'Synthetic staging tenant not found'},404);
+ await env.DB.batch([env.DB.prepare('DELETE FROM audit_log WHERE organization_id=?').bind(orgId),env.DB.prepare('DELETE FROM organizations WHERE id=? AND slug=?').bind(orgId,slug)]);
+ return json({success:true});
+}
 if(!await roleAllowedWithOverrides(env,orgId,userId,role,path,m))return json({error:'Forbidden',message:'Your role does not have permission for this action'},403);
 if(path.startsWith('/api/customers/')&&path.endsWith('/profile')&&path.split('/').length===5&&m==='GET'){const customerPath=path.slice(0,-8),response=await getCust(env,customerPath,orgId),raw=await response.json();if(response.status!==200)return response;const customer={...raw,service_address:raw.installation_address,coverage_area:raw.city,full_name:[raw.first_name,raw.last_name].filter(Boolean).join(' '),account_number:raw.customer_code};return json({data:{customer,subscriptions:(raw.subscriptions||[]).map(x=>({...x,started_at:x.start_date,expires_at:x.end_date,speed_down_mbps:x.speed_mbps,speed_up_mbps:x.speed_mbps,monthly_price_pkr:x.price})),invoices:(raw.invoices||[]).map(x=>({...x,amount_pkr:x.total??x.amount})),payments:(raw.payments||[]).map(x=>({...x,amount_pkr:x.amount,method:x.payment_method,received_at:x.paid_at,invoice_number:''})),complaints:raw.complaints||[],connectionHistory:[],subscriptionHistory:[]}})}
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='GET')return await getPortalAccount(env,path,orgId,role);
