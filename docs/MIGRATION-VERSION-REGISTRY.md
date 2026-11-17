@@ -40,6 +40,15 @@ The D1 Worker schema has a separate numeric migration ledger; these IDs are not 
 
 | ID | Migration | Purpose |
 |---|---|---|
+| 0010 | `0010_pppoe_connection_metadata.sql` | PPPoE router/MAC/connection metadata, indexes and tenant/type guards |
+| 0011 | `0011_sqlite_sync_inbox.sql` | Sync tenant mappings, operation idempotency table and index |
+| 0012 | `0012_customer_workspace_compatibility.sql` | Customer workspace compatibility |
+| 0013 | `0013_subscription_workspace_status.sql` | Subscription workspace status |
+| 0014 | `0014_router_credential_cipher.sql` | Encrypted RouterOS credential storage |
+| 0015 | `0015_genieacs_tr069_inventory.sql` | Tenant-scoped ACS connections, TR-069 devices and audit records |
+| 0016 | `0016_router_customer_pppoe_mappings.sql` | Tenant-scoped RouterOS PPPoE username-to-customer mappings |
+| 0017 | `0017_users_password_hash_guard.sql` | Enforce non-empty password hashes on user insert/update in legacy nullable schemas |
+| 0018 | `0018_reconcile_pppoe_and_sync_guards.sql` | Correct PPPoE router type/tenant guards and sync operation index; reconcile verified 0010 ledger |
 | 0012 | `0012_customer_workspace_compatibility.sql` | Customer workspace compatibility |
 | 0013 | `0013_subscription_workspace_status.sql` | Subscription workspace status |
 | 0014 | `0014_router_credential_cipher.sql` | Encrypted RouterOS credential storage |
@@ -48,3 +57,10 @@ The D1 Worker schema has a separate numeric migration ledger; these IDs are not 
 | 0017 | `0017_users_password_hash_guard.sql` | Enforce non-empty password hashes on user insert/update in legacy nullable schemas |
 
 Apply D1 migrations only after a verified backup, checking the live `schema_migrations` ledger and the exact production/staging schema. The development branch does not automatically apply these files to either database.
+
+
+### Live reconciliation note — 2026-11-17
+
+The staging D1 database had the four PPPoE metadata columns and the three migration-0010 indexes, but its router guard triggers were weaker than the canonical migration: they did not require `device_type='mikrotik'`, and the update trigger ran on every update. Staging also had the migration-0011 sync tables, but its `idx_sync_operations_org_entity` omitted `entity_id`. Production had the stricter PPPoE guards and the three-column sync index. Staging's migration ledger had no ID 10; ID 11 was recorded with the historical name `0011_sync_staging_with_production`. Production had ID 10 and no ID 11 row.
+
+Migration 0018 is a staging reconciliation: it recreates the two PPPoE router guards to match migration 0010, rebuilds the sync index with all three key columns, and records the already-present migration-0010 schema as applied. It does not rewrite the historical ID 11 entry, delete legacy `sync_state`, rebuild tables, or modify business rows. Apply only after a fresh staging export and preflight; production remains unchanged.
