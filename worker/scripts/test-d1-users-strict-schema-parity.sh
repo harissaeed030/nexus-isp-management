@@ -10,6 +10,7 @@ sqlite3 "$DB" <<'SQL'
 PRAGMA foreign_keys=ON;
 CREATE TABLE organizations(id TEXT PRIMARY KEY,name TEXT NOT NULL,slug TEXT NOT NULL UNIQUE);
 CREATE TABLE schema_migrations(id INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL DEFAULT(datetime('now')));
+INSERT INTO schema_migrations(id,name) VALUES(11,'0011_sync_staging_with_production'),(100,'sync_ledger_and_failures_tables');
 CREATE TABLE customers(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE);
 CREATE TABLE users(
  id TEXT PRIMARY KEY DEFAULT(lower(hex(randomblob(16)))),organization_id TEXT NOT NULL,
@@ -68,7 +69,7 @@ test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM ticket_messages WHERE id='message-a'
 test -z "$(sqlite3 "$DB" "PRAGMA foreign_key_check;")"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_d1_%';")" = "6"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('idx_users_organization','idx_users_email_global','idx_users_org_email_ci');")" = "3"
-test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM schema_migrations WHERE id=11 AND name='0011_users_strict_schema_parity';")" = "1"
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM schema_migrations WHERE id=12 AND name='0012_users_strict_schema_parity';")" = "1"
 
 # Production-compatible constraints: missing password hash rejected; role defaults to staff.
 if sqlite3 "$DB" "INSERT INTO users(id,organization_id,email,role) VALUES('bad-null-hash','org-a','nullhash@example.test','staff');" >/dev/null 2>&1; then
@@ -85,7 +86,9 @@ if sqlite3 "$DB" "INSERT INTO users(id,organization_id,email,password_hash,role)
 fi
 
 echo "PASS: all user/dependent rows preserved"
+test "$(sqlite3 "$DB" "SELECT name FROM schema_migrations WHERE id=11;")" = "0011_sync_staging_with_production"
 echo "PASS: exact production users constraints/defaults and column order restored"
+echo "PASS: existing migration 0011 preserved and users parity recorded as 0012"
 echo "PASS: global and organization-scoped email indexes preserved"
 echo "PASS: six organization-integrity triggers restored"
 
