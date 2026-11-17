@@ -1,6 +1,6 @@
 # PR #67 security hardening
 
-- New passwords use versioned PBKDF2-HMAC-SHA256 at 600,000 iterations. Existing salted 100,000-iteration owner/staff hashes remain verifiable and upgrade after successful login. Missing/malformed salts fail closed; plaintext fallback is removed. New passwords are limited to 8–128 characters.
+- New passwords use versioned PBKDF2-HMAC-SHA256 at 600,000 iterations. Existing salted 100,000-iteration owner/staff and customer-portal hashes remain verifiable and upgrade after successful login. Missing/malformed salts fail closed; plaintext fallback is removed. New passwords are limited to 8–128 characters.
 - Production JSON API responses set Cache-Control: no-store and Pragma: no-cache.
 - Registration is throttled to 5 attempts per IP and 3 per normalized email per 15 minutes. This does not replace Cloudflare edge rate limiting or verified-email onboarding.
 - New PPPoE ciphertext uses the separate PPPOE_ENCRYPTION_KEY secret (minimum 32 bytes) and enc:v2. Existing enc:v1 values remain decryptable with the original JWT_SECRET HKDF derivation. Keep JWT_SECRET until legacy v1 records are re-encrypted through a separately reviewed process.

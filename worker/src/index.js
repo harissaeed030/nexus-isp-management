@@ -388,7 +388,8 @@ async function portalLogin(r,env,ip){
  if(!account||account.customer_status!=='active'||!await verifyPw(b.password,account.password_hash,account.password_salt)){
   await recordLoginFailure(env,ip,rateKey);return json({error:'Invalid portal credentials'},401);
  }
- await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
+ if(!isCurrentPasswordHash(account.password_hash)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE customer_portal_accounts SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(upgraded.hash,upgraded.salt,account.id,org.id).run();}
+  await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
  await env.DB.prepare("UPDATE customer_portal_accounts SET last_login=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(account.id,org.id).run();
  const token=await signJWT({principalType:'customer',portalAccountId:account.id,customerId:account.customer_id,orgId:org.id,tokenVersion:Number(account.token_version||0),exp:Date.now()+604800000},getSec(env));
  await audit(env,org.id,null,'customer_portal_login','Customer portal login',ip);
