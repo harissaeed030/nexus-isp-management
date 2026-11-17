@@ -94,3 +94,10 @@ Until those controls exist, use each runtime only for its declared purpose and e
 - Production: deploy only with `worker/wrangler.production.toml`; verify backup, migration state, inherited secrets/bindings and staging E2E first.
 - Never run `worker/schema.sql` on an existing D1 database.
 - Never claim SQLite/D1 data parity or synchronization unless a separately reviewed sync implementation and reconciliation report exist.
+
+
+## Feature-branch addition — 2026-11-17
+
+The hosted billing implementation adds `cloudflare/d1/migrations/0010_payment_promises.sql` for tenant-scoped payment commitments. The Worker also has an idempotent `CREATE TABLE IF NOT EXISTS` migration entry so a future reviewed deployment can initialize the feature safely.
+
+This migration is committed to the feature branch only. It has **not** been applied to production or staging D1. The canonical schema snapshot remains the verified v7 baseline; migration 0010 is intentionally kept separate from that baseline.
