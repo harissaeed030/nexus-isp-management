@@ -6,7 +6,10 @@
   "scripts": {
     "android:add": "cap add android",
     "android:sync": "cap sync android",
-    "android:build": "cd android && ./gradlew assembleDebug"
+    "android:build": "cd android && ./gradlew assembleDebug",
+    "android:open": "cap open android",
+    "android:release": "cd android && ./gradlew assembleRelease",
+    "build:android": "npm run android:sync && npm run android:build"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
