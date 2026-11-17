@@ -56,7 +56,7 @@ The `sync_state` table difference may be legacy; the current checked-in SQLite-t
 ### P1 — complete platform integration
 
 - [x] Add a backward-compatible D1 Worker method adapter for dashboard `PATCH` updates by mapping them to the existing `PUT` handlers; add a contract test. This is committed on the development branch only and has not been deployed.
-- [ ] Resolve a confirmed dashboard/API contract mismatch before hosting the admin UI against D1: the dashboard submits/reads local-API fields such as `full_name`, `speedDownMbps` and `monthlyPricePkr`, while the D1 Worker currently reads/writes fields such as `first_name`, `speed_mbps` and `price`. The dashboard also calls `/api/v1/routers` and `/api/v1/acs/connections`, while the inspected D1 Worker exposes different network inventory/OLT/TR-069 routes and does not provide the local RouterOS route set. Add and test a deliberate compatibility/domain-mapping layer; do not assume path-prefix rewriting alone makes the APIs interchangeable.
+- [ ] Complete the dashboard/D1 compatibility layer. Dashboard and ticket/report adapters are now in place; customer CRUD DTO mapping and an additive D1 migration are committed, but the migration has not been applied and customer E2E acceptance is still open. Package, subscription, invoice and payment DTOs plus remaining network/operations route families still need deliberate mapping. Do not assume path-prefix rewriting alone makes the APIs interchangeable.
 - [ ] Migrate remaining legacy SQLite route handlers to the shared async repository where appropriate; preserve SQLite compatibility and transaction semantics.
 - [ ] Expand database mapping/sync deliberately beyond the current five entities. Users, sessions, staff permissions, tickets, refunds, notifications, PPPoE credentials, routers, OLT/ONU and ACS data are not part of the current shared sync contract. Never sync passwords, session tokens or device secrets.
 - [ ] Define and test conflict, deletion, retry, reconciliation and recovery behavior before enabling broader synchronization. Financial ledger records must remain immutable.
@@ -93,3 +93,18 @@ Verification on `ff66e87e0b15550987ebda56c0a240fe6a2123af`: GitHub Actions `Clou
 
 **Testing readiness:** suitable to begin controlled local/staging testing after selecting an exact candidate SHA and confirming staging data is synthetic and backed up.  
 **Production readiness:** NO-GO until all P0 release gates are evidenced and approved.
+
+
+## Customer dashboard compatibility work — 2026-11-17
+
+The development branch now contains a first customer-management compatibility slice:
+
+- D1 customer list accepts the dashboard's `pageSize`, `q`, `coverageArea` and `connectionStatus` filters and returns `pagination.pageSize`.
+- Customer rows expose `full_name`, `account_number`, `service_address`, `coverage_area` and a distinct `connection_status`.
+- Create/update adapters translate dashboard camelCase fields, split full names, and keep account status separate from connection status.
+- The customer profile route returns tenant-scoped subscriptions, invoices, payments, complaints and history collections.
+- Delete now returns HTTP 409 when linked billing, subscription, support or network records exist, matching the dashboard's stated retention behavior.
+- New additive D1 migration: `cloudflare/d1/migrations/0012_customer_workspace_compatibility.sql`. It adds customer workspace columns and tenant-guarded history tables. It has been committed only; it has NOT been applied to staging or production. The updated Worker requires this migration before customer routes that query the new columns can be exercised.
+- Contract tests cover the DTOs, route expectations, linked-record protection and migration tenant guards. GitHub Actions D1 Worker and backend verification workflows passed on `55703f4a7d2b02e475114941e5fa3b2d9bbcfb6f`; the backend checks workflow was still running at the time of this note.
+
+No Cloudflare D1 schema was changed and no Worker was deployed. Production and staging remain untouched. Customer compatibility is not yet end-to-end verified; package, subscription, billing, network and operations adapters remain open.
