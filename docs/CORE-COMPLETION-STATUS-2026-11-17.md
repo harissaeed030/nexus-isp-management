@@ -176,3 +176,12 @@ The checks are source-level only. No ACS endpoint was contacted, no credentials 
 - API response explicitly distinguishes a saved database mapping from a live RouterOS account: it does not create, change or verify any live PPPoE account.
 - Worker contract workflow passed on commit `55fa694979460967b6614a140e2123cdefe77f0e`.
 - No D1 migration applied, no Worker deployed, and no live MikroTik/PPPoE command sent.
+
+
+## RouterOS credential isolation and ACS controls — 2026-11-17
+
+- RouterOS API credentials now use a dedicated HKDF/AES-GCM key context and `rtr:v1` ciphertext format, separate from PPPoE and GenieACS credential encryption. Ciphertext is excluded from router DTOs.
+- Added a decrypt helper for a future verified RouterOS adapter; no Worker route currently sends RouterOS commands.
+- TR-069 dashboard now supports enabling/disabling and deleting ACS connections. Deleting a connection removes its synchronized device inventory through the database cascade; the audit history remains.
+- Worker contract tests and backend checks/verification passed on commit `1fb31dc890b67b68d3d228654ebe15273eea87e2`.
+- No live ACS/RouterOS endpoint contacted, no device task sent, no migration applied, and no Worker deployed.
