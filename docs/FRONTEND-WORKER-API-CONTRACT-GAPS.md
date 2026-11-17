@@ -53,3 +53,26 @@ A matching path does not by itself prove payload, response shape, authorization,
 - Do not deploy Worker or Pages as part of this audit.
 - Do not modify production/staging D1, customer records, secrets, or network devices.
 - Do not treat local SQLite route availability as proof of hosted Worker availability.
+
+
+## Implementation update — 2026-11-17
+
+The following hosted implementation work has now been committed on `work/core-feature-completion`:
+
+- Dashboard uses the Worker stats endpoint; the Worker summary endpoint now returns revenue, outstanding receivables, monthly revenue and invoice counts.
+- Frontend ticket paths are accepted through the Worker complaints route; ticket rows now include a customer display name and hosted PATCH updates are normalized to PUT.
+- Hosted network inventory uses the D1 `network_devices` table. The hosted UI deliberately exposes inventory CRUD only; it does not claim live RouterOS control or store router passwords.
+- Hosted payment promise CRUD and overdue aging endpoints have been added, backed by an additive `payment_promises` D1 table migration and organization-scoped queries.
+- Hosted invoice creation/payment payloads, package/subscription payloads, and customer/staff form fields receive a compatibility normalization layer.
+- Subscription package changes and renewal are now supported by the hosted Worker routes.
+- Customer profile response compatibility and list-field aliases were added for the existing Pages UI.
+
+### Still intentionally outside hosted scope
+
+- ACS connection secrets, GenieACS synchronization, TR-069 device actions and TR-069 audit endpoints are not implemented in the hosted Worker. The hosted UI now says so rather than presenting non-functional controls. The existing local Node/SQLite GenieACS adapter remains a separate runtime.
+- Live MikroTik commands are not exposed by the hosted Worker; hosted network device management is inventory only.
+- Local SQLite and hosted D1 remain independent. No automatic replication or sync has been added.
+
+### Safety and verification boundary
+
+These changes are source changes on the feature branch only. They have not been deployed to Pages or the production Worker, and no production/staging D1 records or secrets have been changed. GitHub Actions source/backend checks are being used for code feedback; live production endpoint smoke failures must be investigated separately and are not represented as passed.
