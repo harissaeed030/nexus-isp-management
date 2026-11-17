@@ -1,6 +1,16 @@
 name: NEXUS Android APK
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "package.json"
+      - "capacitor.config.json"
+      - ".github/workflows/android-apk.yml"
+      - "index.html"
+      - "assets/**"
+      - "manifest.webmanifest"
+      - "sw.js"
+      - "www/**"
   push:
     branches: [main]
     paths:
