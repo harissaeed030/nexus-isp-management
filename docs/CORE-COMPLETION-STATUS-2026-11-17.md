@@ -134,3 +134,18 @@ The D1 Worker now also maps the current billing dashboard contract:
 - Contract tests cover invoice/payment DTO mapping and the new route/permission mapping. D1 Worker tests and backend verification passed on `c6e34b488af86d8b125a72781e100635bb7555c9`; backend checks were still running at the time of this note.
 
 These are source-level contract checks only. No payment was recorded, no billing run was triggered, and no D1/Worker deployment was performed. A staging E2E must verify invoice creation, partial/full payment, refund interactions and ledger consistency before release.
+
+
+## Network inventory compatibility — 2026-11-17
+
+The dashboard network inventory path has been advanced on the development branch:
+
+- OLT list/create, PON-port inventory counts and capability metadata now adapt the dashboard's `/api/olts` routes to tenant-scoped `network_devices` rows. The UI now submits the OLT inventory form.
+- ONU list/detail DTOs now expose the dashboard's `olt_id`, `pon_index` and `customer_name` fields. ONU create accepts the dashboard's camelCase fields and selected PON port; the UI now submits the ONU inventory form.
+- ONU-to-customer mapping now validates both records within the same organization and, when supplied, verifies that the subscription belongs to that customer.
+- Router inventory endpoints now support list/create/update/delete. Router API passwords are encrypted using the existing AES-GCM credential helper and stored in the new `credential_password_cipher` column. The dashboard receives no password or ciphertext.
+- New additive D1 migration: `cloudflare/d1/migrations/0014_router_credential_cipher.sql`. Apply migrations 0012, 0013 and 0014 in order only after a staging backup and schema preflight.
+- RouterOS live test, PPPoE secret/profile operations, sync, OLT live control and optical telemetry remain unavailable. These routes fail closed with an explicit not-configured response; no fake live status is returned. OLT credentials are deliberately not accepted by the inventory-only D1 adapter.
+- Contract tests cover OLT/ONU and RouterOS DTOs, encryption-path presence, and fail-closed behavior. D1 Worker tests and backend checks passed on `e2b3e3772a148cadc0699dadf51e9a96501495b4`. Dashboard form wiring is on the later UI commit and its verification was still running at the time of this note.
+
+No migrations were executed, no Worker deployed, no production/staging data changed, and no router/OLT/ONU hardware was contacted.
