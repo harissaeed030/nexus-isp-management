@@ -781,7 +781,7 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
  if(role!=='owner'&&ex.role==='admin')return json({error:'Only the owner can manage administrators'},403);
  const allowed=['admin','billing','support','technician','staff'];
  if(b.role!==undefined&&!allowed.includes(b.role))return json({error:'Invalid role'},400);
- if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8))return json({error:'Password must be at least 8 characters'},400);
+ if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8||b.password.length>128))return json({error:'Password must be 8-128 characters'},400);
  if(b.status!==undefined&&!['active','disabled'].includes(b.status))return json({error:'Invalid user status'},400);
  if(id===uid&&b.role!==undefined&&b.role!==role)return json({error:'You cannot change your own role'},400);
  const fields=['name','role','phone','status'],sets=[],params=[];
