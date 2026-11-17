@@ -1,0 +1,101 @@
+/* NEXUS Professional UI refresh — layered overrides, preserves existing app behavior */
+:root{--navy:#071f35;--navy2:#0b3048;--cyan:#24c6b4;--cyan2:#16a895;--ink:#172f43;--muted:#71869a;--line:#e4ebf1;--bg:#f3f6fa;--panel:#fff;--shadow:0 8px 28px rgba(20,43,67,.055);font-family:Inter,'DM Sans',Arial,sans-serif}
+body{background:#f4f7fb;color:var(--ink);font-size:14px}
+.sidebar{width:260px;padding:24px 16px 16px;background:linear-gradient(180deg,#081f34 0%,#0b2c43 58%,#09263b 100%);box-shadow:8px 0 30px rgba(8,31,52,.08)}
+.brand{padding:3px 10px 25px;gap:12px;font-size:20px;letter-spacing:1.4px}
+.brand-mark{width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,#38e0cb,#13a895);color:#062b3d;box-shadow:0 8px 22px #19b9a43b}
+.brand small{font-size:8px;letter-spacing:2px}
+.workspace{margin-bottom:26px;padding:12px;border-radius:12px;background:#ffffff0a;border-color:#ffffff17}
+.workspace b{font-size:11px}.workspace small{font-size:10px}
+.nav-label{margin:0 10px 10px;color:#6e96ad;font-size:9px;letter-spacing:1.7px}
+.nav{gap:5px;margin-bottom:24px}
+.nav-item{min-height:41px;padding:9px 11px;border-radius:9px;color:#b5c8d7;font-size:12px;font-weight:600}
+.nav-item span{width:23px;height:23px;border-radius:7px;color:#8eb9c9;font-size:14px}
+.nav-item:hover{background:#ffffff0d}
+.nav-item.active{border-color:#2dd3c21f;background:linear-gradient(100deg,#1bb5a42b,#1bb5a40a);box-shadow:inset 3px 0 #35d7c3;color:#fff}
+.nav-item.active span{background:#28cbb52b;color:#6ce8d8}
+.main{margin-left:260px}
+.topbar{height:68px;padding:0 34px;background:#ffffffd9;border-bottom:1px solid #e8edf3}
+.crumb{font-size:12px}.crumb b{color:#203b52}
+.demo-pill{padding:8px 12px;background:#effaf8;border-color:#d7f0eb;color:#218b7e;font-size:9px}
+.content{max-width:1740px;padding:32px 34px 48px}
+.page-heading{margin-bottom:24px}
+.eyebrow{color:#0d9f91;font-size:9px;letter-spacing:1.9px}
+.page-heading h1{color:#142f45;font-size:29px;letter-spacing:-.9px}
+.page-heading .subheading{color:#7c8fa1;font-size:12px}
+.primary-btn,.nx-btn{min-height:39px;padding:10px 16px;border-radius:9px;background:linear-gradient(135deg,#17b6a5,#0d9488);box-shadow:0 5px 14px #109c8d24;font-size:11px}
+.nx-btn{background:#0d9488}
+.primary-btn:hover,.nx-btn:hover{filter:brightness(1.06);transform:translateY(-1px)}
+.nx-panel,.nx-kpi,.was-panel{padding:20px;border:1px solid #e8edf3;border-radius:15px;background:#fff;box-shadow:var(--shadow);backdrop-filter:none}
+.nx-grid{gap:14px}
+.nx-kpi b{color:#183b52}
+.nx-table{min-width:580px;border-spacing:0}
+.nx-table th,.nx-table td{padding:14px 13px;font-size:11px}
+.nx-table th{background:#f6f8fb;color:#71869a;font-size:9px;letter-spacing:.7px}
+.nx-table th:first-child{border-radius:8px 0 0 8px}.nx-table th:last-child{border-radius:0 8px 8px 0}
+.nx-table td{color:#40596d}
+.nx-table tr:hover td{background:#f8fbfc}
+.nx-form label{font-size:11px}
+.nx-form input,.nx-row input,.nx-row select,.nx-form select,.nx-form textarea{min-height:42px;padding:11px 12px;border:1px solid #dfe7ee;border-radius:9px;background:#fbfcfe;color:#253f52}
+.nx-form input:focus,.nx-row input:focus,.nx-row select:focus,.nx-form select:focus,.nx-form textarea:focus{border-color:#28b7a8;box-shadow:0 0 0 3px #28b7a81b}
+.nx-auth{background:radial-gradient(ellipse at 80% 0%,#d8f5f0,#f3f7fa 56%,#eaf0f6)}
+.nx-card{padding:32px;border:1px solid #e5edf2;border-radius:20px;box-shadow:0 24px 70px #153a5418}
+.nx-card h1{color:#102e45;letter-spacing:1.8px}
+.nx-video-dashboard{gap:18px}
+.nx-video-hero{min-height:166px;padding:30px 32px;border:0;border-radius:18px;background:linear-gradient(112deg,#08283f 0%,#0b5365 58%,#0d9388 100%);box-shadow:0 16px 38px #0d53632a}
+.nx-video-hero:after{border-color:#ffffff24;box-shadow:0 0 0 34px #ffffff08,0 0 0 72px #ffffff06}
+.nx-video-eyebrow,.nx-video-section-head>div>span{font-size:9px;letter-spacing:1.7px}
+.nx-video-hero h2{font-size:30px;letter-spacing:-1px}
+.nx-video-hero p{font-size:12px}
+.nx-hero-meta{border-radius:12px;background:#ffffff14;font-size:10px}
+.nx-video-kpis{gap:14px}
+.nx-video-kpis article{padding:19px;border:1px solid #e8edf3;border-radius:15px;box-shadow:var(--shadow);backdrop-filter:none}
+.nx-kpi-icon{width:42px;height:42px;border-radius:12px;background:#e8f7f5;color:#0d9b8d}
+.nx-video-kpis small{font-size:10px;color:#71869a}
+.nx-video-kpis b{color:#173b52;font-size:25px}
+.nx-video-kpis em{font-size:10px}
+.nx-video-activity,.nx-video-announcements,.nx-video-moderation{padding:20px;border:1px solid #e8edf3;border-radius:15px;background:#fff;box-shadow:var(--shadow);backdrop-filter:none}
+.nx-video-section-head h3,.was-panel h3{color:#1a394f;font-size:15px}
+.nx-video-activity-grid{gap:12px}
+.nx-video-activity-grid article{padding:14px;border:1px solid #edf1f5;border-radius:11px;background:#f8fafc}
+.nx-video-activity-grid b{color:#1c4359;font-size:19px}
+.was-panel{margin:0}
+.was-tabs{gap:8px}
+.was-tabs button{padding:9px 12px;border-radius:8px;background:#f6f8fb;color:#657c8e;font-size:10px}
+.was-tabs button.selected{border-color:#0fa394;background:#0e9c8e;box-shadow:0 4px 10px #0e9c8e25}
+.was-toolbar{font-size:11px}
+.was-donut{background:conic-gradient(#19b7a6 var(--active),#e9eff4 0)}
+.was-bar-col i{background:linear-gradient(180deg,#29c9b6,#138c91)}
+.was-package-row>div i{background:linear-gradient(90deg,#18b8a7,#4bc8a9)}
+.was-feature{padding:12px;border:1px solid #edf1f5;border-radius:10px;background:#fbfcfe}
+.was-feature i{background:#e7f7f4;color:#0b9a8b}
+.nx-count-pill{background:#e7f7f4;color:#0a9588}
+.nx-customer-dialog{border-radius:17px}
+.nx-customer-dialog-head{padding:17px 20px}
+.nx-customer-dialog-body{padding:20px}
+.nx-detail-grid div{border-color:#eaf0f4;border-radius:10px;background:#f8fafc}
+.toast{border-radius:11px}
+footer{color:#8a9aaa}
+@media(max-width:1100px){.sidebar{width:240px}.main{margin-left:240px}.content{padding-inline:24px}}
+@media(max-width:760px){
+ .sidebar{width:min(300px,86vw);margin:0;box-shadow:18px 0 50px #061d3240}
+ .main{margin-left:0}
+ .topbar{height:60px;padding:0 14px}
+ .content{padding:20px 14px 36px}
+ .page-heading h1{font-size:24px}
+ .nx-video-hero{padding:22px;border-radius:15px}
+ .nx-video-hero h2{font-size:24px}
+ .nx-video-kpis{gap:9px}
+ .nx-video-kpis article{padding:13px 11px;border-radius:12px}
+ .nx-video-activity,.nx-video-announcements,.nx-video-moderation{padding:15px}
+ .was-panel{padding:15px}
+ .nx-table{min-width:560px}
+ .nx-customer-dialog{max-height:90dvh}
+ .nx-customer-dialog-body{padding:13px}
+}
+@media(max-width:390px){
+ .nx-video-kpis article{grid-template-columns:1fr}
+ .nx-video-kpis b{font-size:18px}
+ .nx-video-hero h2{font-size:21px}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;scroll-behavior:auto!important}}
