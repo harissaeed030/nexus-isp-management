@@ -13,17 +13,17 @@ async function adaptHostedBody(request,path){
  b={...b};const move=(from,to)=>{if(b[from]!==undefined&&b[to]===undefined)b[to]=b[from];delete b[from]};
  if(path==='/api/customers'||(path.startsWith('/api/customers/')&&path.split('/').length===4)){
   if(b.fullName!==undefined){const parts=String(b.fullName).trim().split(' ').filter(Boolean);if(b.first_name===undefined)b.first_name=parts.shift()||'';if(b.last_name===undefined)b.last_name=parts.join(' ');delete b.fullName}
-  move('serviceAddress','installation_address');move('coverageArea','city');move('installationDate','installation_date');
+  move('serviceAddress','installation_address');move('coverageArea','city');move('installationDate','installation_date');move('idType','id_type');move('idNumber','id_number');
   if(b.status==='inactive')b.status='suspended';else if(b.status==='blocked')b.status='terminated';delete b.connectionStatus;
  }
  if(path==='/api/packages'||(path.startsWith('/api/packages/')&&path.split('/').length===4)){
-  move('speedDownMbps','speed_down');move('speedUpMbps','speed_up');move('monthlyPricePkr','price');
+  move('speedDownMbps','speed_down');move('speedUpMbps','speed_up');move('monthlyPricePkr','price');move('billingCycle','billing_cycle');move('dataLimitGb','data_limit_gb');
   if(b.speed_down!==undefined&&b.speed_mbps===undefined)b.speed_mbps=Number(b.speed_down);
   if(b.status!==undefined&&b.is_active===undefined)b.is_active=b.status==='active';delete b.status;
  }
- if(path==='/api/subscriptions'||(path.startsWith('/api/subscriptions/')&&path.split('/').length===4)){move('customerId','customer_id');move('packageId','package_id');move('startedAt','start_date');move('expiresAt','end_date')}
- if(path==='/api/invoices'){move('customerId','customer_id');move('amountPkr','amount');move('dueDate','due_date')}
- if(path==='/api/payments'){move('invoiceId','invoice_id');move('amountPkr','amount');move('paymentDate','payment_date')}
+ if(path==='/api/subscriptions'||(path.startsWith('/api/subscriptions/')&&path.split('/').length===4)){move('customerId','customer_id');move('packageId','package_id');move('startedAt','start_date');move('expiresAt','end_date');move('autoRenew','auto_renew')}
+ if(path==='/api/invoices'){move('customerId','customer_id');move('subscriptionId','subscription_id');move('amountPkr','amount');move('dueDate','due_date');move('issueDate','issue_date')}
+ if(path==='/api/payments'){move('invoiceId','invoice_id');move('amountPkr','amount');move('paymentDate','payment_date');move('paymentMethod','method');move('transactionRef','reference')}
  if(path==='/api/operations/payment-promises'){move('customerId','customer_id');move('amountPkr','amount');move('promiseDate','promise_date')}
  if(path==='/api/complaints'||(path.startsWith('/api/complaints/')&&path.split('/').length===4)){move('customerId','customer_id');move('assignedTo','assigned_to');if(b.priority==='normal')b.priority='medium'}
  if(path==='/api/network/devices'||(path.startsWith('/api/network/devices/')&&path.split('/').length===5)){move('apiPort','port');move('location','notes');if(b.type!==undefined)move('type','device_type');if(!b.device_type&&path==='/api/network/devices')b.device_type='mikrotik';delete b.password}
