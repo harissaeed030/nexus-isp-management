@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload } from "../src/d1-api-worker.js";
+import { normalizeApiMethod, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
@@ -194,4 +194,42 @@ test("payment DTO returns dashboard amount, method and receipt date", () => {
 test("dashboard payment collection endpoint is permission-mapped and routed", () => {
   assert.match(source, /path==='\/api\/payments'\)return v==='GET'\?'billing.read':v==='POST'\?'payments.create'/);
   assert.match(source, /path==='\/api\/payments'&&m==='POST'/);
+});
+
+
+test("OLT inventory DTO exposes dashboard fields without implying live management", () => {
+  assert.deepEqual(mapOltRow({
+    id:"olt1",name:"Main OLT",device_type:"olt",host:"192.0.2.10",status:"inactive",
+    model:"HSGQ-G04R",notes:"Unit 8",pon_ports:4
+  }), {
+    id:"olt1",name:"Main OLT",device_type:"olt",host:"192.0.2.10",status:"inactive",
+    model:"HSGQ-G04R",notes:"Unit 8",pon_ports:4,vendor:"Unknown",location:"Unit 8",
+    firmwareVersion:null
+  });
+});
+
+test("ONU DTO and payload adapter map dashboard PON and customer fields", () => {
+  assert.deepEqual(mapOnuRow({
+    id:"onu1",olt_device_id:"olt1",pon_port:"3",first_name:"Haris",last_name:"Qureshi",
+    serial_number:"ABC123"
+  }), {
+    id:"onu1",olt_device_id:"olt1",pon_port:"3",first_name:"Haris",last_name:"Qureshi",
+    serial_number:"ABC123",olt_id:"olt1",pon_index:3,customer_name:"Haris Qureshi"
+  });
+  assert.deepEqual(normalizeOnuPayload({
+    serialNumber:"ABC123",oltId:"olt1",customerId:"c1",ponPortId:"olt1:2"
+  }), {
+    serialNumber:"ABC123",oltId:"olt1",customerId:"c1",ponPortId:"olt1:2",
+    serial_number:"ABC123",olt_device_id:"olt1",customer_id:"c1",pon_port:"olt1:2"
+  });
+});
+
+test("OLT inventory routes are tenant scoped and do not accept plaintext credentials", () => {
+  assert.match(source, /async function createOlt/);
+  assert.match(source, /OLT credential storage is not enabled/);
+  assert.match(source, /device_type='olt'/);
+  assert.match(source, /async function getOltPorts/);
+  assert.match(source, /liveTelemetry:false/);
+  assert.match(source, /mapOnuRow/);
+  assert.match(source, /map_onu_customer/);
 });
