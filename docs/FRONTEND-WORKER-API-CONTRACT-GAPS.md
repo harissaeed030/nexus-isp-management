@@ -79,3 +79,12 @@ These changes are source changes on the feature branch only. They have not been 
 
 
 - Added tenant-checked staff and customer-portal ticket conversation endpoints using the existing `ticket_messages` table; the hosted admin and customer portal UIs now support replies. The local SQLite UI does not display these hosted-only controls.
+
+
+
+## Contract guard and hosted network scope decision — 2026-11-17
+
+- Added `worker/scripts/verify-frontend-worker-contract.mjs`, a static regression guard for 13 important frontend/Worker route families, the `/api/v1/` prefix rewrite, and ticket/router compatibility aliases.
+- Wired the guard into `.github/workflows/verify.yml` before Worker source verification. This checks source-level route presence only; it does not claim payload, authorization, D1, browser or live endpoint correctness.
+- Recorded the current hosted network-control boundary in [ADR-001](ADR-001-hosted-network-control-scope.md): hosted device features are inventory-only; live MikroTik/OLT/ONU/ACS/TR-069 control stays outside the hosted milestone and local adapters remain separate.
+- These additions are feature-branch source changes. The CI run must execute on the resulting commit before the checks can be called passed. No Worker/Pages deployment, D1 change, secret change or device command was performed.
