@@ -106,8 +106,43 @@
         " <span class='pill'>" + esc(ticket.status) + "</span></b><p>" +
         esc(ticket.description || "") + "</p><small>" +
         esc(ticket.created_at || "") + " · " + esc(ticket.priority || "medium") +
-        "</small></div>"
+        "</small><p><button type='button' data-ticket-conversation='" + esc(ticket.id) + "'>View conversation / reply</button></p><div id='portal-thread-" + esc(ticket.id) + "'></div></div>"
       ).join("") || "<p class='muted'>No complaints submitted.</p>";
+      $("#complaints").querySelectorAll("[data-ticket-conversation]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const id = button.dataset.ticketConversation;
+          const thread = $("#portal-thread-" + CSS.escape(id));
+          button.disabled = true;
+          try {
+            const response = await api("/tickets/" + encodeURIComponent(id) + "/messages");
+            const messages = response.data || [];
+            thread.innerHTML = messages.map((message) =>
+              "<div class='ticket'><b>" + esc(message.sender_name || (Number(message.is_staff) === 1 ? "Support team" : "You")) +
+              "</b><p>" + esc(message.message) + "</p><small>" + esc(message.created_at || "") + "</small></div>"
+            ).join("") || "<p class='muted'>No replies yet. Send a message to continue.</p>";
+            thread.insertAdjacentHTML("beforeend", "<form class='portal-reply-form'><textarea name='message' required maxlength='4000' placeholder='Write a reply'></textarea><button type='submit'>Send reply</button><p class='muted' aria-live='polite'></p></form>");
+            const form = thread.querySelector(".portal-reply-form");
+            form.addEventListener("submit", async (event) => {
+              event.preventDefault();
+              const status = form.querySelector("p");
+              const message = new FormData(form).get("message");
+              try {
+                await api("/tickets/" + encodeURIComponent(id) + "/messages", { method: "POST", body: JSON.stringify({ message }) });
+                form.reset();
+                status.textContent = "Reply sent.";
+                button.disabled = false;
+                button.click();
+              } catch (error) {
+                status.textContent = error.message;
+              }
+            });
+          } catch (error) {
+            thread.textContent = error.message;
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
     } catch (error) {
       if (/session|sign.?in|authentication/i.test(error.message)) showLogin();
       else alert(error.message);
