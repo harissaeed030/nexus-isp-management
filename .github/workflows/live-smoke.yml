@@ -103,7 +103,7 @@ jobs:
 
           const page = await fetch(origin, { signal: AbortSignal.timeout(15000) });
           assert.equal(page.status, 200, "Pages production status");
-          assert.match(page.headers.get("content-type") || "", /text\\/html/i);
+          assert.match(page.headers.get("content-type") || "", /text\/html/i);
           const html = await page.text();
           assert.match(html, /NEXUS/i, "Pages frontend content");
           console.log("Pages production: HTTP 200 and NEXUS HTML verified");
