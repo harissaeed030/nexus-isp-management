@@ -6,8 +6,13 @@ function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
-async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
-async function verifyPw(pw,h,salt){if(!h)return false;if(!salt)return pw===h;const{hash}=await hashPw(pw,salt);return hash===h}
+const PASSWORD_HASH_ITERATIONS=600000;
+const LEGACY_PASSWORD_HASH_ITERATIONS=100000;
+async function derivePasswordHash(pw,salt,iterations){const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations,hash:'SHA-256'},km,256);return b2h(new Uint8Array(bits))}
+async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const saltHex=b2h(s);const hash=await derivePasswordHash(pw,s,PASSWORD_HASH_ITERATIONS);return{hash:'pbkdf2-sha256$'+PASSWORD_HASH_ITERATIONS+'$'+hash,salt:saltHex}}
+function constantTimeHexEqual(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0}
+async function verifyPw(pw,h,salt){if(typeof pw!=='string'||typeof h!=='string'||typeof salt!=='string'||!/^[a-f0-9]{32}$/i.test(salt))return false;let iterations=LEGACY_PASSWORD_HASH_ITERATIONS,expected=h;const versioned=h.match(/^pbkdf2-sha256\$(\d+)\$([a-f0-9]{64})$/i);if(versioned){iterations=Number(versioned[1]);expected=versioned[2];if(!Number.isSafeInteger(iterations)||iterations<LEGACY_PASSWORD_HASH_ITERATIONS||iterations>1000000)return false}else if(!/^[a-f0-9]{64}$/i.test(h))return false;const actual=await derivePasswordHash(pw,hex2b(salt),iterations);return constantTimeHexEqual(actual,expected.toLowerCase())}
+function passwordHashNeedsUpgrade(h,salt){if(typeof salt!=='string'||!/^[a-f0-9]{32}$/i.test(salt)||typeof h!=='string')return false;const versioned=h.match(/^pbkdf2-sha256\$(\d+)\$[a-f0-9]{64}$/i);return !versioned||Number(versioned[1])<PASSWORD_HASH_ITERATIONS}
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
 async function signJWT(p,sec){const e=new TextEncoder();const h=b64u(e.encode(JSON.stringify({alg:'HS256',typ:'JWT'})));const p64=b64u(e.encode(JSON.stringify(p)));const d=h+'.'+p64;const k=await crypto.subtle.importKey('raw',e.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=await crypto.subtle.sign('HMAC',k,e.encode(d));return d+'.'+b64u(new Uint8Array(sig))}
@@ -323,7 +328,7 @@ if(path==='/api/profile'&&m==='PUT')return await updProf(request,env,auth,ip);
 if(path==='/api/profile/password'&&m==='PUT')return await chgPw(request,env,auth,ip);
 if(path==='/api/company'&&m==='GET')return await getCo(env,orgId);
 if(path==='/api/company'&&m==='PUT')return await updCo(request,env,orgId,userId,ip);
-return json({error:'Not Found',path},404)}catch(e){return json({error:'Server Error',message:e.message},500)}}
+return json({error:'Not Found',path},404)}catch(e){const errorId=crypto.randomUUID();console.error('NEXUS_REQUEST_FAILED',{errorId,errorType:safeErrorType(e)});return json({error:'Internal server error',errorId},500)}}
 
 
 async function portalLogin(r,env,ip){
@@ -361,6 +366,7 @@ async function portalLogin(r,env,ip){
  if(!account||account.customer_status!=='active'||!await verifyPw(b.password,account.password_hash,account.password_salt)){
   await recordLoginFailure(env,ip,rateKey);return json({error:'Invalid portal credentials'},401);
  }
+if(passwordHashNeedsUpgrade(account.password_hash,account.password_salt)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE customer_portal_accounts SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(upgraded.hash,upgraded.salt,account.id,org.id).run();}
  await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
  await env.DB.prepare("UPDATE customer_portal_accounts SET last_login=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(account.id,org.id).run();
  const token=await signJWT({principalType:'customer',portalAccountId:account.id,customerId:account.customer_id,orgId:org.id,tokenVersion:Number(account.token_version||0),exp:Date.now()+604800000},getSec(env));
@@ -526,6 +532,7 @@ if(b.workspace!==undefined&&b.workspace!==null&&String(b.workspace).trim()!=='')
  u=rows[0]||null;
 }
 if(!u||!await verifyPw(b.password,u.password_hash,u.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid credentials'},401);}
+if(passwordHashNeedsUpgrade(u.password_hash,u.password_salt)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(upgraded.hash,upgraded.salt,u.id,u.organization_id).run();}
 await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,email).run();
 await env.DB.prepare("UPDATE users SET last_login=datetime('now'),updated_at=datetime('now')WHERE id=? AND organization_id=?").bind(u.id,u.organization_id).run();
 const tk=await signJWT({userId:u.id,orgId:u.organization_id,role:u.role,email:u.email,name:u.name||u.email,tokenVersion:Number(u.token_version||0),exp:Date.now()+604800000},getSec(env));
