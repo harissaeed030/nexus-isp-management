@@ -2,12 +2,40 @@
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 function uuid(){return crypto.randomUUID()}
-function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
+function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Cache-Control':'no-store','Pragma':'no-cache','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
-async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
-async function verifyPw(pw,h,salt){if(!h)return false;if(!salt)return pw===h;const{hash}=await hashPw(pw,salt);return hash===h}
+async function adaptHostedBody(request,path){
+ if(!['POST','PUT','PATCH'].includes(request.method))return request;
+ let b;try{b=await request.clone().json()}catch{return request}
+ if(!b||typeof b!=='object'||Array.isArray(b))return request;
+ b={...b};const move=(from,to)=>{if(b[from]!==undefined&&b[to]===undefined)b[to]=b[from];delete b[from]};
+ if(path==='/api/customers'||(path.startsWith('/api/customers/')&&path.split('/').length===4)){
+  if(b.fullName!==undefined){const parts=String(b.fullName).trim().split(' ').filter(Boolean);if(b.first_name===undefined)b.first_name=parts.shift()||'';if(b.last_name===undefined)b.last_name=parts.join(' ');delete b.fullName}
+  move('serviceAddress','installation_address');move('coverageArea','city');move('installationDate','installation_date');move('idType','id_type');move('idNumber','id_number');
+  if(b.status==='inactive')b.status='suspended';else if(b.status==='blocked')b.status='terminated';delete b.connectionStatus;
+ }
+ if(path==='/api/packages'||(path.startsWith('/api/packages/')&&path.split('/').length===4)){
+  move('speedDownMbps','speed_down');move('speedUpMbps','speed_up');move('monthlyPricePkr','price');move('billingCycle','billing_cycle');move('dataLimitGb','data_limit_gb');
+  if(b.speed_down!==undefined&&b.speed_mbps===undefined)b.speed_mbps=Number(b.speed_down);
+  if(b.status!==undefined&&b.is_active===undefined)b.is_active=b.status==='active';delete b.status;
+ }
+ if(path==='/api/subscriptions'||(path.startsWith('/api/subscriptions/')&&path.split('/').length===4)){move('customerId','customer_id');move('packageId','package_id');move('startedAt','start_date');move('expiresAt','end_date');move('autoRenew','auto_renew')}
+ if(path==='/api/invoices'){move('customerId','customer_id');move('subscriptionId','subscription_id');move('amountPkr','amount');move('dueDate','due_date');move('issueDate','issue_date')}
+ if(path==='/api/payments'){move('invoiceId','invoice_id');move('amountPkr','amount');move('paymentDate','payment_date');move('paymentMethod','method');move('transactionRef','reference')}
+ if(path==='/api/operations/payment-promises'){move('customerId','customer_id');move('amountPkr','amount');move('promiseDate','promise_date')}
+ if(path==='/api/complaints'||(path.startsWith('/api/complaints/')&&path.split('/').length===4)){move('customerId','customer_id');move('assignedTo','assigned_to');if(b.priority==='normal')b.priority='medium'}
+ if(path==='/api/network/devices'||(path.startsWith('/api/network/devices/')&&path.split('/').length===5)){move('apiPort','port');move('location','notes');if(b.type!==undefined)move('type','device_type');if(!b.device_type&&path==='/api/network/devices')b.device_type='mikrotik';delete b.password}
+ if(path==='/api/staff'||(path.startsWith('/api/staff/')&&path.split('/').length===4)){move('fullName','name');if(b.status==='inactive')b.status='disabled'}
+ const headers=new Headers(request.headers);headers.delete('content-length');return new Request(request.url,{method:request.method,headers,body:JSON.stringify(b)});
+}
+const PASSWORD_HASH_ITERATIONS=600000;
+const HASH_SEPARATOR=String.fromCharCode(36);
+function isCurrentPasswordHash(h){if(typeof h!=='string')return false;const p=h.split(HASH_SEPARATOR);return p.length===3&&p[0]==='pbkdf2-sha256'&&Number(p[1])===PASSWORD_HASH_ITERATIONS&&/^[0-9a-f]{64}$/i.test(p[2])}
+async function hashPw(pw,salt){if(typeof pw!=='string'||pw.length<8||pw.length>128)throw new Error('Password must be 8-128 characters');const saltBytes=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:saltBytes,iterations:PASSWORD_HASH_ITERATIONS,hash:'SHA-256'},km,256);return{hash:'pbkdf2-sha256'+HASH_SEPARATOR+PASSWORD_HASH_ITERATIONS+HASH_SEPARATOR+b2h(new Uint8Array(bits)),salt:b2h(saltBytes)}}
+async function verifyPw(pw,h,salt){if(typeof pw!=='string'||pw.length>1024||typeof h!=='string'||typeof salt!=='string'||!/^[0-9a-f]{32}$/i.test(salt))return false;let iterations=100000,expected=h;const parts=h.split(HASH_SEPARATOR);if(parts.length===3){if(parts[0]!=='pbkdf2-sha256'||!/^[0-9a-f]{64}$/i.test(parts[2]))return false;iterations=Number(parts[1]);if(!Number.isSafeInteger(iterations)||iterations<100000||iterations>1000000)return false;expected=parts[2]}else if(!/^[0-9a-f]{64}$/i.test(h))return false;const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:hex2b(salt),iterations,hash:'SHA-256'},km,256);const actual=b2h(new Uint8Array(bits));let diff=0;for(let i=0;i<actual.length;i++)diff|=actual.charCodeAt(i)^expected.toLowerCase().charCodeAt(i);return diff===0}
+
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
 async function signJWT(p,sec){const e=new TextEncoder();const h=b64u(e.encode(JSON.stringify({alg:'HS256',typ:'JWT'})));const p64=b64u(e.encode(JSON.stringify(p)));const d=h+'.'+p64;const k=await crypto.subtle.importKey('raw',e.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=await crypto.subtle.sign('HMAC',k,e.encode(d));return d+'.'+b64u(new Uint8Array(sig))}
@@ -21,7 +49,7 @@ async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT IN
 function vEmail(e){return/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e||'')}
 function vReq(o,f){return f.filter(x=>!o[x]&&o[x]!==0)}
 function s(v){return typeof v==='string'?v.trim():v}
-function pg(url,d=20){const page=Math.max(1,parseInt(url.searchParams.get('page')||'1'));const pp=Math.min(100,Math.max(1,parseInt(url.searchParams.get('per_page')||String(d))));return{page,pp,off:(page-1)*pp}}
+function pg(url,d=20){const page=Math.max(1,parseInt(url.searchParams.get('page')||'1'));const pp=Math.min(100,Math.max(1,parseInt(url.searchParams.get('per_page')||url.searchParams.get('pageSize')||String(d))));return{page,pp,off:(page-1)*pp}}
 
 
 function corsHeaders(request,env){
@@ -79,7 +107,9 @@ function permissionForRoute(path,method){
  if(path==='/api/billing/generate')return v==='POST'?'billing.generate':null;
  if(path.match(/^\/api\/invoices\/[^/]+\/payments$/))return v==='POST'?'payments.create':null;
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
- if(path==='/api/payments')return v==='GET'?'billing.read':null;
+ if(path==='/api/payments')return v==='GET'?'billing.read':v==='POST'?'payments.create':null;
+ if(match('/api/operations/payment-promises'))return v==='GET'?'billing.read':['POST','PUT'].includes(v)?'payments.create':null;
+ if(path==='/api/financial/aging')return v==='GET'?'reports.read':null;
  if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
  if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
@@ -141,19 +171,32 @@ async function loginRateLimited(env,ip,email){
  return (a?.n||0)>=30||(b?.n||0)>=10
 }
 async function recordLoginFailure(env,ip,email){await env.DB.prepare("INSERT INTO login_attempts(id,ip_address,email)VALUES(?,?,?)").bind(uuid(),ip,email).run()}
-async function pppoeCryptoKey(env,usages){
- if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
- const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']);
- return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-PPPOE-SALT-V1'),info:new TextEncoder().encode('NEXUS-PPPOE-PASSWORD-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,usages)
+async function registrationRateLimited(env,ip,email){
+ await env.DB.prepare("DELETE FROM registration_attempts WHERE attempted_at<datetime('now','-1 day')").run();
+ const [byIp,byEmail]=await Promise.all([
+  env.DB.prepare("SELECT COUNT(*) AS n FROM registration_attempts WHERE ip_address=? AND attempted_at>=datetime('now','-15 minutes')").bind(ip).first(),
+  email?env.DB.prepare("SELECT COUNT(*) AS n FROM registration_attempts WHERE email=? AND attempted_at>=datetime('now','-15 minutes')").bind(email).first():Promise.resolve({n:0})
+ ]);
+ if(Number(byIp?.n||0)>=5||Number(byEmail?.n||0)>=3)return true;
+ await env.DB.prepare("INSERT INTO registration_attempts(id,ip_address,email)VALUES(?,?,?)").bind(uuid(),ip,email||null).run();
+ return false
+}
+async function pppoeCryptoKey(env,usages,legacy=false){
+ const secret=legacy?env.JWT_SECRET:env.PPPOE_ENCRYPTION_KEY;
+ if(!secret)throw new Error(legacy?'JWT_SECRET required to decrypt legacy PPPoE records':'PPPOE_ENCRYPTION_KEY must be configured before storing PPPoE passwords');
+ if(!legacy&&new TextEncoder().encode(secret).length<32)throw new Error('PPPOE_ENCRYPTION_KEY must contain at least 32 bytes');
+ const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),'HKDF',false,['deriveKey']);
+ const salt=legacy?'NEXUS-PPPOE-SALT-V1':'NEXUS-PPPOE-SALT-V2',info=legacy?'NEXUS-PPPOE-PASSWORD-ENCRYPTION':'NEXUS-PPPOE-PASSWORD-ENCRYPTION-V2';
+ return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode(salt),info:new TextEncoder().encode(info)},material,{name:'AES-GCM',length:256},false,usages)
 }
 async function encryptPppoePassword(password,env){
  const key=await pppoeCryptoKey(env,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12));
  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(password));
- return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(cipher))
+ return 'enc:v2:'+b64u(iv)+':'+b64u(new Uint8Array(cipher))
 }
 async function decryptPppoePassword(value,env){
- const p=String(value||'').split(':');if(p.length!==4||p[0]!=='enc'||p[1]!=='v1')throw new Error('Unsupported PPPoE password format');
- const key=await pppoeCryptoKey(env,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
+ const p=String(value||'').split(':');if(p.length!==4||p[0]!=='enc'||!['v1','v2'].includes(p[1]))throw new Error('Unsupported PPPoE password format');
+ const key=await pppoeCryptoKey(env,['decrypt'],p[1]==='v1'),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
  return new TextDecoder().decode(plain)
 }
 
@@ -188,6 +231,8 @@ async function runMigrations(env){
  ['customer_portal_accounts',"CREATE TABLE IF NOT EXISTS customer_portal_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,email TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),token_version INTEGER NOT NULL DEFAULT 0,last_login TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,email),UNIQUE(organization_id,customer_id),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE)"],
  ['notif',"CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,title TEXT NOT NULL,message TEXT,type TEXT DEFAULT 'info',is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT(datetime('now')))"],
  ['settings',"CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,key))"],
+ ['payment_promises',"CREATE TABLE IF NOT EXISTS payment_promises(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),promise_date TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','kept','broken','cancelled')),notes TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id))"],
+ ['payment_promises.org_date_index','CREATE INDEX IF NOT EXISTS idx_payment_promises_org_date ON payment_promises(organization_id,promise_date,status)'],
  ['pppoe',"CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT 'active',created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,username))"],
  ['network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT'],
  ['network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT'],
@@ -197,6 +242,12 @@ async function runMigrations(env){
  ['invoices.period_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL'],
  ['onu_devices.index','CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id,status)'],
  ['invoices.number_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id,invoice_number)'],
+ ['registration_attempts',"CREATE TABLE IF NOT EXISTS registration_attempts(id TEXT PRIMARY KEY,ip_address TEXT NOT NULL,email TEXT,attempted_at TEXT NOT NULL DEFAULT(datetime('now')))"],
+ ['registration_attempts.ip_index','CREATE INDEX IF NOT EXISTS idx_registration_attempts_ip_time ON registration_attempts(ip_address,attempted_at)'],
+ ['registration_attempts.email_index','CREATE INDEX IF NOT EXISTS idx_registration_attempts_email_time ON registration_attempts(email,attempted_at)'],
+ ['payment_promises.customer_tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_payment_promises_customer_tenant_insert BEFORE INSERT ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer tenant mismatch') END; END"],
+ ['payment_promises.creator_tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_payment_promises_creator_tenant_insert BEFORE INSERT ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator tenant mismatch') END; END"],
+ ['payment_promises.tenant_update_guard',"CREATE TRIGGER IF NOT EXISTS trg_payment_promises_tenant_update BEFORE UPDATE OF organization_id,customer_id,created_by ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer tenant mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator tenant mismatch') END; END"],
  ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"]
  ];
  const results=[];
@@ -208,22 +259,27 @@ async function runMigrations(env){
 }
 
 let _migrated=false;
-export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
+export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method==='PATCH'?'PUT':request.method;
 if(m==='OPTIONS')return withCors(new Response(null,{status:204}),request,env);
 if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
 if(path.startsWith('/api/'))return withCors(await handleApi(request,env,url,path,m),request,env);
 return new Response(FRONTEND_HTML,{headers:{'Content-Type':'text/html;charset=utf-8'}})}};
 
-async function handleApi(request,env,url,path,m){if(path.startsWith('/api/customer-portal/')){path='/api/portal'+path.slice('/api/customer-portal'.length);if(path==='/api/portal/login')path='/api/portal/auth/login';if(path==='/api/portal/logout')path='/api/portal/auth/logout';if(path==='/api/portal/complaints')path='/api/portal/tickets';}const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
+async function handleApi(request,env,url,path,m){
+ if(path==='/api/setup')path='/api/auth/register';
+ if(path==='/api/tickets'||path.startsWith('/api/tickets/'))path=path.replace('/api/tickets','/api/complaints');
+ if(path==='/api/routers'||path.startsWith('/api/routers/'))path=path.replace('/api/routers','/api/network/devices');
+ if(path.startsWith('/api/customer-portal/')){path='/api/portal'+path.slice('/api/customer-portal'.length);if(path==='/api/portal/login')path='/api/portal/auth/login';if(path==='/api/portal/logout')path='/api/portal/auth/logout';if(path==='/api/portal/complaints')path='/api/portal/tickets';}const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
 if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
-const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status,token_version FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
+const{orgId,userId}=auth;request=await adaptHostedBody(request,path);const currentUser=await env.DB.prepare('SELECT role,status,token_version FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
 // Staging-only E2E teardown. This route is unreachable on production hostnames.
 if(!await roleAllowedWithOverrides(env,orgId,userId,role,path,m))return json({error:'Forbidden',message:'Your role does not have permission for this action'},403);
+if(path.startsWith('/api/customers/')&&path.endsWith('/profile')&&path.split('/').length===5&&m==='GET'){const customerPath=path.slice(0,-8),response=await getCust(env,customerPath,orgId),raw=await response.json();if(response.status!==200)return response;const customer={...raw,service_address:raw.installation_address,coverage_area:raw.city,full_name:[raw.first_name,raw.last_name].filter(Boolean).join(' '),account_number:raw.customer_code};return json({data:{customer,subscriptions:(raw.subscriptions||[]).map(x=>({...x,started_at:x.start_date,expires_at:x.end_date,speed_down_mbps:x.speed_mbps,speed_up_mbps:x.speed_mbps,monthly_price_pkr:x.price})),invoices:(raw.invoices||[]).map(x=>({...x,amount_pkr:x.total??x.amount})),payments:(raw.payments||[]).map(x=>({...x,amount_pkr:x.amount,method:x.payment_method,received_at:x.paid_at,invoice_number:''})),complaints:raw.complaints||[],connectionHistory:[],subscriptionHistory:[]}})}
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='GET')return await getPortalAccount(env,path,orgId,role);
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='POST')return await savePortalAccount(request,env,path,orgId,userId,role,ip);
 if(path==='/api/auth/me'&&m==='GET')return await authMe(env,auth);
@@ -243,9 +299,15 @@ if(path==='/api/subscriptions'&&m==='GET')return await listSubs(env,url,orgId);
 if(path==='/api/subscriptions'&&m==='POST')return await createSub(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/subscriptions\/[^/]+$/)&&m==='GET')return await getSub(env,path,orgId);
 if(path.match(/^\/api\/subscriptions\/[^/]+$/)&&m==='PUT')return await updateSub(request,env,path,orgId,userId,ip);
+if(path.match(/^\/api\/subscriptions\/[^/]+\/renew$/)&&m==='POST'){const id=path.split('/')[3],b=await parseBody(request),days=Math.min(365,Math.max(1,parseInt(b?.days||30)));const ex=await env.DB.prepare('SELECT id FROM subscriptions WHERE id=? AND organization_id=?').bind(id,orgId).first();if(!ex)return json({error:'Subscription not found'},404);await env.DB.prepare("UPDATE subscriptions SET status='active',end_date=date(CASE WHEN end_date IS NULL OR end_date<date('now') THEN date('now') ELSE end_date END,'+'||?||' days'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(days,id,orgId).run();await audit(env,orgId,userId,'renew_subscription','Subscription:'+id+' · '+days+' days',ip);return json({success:true,data:await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,orgId).first()})}
 if(path.match(/^\/api\/subscriptions\/[^/]+$/)&&m==='DELETE')return await delSub(env,path,orgId,userId,ip);
 if(path==='/api/invoices'&&m==='GET')return await listInv(env,url,orgId);
 if(path==='/api/invoices'&&m==='POST')return await createInv(request,env,orgId,userId,ip);
+if(path==='/api/payments'&&m==='POST'){const b=await parseBody(request);if(!b?.invoice_id)return json({error:'invoice_id is required'},400);const paymentPath='/api/invoices/'+encodeURIComponent(b.invoice_id)+'/payments';const paymentRequest=new Request(new URL(paymentPath,url),{method:'POST',headers:request.headers,body:JSON.stringify(b)});return await recPay(paymentRequest,env,paymentPath,orgId,userId,ip)}
+if(path==='/api/operations/payment-promises'&&m==='GET')return await listPaymentPromises(env,url,orgId);
+if(path==='/api/operations/payment-promises'&&m==='POST')return await createPaymentPromise(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/operations\/payment-promises\/[^/]+$/)&&m==='PUT')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
+if(path==='/api/financial/aging'&&m==='GET')return await financialAging(env,orgId);
 if(path==='/api/billing/generate'&&m==='POST')return await generateBilling(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/invoices\/[^/]+$/)&&m==='GET')return await getInv(env,path,orgId);
 if(path.match(/^\/api\/invoices\/[^/]+\/payments$/)&&m==='POST')return await recPay(request,env,path,orgId,userId,ip);
@@ -255,6 +317,8 @@ if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
 if(path==='/api/complaints'&&m==='GET')return await listComp(env,url,orgId);
 if(path==='/api/complaints'&&m==='POST')return await createComp(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/complaints\/[^/]+\/messages$/)&&m==='GET')return await listStaffTicketMessages(env,path,orgId);
+if(path.match(/^\/api\/complaints\/[^/]+\/messages$/)&&m==='POST')return await createStaffTicketMessage(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
@@ -277,6 +341,7 @@ if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='PUT')return await updateOnu(request,
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='DELETE')return await deleteOnu(env,path,orgId,userId,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
+if(path==='/api/reports/summary'&&m==='GET')return await repSummary(env,orgId);
 if(path==='/api/reports/revenue'&&m==='GET')return await repRev(env,url,orgId);
 if(path==='/api/reports/customers'&&m==='GET')return await repCust(env,orgId);
 if(path==='/api/reports/subscriptions'&&m==='GET')return await repSubs(env,orgId);
@@ -330,7 +395,8 @@ async function portalLogin(r,env,ip){
  if(!account||account.customer_status!=='active'||!await verifyPw(b.password,account.password_hash,account.password_salt)){
   await recordLoginFailure(env,ip,rateKey);return json({error:'Invalid portal credentials'},401);
  }
- await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
+ if(!isCurrentPasswordHash(account.password_hash)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE customer_portal_accounts SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(upgraded.hash,upgraded.salt,account.id,org.id).run();}
+  await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
  await env.DB.prepare("UPDATE customer_portal_accounts SET last_login=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(account.id,org.id).run();
  const token=await signJWT({principalType:'customer',portalAccountId:account.id,customerId:account.customer_id,orgId:org.id,tokenVersion:Number(account.token_version||0),exp:Date.now()+604800000},getSec(env));
  await audit(env,org.id,null,'customer_portal_login','Customer portal login',ip);
@@ -355,7 +421,7 @@ async function savePortalAccount(r,env,path,oid,uid,role,ip){
  const email=s(b.email||customer.email||'').toLowerCase(),password=typeof b.password==='string'?b.password:'',status=b.status||'active';
  if(!vEmail(email))return json({error:'A valid customer portal email is required'},400);
  if(!['active','disabled'].includes(status))return json({error:'Portal status must be active or disabled'},400);
- if(password&&password.length<8)return json({error:'Portal password must be at least 8 characters'},400);
+ if(password&&(password.length<8||password.length>128))return json({error:'Portal password must be 8-128 characters'},400);
  const existing=await env.DB.prepare('SELECT id FROM customer_portal_accounts WHERE customer_id=? AND organization_id=?').bind(id,oid).first();
  if(!existing&&!password)return json({error:'Set an initial portal password of at least 8 characters'},400);
  const credentials=password?await hashPw(password):null;
@@ -385,6 +451,8 @@ async function handlePortalApi(request,env,url,path,m,auth,ip){
  if(path==='/api/portal/payments'&&m==='GET')return await portalPayments(env,url,account);
  if(path==='/api/portal/tickets'&&m==='GET')return await portalTickets(env,url,account);
  if(path==='/api/portal/tickets'&&m==='POST')return await createPortalTicket(request,env,account,ip);
+ if(path.startsWith('/api/portal/tickets/')&&path.endsWith('/messages')&&path.split('/').length===6&&m==='GET')return await listPortalTicketMessages(env,path,account);
+ if(path.startsWith('/api/portal/tickets/')&&path.endsWith('/messages')&&path.split('/').length===6&&m==='POST')return await createPortalTicketMessage(request,env,path,account,ip);
  if(path==='/api/portal/password'&&m==='PUT')return await changePortalPassword(request,env,account);
  return json({error:'Forbidden'},403)
 }
@@ -462,11 +530,12 @@ async function changePortalPassword(r,env,account){
 
 async function authReg(r,env,ip){
  const raw=await parseBody(r);if(!raw||typeof raw!=='object'||Array.isArray(raw))return json({error:'Invalid body'},400);
+ const attemptEmail=String(raw.email||'').trim().toLowerCase().slice(0,254);if(await registrationRateLimited(env,ip,attemptEmail))return json({error:'Registration limit reached. Try again in 15 minutes.'},429);
  const b={companyName:s(raw.companyName??raw.company_name??raw.company??''),slug:s(raw.slug??raw.organizationSlug??raw.organization_slug??''),email:s(raw.email??''),password:raw.password,name:s(raw.name??raw.fullName??raw.full_name??raw.owner_name??raw.ownerName??''),phone:s(raw.phone??'')};
  if(!b.slug&&b.companyName)b.slug=b.companyName.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48);
  const missing=vReq(b,['companyName','email','password','name']);if(missing.length)return json({error:'Missing fields',fields:missing},400);
  if(!vEmail(b.email))return json({error:'Invalid email'},400);
- if(typeof b.password!=='string'||b.password.length<8)return json({error:'Password must be at least 8 characters'},400);
+ if(typeof b.password!=='string'||b.password.length<8||b.password.length>128)return json({error:'Password must be 8-128 characters'},400);
  if(typeof b.companyName!=='string'||b.companyName.length>120)return json({error:'Company name must be 1-120 characters'},400);
  if(typeof b.name!=='string'||b.name.length>120)return json({error:'Owner name must be 1-120 characters'},400);
  if(!b.slug)return json({error:'A valid organization slug could not be generated'},400);
@@ -495,6 +564,7 @@ if(b.workspace!==undefined&&b.workspace!==null&&String(b.workspace).trim()!=='')
  u=rows[0]||null;
 }
 if(!u||!await verifyPw(b.password,u.password_hash,u.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid credentials'},401);}
+if(!isCurrentPasswordHash(u.password_hash)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(upgraded.hash,upgraded.salt,u.id,u.organization_id).run();}
 await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,email).run();
 await env.DB.prepare("UPDATE users SET last_login=datetime('now'),updated_at=datetime('now')WHERE id=? AND organization_id=?").bind(u.id,u.organization_id).run();
 const tk=await signJWT({userId:u.id,orgId:u.organization_id,role:u.role,email:u.email,name:u.name||u.email,tokenVersion:Number(u.token_version||0),exp:Date.now()+604800000},getSec(env));
@@ -505,24 +575,24 @@ async function authMe(env,auth){const u=await env.DB.prepare('SELECT id,email,na
 
 async function dashStats(env,oid){const c=await env.DB.prepare('SELECT COUNT(*)v FROM customers WHERE organization_id=?').bind(oid).first();const ac=await env.DB.prepare("SELECT COUNT(*)v FROM customers WHERE organization_id=? AND status='active'").bind(oid).first();const pk=await env.DB.prepare('SELECT COUNT(*)v FROM packages WHERE organization_id=?').bind(oid).first();const sc=await env.DB.prepare('SELECT COUNT(*)v FROM subscriptions WHERE organization_id=?').bind(oid).first();const pi=await env.DB.prepare("SELECT COUNT(*)v,COALESCE(SUM(total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)),0)amt FROM invoices WHERE organization_id=? AND status IN ('pending','overdue') AND total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)").bind(oid).first();const rev=await env.DB.prepare("SELECT COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)v FROM payments WHERE organization_id=? AND status='completed'").bind(oid).first();const oc=await env.DB.prepare("SELECT COUNT(*)v FROM support_tickets WHERE organization_id=? AND status='open'").bind(oid).first();const st=await env.DB.prepare('SELECT COUNT(*)v FROM users WHERE organization_id=?').bind(oid).first();const mr=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now','-6 months')GROUP BY m ORDER BY m").bind(oid).all();return json({customers:c.v,activeCustomers:ac.v,packages:pk.v,subscriptions:sc.v,pendingInvoices:pi.v,pendingAmount:pi.amt,totalRevenue:rev.v,openComplaints:oc.v,staff:st.v,monthlyRevenue:mr.results||[]})}
 
-async function listCust(env,url,oid){const{page,pp,off}=pg(url);const q=url.searchParams.get('search')||'';const st=url.searchParams.get('status')||'';let w='WHERE organization_id=?';const p=[oid];if(q){w+=' AND(first_name LIKE? OR last_name LIKE? OR email LIKE? OR phone LIKE?)';const s='%'+q+'%';p.push(s,s,s,s)}if(st){w+=' AND status=?';p.push(st)}const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM customers '+w).bind(...p).first();const rows=await env.DB.prepare('SELECT * FROM customers '+w+' ORDER BY created_at DESC LIMIT? OFFSET?').bind(...p,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listCust(env,url,oid){const{page,pp,off}=pg(url);const q=url.searchParams.get('search')||'';const st=url.searchParams.get('status')||'';let w='WHERE organization_id=?';const p=[oid];if(q){w+=' AND(first_name LIKE? OR last_name LIKE? OR email LIKE? OR phone LIKE?)';const s='%'+q+'%';p.push(s,s,s,s)}if(st){w+=' AND status=?';p.push(st)}const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM customers '+w).bind(...p).first();const rows=await env.DB.prepare("SELECT customers.*,first_name||' '||last_name AS full_name,customer_code AS account_number,city AS coverage_area,COALESCE((SELECT status FROM subscriptions s WHERE s.customer_id=customers.id AND s.organization_id=customers.organization_id ORDER BY s.created_at DESC LIMIT 1),'pending') AS connection_status FROM customers "+w+' ORDER BY created_at DESC LIMIT? OFFSET?').bind(...p,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp),pageSize:pp}})}
 async function createCust(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['first_name']);if(ms.length)return json({error:'Missing fields',fields:ms},400);const id=uuid();const code='CUS-'+crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase();await env.DB.prepare('INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,city,status,customer_code,balance,notes,installation_address,installation_date,id_type,id_number)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,s(b.first_name),b.last_name||'',b.email||null,b.phone||null,b.address||null,b.city||null,b.status||'active',code,b.balance||0,b.notes||null,b.installation_address||null,b.installation_date||null,b.id_type||null,b.id_number||null).run();await audit(env,oid,uid,'create_customer','Customer:'+b.first_name,ip);return json(await env.DB.prepare('SELECT * FROM customers WHERE id=?').bind(id).first(),201)}
 async function getCust(env,path,oid){const id=path.split('/')[3];const cu=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!cu)return json({error:'Not found'},404);const subs=await env.DB.prepare('SELECT s.*,p.name package_name,p.price,p.speed_mbps FROM subscriptions s LEFT JOIN packages p ON s.package_id=p.id WHERE s.customer_id=? AND s.organization_id=?').bind(id,oid).all();const inv=await env.DB.prepare('SELECT * FROM invoices WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const pay=await env.DB.prepare('SELECT * FROM payments WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const comp=await env.DB.prepare('SELECT * FROM support_tickets WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();return json({...cu,subscriptions:subs.results,invoices:inv.results,payments:pay.results,complaints:comp.results})}
 async function updateCust(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);const f=['first_name','last_name','email','phone','address','city','status','notes','installation_address','installation_date','id_type','id_number','balance'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE customers SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();await audit(env,oid,uid,'update_customer','Updated:'+ex.first_name,ip);return json(await env.DB.prepare('SELECT * FROM customers WHERE id=?').bind(id).first())}
 async function delCust(env,path,oid,uid,ip){const id=path.split('/')[3];const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM customers WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_customer','Deleted:'+ex.first_name,ip);return json({success:true})}
 
-async function listPkg(env,url,oid){const{page,pp,off}=pg(url,50);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM packages WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT * FROM packages WHERE organization_id=? ORDER BY created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listPkg(env,url,oid){const{page,pp,off}=pg(url,50);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM packages WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT * FROM packages WHERE organization_id=? ORDER BY created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();const data=(rows.results||[]).map(x=>({...x,speed_down_mbps:Number(x.speed_down||x.speed_mbps||0),speed_up_mbps:Number(x.speed_up||x.speed_mbps||0),monthly_price_pkr:x.price,status:Number(x.is_active)!==0?'active':'inactive'}));return json({data,pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 async function createPkg(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['name','price']);if(ms.length)return json({error:'Missing fields',fields:ms},400);const id=uuid();await env.DB.prepare('INSERT INTO packages(id,organization_id,name,description,speed_mbps,speed_down,speed_up,price,billing_cycle,data_limit_gb,is_active)VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,s(b.name),b.description||null,parseInt(b.speed_mbps||0),b.speed_down||null,b.speed_up||null,parseFloat(b.price),b.billing_cycle||'monthly',b.data_limit_gb?parseInt(b.data_limit_gb):null,b.is_active!==undefined?(b.is_active?1:0):1).run();await audit(env,oid,uid,'create_package','Package:'+b.name,ip);return json(await env.DB.prepare('SELECT * FROM packages WHERE id=?').bind(id).first(),201)}
 async function getPkg(env,path,oid){const id=path.split('/')[3];const p=await env.DB.prepare('SELECT * FROM packages WHERE id=? AND organization_id=?').bind(id,oid).first();return p?json(p):json({error:'Not found'},404)}
 async function updatePkg(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM packages WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);const f=['name','description','speed_mbps','speed_down','speed_up','price','billing_cycle','data_limit_gb'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(b.is_active!==undefined){u.push('is_active=?');p.push(b.is_active?1:0)}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE packages SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();await audit(env,oid,uid,'update_package','Updated:'+ex.name,ip);return json(await env.DB.prepare('SELECT * FROM packages WHERE id=?').bind(id).first())}
 async function delPkg(env,path,oid,uid,ip){const id=path.split('/')[3];const ex=await env.DB.prepare('SELECT * FROM packages WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM packages WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_package','Deleted:'+ex.name,ip);return json({success:true})}
 
-async function listSubs(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM subscriptions WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT s.*,c.first_name,c.last_name,p.name package_name,p.price,p.speed_mbps FROM subscriptions s LEFT JOIN customers c ON s.customer_id=c.id LEFT JOIN packages p ON s.package_id=p.id WHERE s.organization_id=? ORDER BY s.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listSubs(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM subscriptions WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT s.*,s.start_date AS started_at,s.end_date AS expires_at,c.first_name,c.last_name,c.first_name||' '||c.last_name AS customer_name,c.customer_code AS account_number,p.name package_name,p.price,p.price AS monthly_price_pkr,CAST(COALESCE(p.speed_down,p.speed_mbps) AS INTEGER) AS speed_down_mbps,CAST(COALESCE(p.speed_up,p.speed_mbps) AS INTEGER) AS speed_up_mbps FROM subscriptions s LEFT JOIN customers c ON s.customer_id=c.id AND c.organization_id=s.organization_id LEFT JOIN packages p ON s.package_id=p.id AND p.organization_id=s.organization_id WHERE s.organization_id=? ORDER BY s.created_at DESC LIMIT? OFFSET?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 async function createSub(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['customer_id','package_id']);if(ms.length)return json({error:'Missing fields',fields:ms},400);if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);if(!await env.DB.prepare('SELECT id FROM packages WHERE id=? AND organization_id=?').bind(b.package_id,oid).first())return json({error:'Package not found'},404);const id=uuid();const sd=b.start_date||new Date().toISOString().split('T')[0];let ed=b.end_date;if(!ed){const d=new Date(sd);d.setMonth(d.getMonth()+1);ed=d.toISOString().split('T')[0]}await env.DB.prepare('INSERT INTO subscriptions(id,organization_id,customer_id,package_id,status,start_date,end_date,auto_renew)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id,b.package_id,b.status||'active',sd,ed,b.auto_renew?1:0).run();await audit(env,oid,uid,'create_subscription','Sub for '+b.customer_id,ip);return json(await env.DB.prepare('SELECT * FROM subscriptions WHERE id=?').bind(id).first(),201)}
-async function updateSub(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);const f=['status','start_date','end_date'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(b.auto_renew!==undefined){u.push('auto_renew=?');p.push(b.auto_renew?1:0)}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE subscriptions SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();return json(await env.DB.prepare('SELECT * FROM subscriptions WHERE id=?').bind(id).first())}
+async function updateSub(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);if(b.package_id&&!await env.DB.prepare('SELECT id FROM packages WHERE id=? AND organization_id=?').bind(b.package_id,oid).first())return json({error:'Package not found'},404);const f=['status','start_date','end_date','package_id'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(b.auto_renew!==undefined){u.push('auto_renew=?');p.push(b.auto_renew?1:0)}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE subscriptions SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();await audit(env,oid,uid,'update_subscription','Subscription:'+id,ip);return json(await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).first())}
 async function delSub(env,path,oid,uid,ip){const id=path.split('/')[3];if(!await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).first())return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).run();return json({success:true})}
 
-async function listInv(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM invoices WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT i.*,c.first_name,c.last_name,COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) AS paid_amount,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_amount,CASE WHEN COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)>0 AND COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)<i.total THEN 'partial' ELSE i.status END AS display_status FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id AND c.organization_id=i.organization_id WHERE i.organization_id=? ORDER BY i.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listInv(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM invoices WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT i.*,c.first_name,c.last_name,COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) AS paid_amount,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_amount,CASE WHEN COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)>0 AND COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)<i.total THEN 'partial' ELSE i.status END AS display_status FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id AND c.organization_id=i.organization_id WHERE i.organization_id=? ORDER BY i.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();const data=(rows.results||[]).map(x=>({...x,customer_name:[x.first_name,x.last_name].filter(Boolean).join(' '),amount_pkr:x.total??x.amount,status:x.display_status||x.status}));return json({data,pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 async function createInv(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ms=vReq(b,['customer_id','amount']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
@@ -610,7 +680,7 @@ async function recPay(r,env,path,oid,uid,ip){
  await notifyAdmins(env,oid,'Payment recorded',inv.invoice_number+' · '+amount+' PKR','billing');
  return json(await env.DB.prepare('SELECT * FROM payments WHERE id=? AND organization_id=?').bind(pid,oid).first(),201)
 }
-async function listPay(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM payments WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT p.*,c.first_name,c.last_name,i.invoice_number FROM payments p LEFT JOIN customers c ON p.customer_id=c.id AND c.organization_id=p.organization_id LEFT JOIN invoices i ON p.invoice_id=i.id AND i.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listPay(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM payments WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT p.*,c.first_name,c.last_name,c.first_name||' '||c.last_name AS customer_name,i.invoice_number,p.amount AS amount_pkr,p.payment_method AS method,p.paid_at AS received_at FROM payments p LEFT JOIN customers c ON p.customer_id=c.id AND c.organization_id=p.organization_id LEFT JOIN invoices i ON p.invoice_id=i.id AND i.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.created_at DESC LIMIT? OFFSET?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 
 
 async function listRefunds(env,url,oid){
@@ -653,19 +723,47 @@ async function updateRefund(request,env,path,oid,uid,ip){
  return json({success:true,data:await env.DB.prepare('SELECT * FROM refunds WHERE id=? AND organization_id=?').bind(id,oid).first()});
 }
 
-async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT t.*,c.first_name,c.last_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT t.*,c.first_name,c.last_name,CASE WHEN c.id IS NULL THEN '—' ELSE c.first_name||' '||c.last_name END AS customer_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id AND c.organization_id=t.organization_id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT? OFFSET?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listStaffTicketMessages(env,path,oid){
+ const id=path.split('/')[3],ticket=await env.DB.prepare('SELECT id FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ticket)return json({error:'Ticket not found'},404);
+ const rows=await env.DB.prepare("SELECT m.id,m.message,m.is_staff,m.created_at,u.name AS sender_name FROM ticket_messages m LEFT JOIN users u ON u.id=m.user_id AND u.organization_id=? WHERE m.ticket_id=? ORDER BY m.created_at ASC").bind(oid,id).all();
+ return json({data:rows.results||[]})
+}
+async function createStaffTicketMessage(request,env,path,oid,uid,ip){
+ const id=path.split('/')[3],b=await parseBody(request),message=s(b?.message||'').trim();if(!message||message.length>4000)return json({error:'Message must be 1-4000 characters'},400);
+ const ticket=await env.DB.prepare('SELECT id,customer_id,subject FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ticket)return json({error:'Ticket not found'},404);
+ const mid=uuid();await env.DB.prepare('INSERT INTO ticket_messages(id,ticket_id,user_id,message,is_staff) VALUES(?,?,?,?,1)').bind(mid,id,uid,message).run();
+ await env.DB.prepare("UPDATE support_tickets SET updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid).run();
+ await audit(env,oid,uid,'reply_support_ticket','Ticket:'+id,ip);
+ 
+ return json({success:true,data:{id:mid,ticket_id:id,message,is_staff:1,created_at:new Date().toISOString()}},201)
+}
+async function listPortalTicketMessages(env,path,account){
+ const id=path.split('/')[4],ticket=await env.DB.prepare('SELECT id FROM support_tickets WHERE id=? AND organization_id=? AND customer_id=?').bind(id,account.organization_id,account.customer_id).first();if(!ticket)return json({error:'Ticket not found'},404);
+ const rows=await env.DB.prepare("SELECT m.id,m.message,m.is_staff,m.created_at,COALESCE(u.name,CASE WHEN m.is_staff=1 THEN 'Support team' ELSE 'You' END) AS sender_name FROM ticket_messages m LEFT JOIN users u ON u.id=m.user_id AND u.organization_id=? WHERE m.ticket_id=? ORDER BY m.created_at ASC").bind(account.organization_id,id).all();
+ return json({data:rows.results||[]})
+}
+async function createPortalTicketMessage(request,env,path,account,ip){
+ const id=path.split('/')[4],b=await parseBody(request),message=s(b?.message||'').trim();if(!message||message.length>4000)return json({error:'Message must be 1-4000 characters'},400);
+ const ticket=await env.DB.prepare('SELECT id,subject FROM support_tickets WHERE id=? AND organization_id=? AND customer_id=?').bind(id,account.organization_id,account.customer_id).first();if(!ticket)return json({error:'Ticket not found'},404);
+ const mid=uuid();await env.DB.prepare('INSERT INTO ticket_messages(id,ticket_id,user_id,message,is_staff) VALUES(?,?,NULL,?,0)').bind(mid,id,message).run();
+ await env.DB.prepare("UPDATE support_tickets SET updated_at=datetime('now') WHERE id=? AND organization_id=? AND customer_id=?").bind(id,account.organization_id,account.customer_id).run();
+ await audit(env,account.organization_id,null,'customer_ticket_reply','Ticket:'+id,ip);
+ await notifyAdmins(env,account.organization_id,'Customer replied to a complaint',String(ticket.subject).slice(0,180),'support');
+ return json({success:true,data:{id:mid,ticket_id:id,message,is_staff:0,created_at:new Date().toISOString()}},201)
+}
 async function createComp(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ms=vReq(b,['subject']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
  if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);
  if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);
- const id=uuid();
- await env.DB.prepare('INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status,assigned_to)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id||null,s(b.subject),b.description||null,b.priority||'medium','open',b.assigned_to||null).run();
+ const id=uuid(),customerId=b.customer_id||b.customerId||null,priority=b.priority==='normal'?'medium':(b.priority||'medium');
+ await env.DB.prepare('INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status,assigned_to)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,customerId,s(b.subject),b.description||null,priority,'open',b.assigned_to||b.assignedTo||null).run();
  await audit(env,oid,uid,'create_ticket','Ticket:'+b.subject,ip);
  await notifyAdmins(env,oid,'New support ticket',String(b.subject).slice(0,180),'support');
  return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first(),201)
 }
-async function updateComp(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);const f=['status','priority','assigned_to','resolution','description'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE support_tickets SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=?').bind(id).first())}
+async function updateComp(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);const f=['status','priority','assigned_to','resolution','description'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE support_tickets SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();await audit(env,oid,uid,'update_ticket','Ticket:'+id,ip);return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first())}
 
 
 async function notifyAdmins(env,oid,title,message,type='info'){
@@ -720,7 +818,7 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
  if(role!=='owner'&&ex.role==='admin')return json({error:'Only the owner can manage administrators'},403);
  const allowed=['admin','billing','support','technician','staff'];
  if(b.role!==undefined&&!allowed.includes(b.role))return json({error:'Invalid role'},400);
- if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8))return json({error:'Password must be at least 8 characters'},400);
+ if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8||b.password.length>128))return json({error:'Password must be 8-128 characters'},400);
  if(b.status!==undefined&&!['active','disabled'].includes(b.status))return json({error:'Invalid user status'},400);
  if(id===uid&&b.role!==undefined&&b.role!==role)return json({error:'You cannot change your own role'},400);
  const fields=['name','role','phone','status'],sets=[],params=[];
@@ -782,7 +880,7 @@ async function delPppoe(env,path,oid,uid,ip){
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
  const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
- return json({data:rows.results||[],pagination:{page,per_page:pp,total:cnt.n,total_pages:Math.ceil(cnt.n/pp)}})
+ const data=(rows.results||[]).map(row=>({...row,apiPort:row.port,location:row.notes}));return json({data,pagination:{page,per_page:pp,total:cnt.n,total_pages:Math.ceil(cnt.n/pp)}})
 }
 async function listOnus(env,url,oid){
  const{page,pp,off}=pg(url,50),q=url.searchParams.get('search')||'',status=url.searchParams.get('status')||'',olt=url.searchParams.get('olt_id')||'';
@@ -877,6 +975,49 @@ async function networkStatus(env,oid){
  return json({configured:Object.values(counts).reduce((a,b)=>a+b,0)>0,devices:counts,connection_tested:false,note:'Device inventory is configured; live router/OLT connectivity requires reachable management endpoints and credentials.'})
 }
 
+async function listPaymentPromises(env,url,oid){
+ const {page,pp,off}=pg(url),count=await env.DB.prepare('SELECT COUNT(*) AS total FROM payment_promises WHERE organization_id=?').bind(oid).first();
+ const rows=await env.DB.prepare("SELECT p.id,p.customer_id,p.amount AS amount_pkr,p.promise_date,p.status,p.notes,p.created_at,p.updated_at,c.first_name||' '||c.last_name AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY CASE WHEN p.status='open' THEN 0 ELSE 1 END,p.promise_date ASC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}})
+}
+async function createPaymentPromise(request,env,oid,uid,ip){
+ const b=await parseBody(request);if(!b)return json({error:'Invalid body'},400);
+ const customerId=s(b.customer_id||''),amount=Number(b.amount),promiseDate=s(b.promise_date||''),notes=s(b.notes||'').slice(0,500)||null;
+ if(!customerId||!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(customerId,oid).first())return json({error:'Customer not found'},404);
+ if(!Number.isSafeInteger(amount)||amount<=0)return json({error:'Promised amount must be a positive whole number of rupees'},400);
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(promiseDate)||Number.isNaN(Date.parse(promiseDate))||new Date(promiseDate).toISOString().slice(0,10)!==promiseDate)return json({error:'A valid promise date is required'},400);
+ const id=uuid();await env.DB.prepare("INSERT INTO payment_promises(id,organization_id,customer_id,amount,promise_date,status,notes,created_by) VALUES(?,?,?,?,?,'open',?,?)").bind(id,oid,customerId,amount,promiseDate,notes,uid).run();
+ await audit(env,oid,uid,'create_payment_promise','Customer:'+customerId+' · '+amount+' PKR · '+promiseDate,ip);
+ const row=await env.DB.prepare("SELECT p.id,p.customer_id,p.amount AS amount_pkr,p.promise_date,p.status,p.notes,p.created_at,p.updated_at,c.first_name||' '||c.last_name AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row},201)
+}
+async function updatePaymentPromise(request,env,path,oid,uid,ip){
+ const id=path.split('/')[4],b=await parseBody(request);if(!b)return json({error:'Invalid body'},400);
+ const ex=await env.DB.prepare('SELECT id FROM payment_promises WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Payment promise not found'},404);
+ const allowed=['open','kept','broken','cancelled'];if(b.status!==undefined&&!allowed.includes(b.status))return json({error:'Invalid payment promise status'},400);
+ const sets=[],params=[];for(const field of ['status','notes'])if(b[field]!==undefined){sets.push(field+'=?');params.push(field==='notes'?s(b[field]||'').slice(0,500):b[field])}
+ if(!sets.length)return json({error:'No supported fields supplied'},400);
+ sets.push("updated_at=datetime('now')");params.push(id,oid);
+ await env.DB.prepare('UPDATE payment_promises SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...params).run();
+ await audit(env,oid,uid,'update_payment_promise','Promise:'+id,ip);
+ const row=await env.DB.prepare("SELECT p.id,p.customer_id,p.amount AS amount_pkr,p.promise_date,p.status,p.notes,p.created_at,p.updated_at,c.first_name||' '||c.last_name AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row})
+}
+async function financialAging(env,oid){
+ const rows=await env.DB.prepare("SELECT * FROM (SELECT c.first_name||' '||c.last_name AS customerName,i.invoice_number AS invoiceNumber,i.due_date AS dueDate,MAX(0,CAST(julianday(date('now'))-julianday(i.due_date) AS INTEGER)) AS daysOverdue,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstandingPkr FROM invoices i JOIN customers c ON c.id=i.customer_id AND c.organization_id=i.organization_id WHERE i.organization_id=? AND i.status IN ('pending','overdue') AND i.due_date<date('now')) WHERE outstandingPkr>0 ORDER BY dueDate ASC").bind(oid).all();
+ const invoices=rows.results||[],bucketsPkr={'1_30':0,'31_60':0,'61_90':0,'90_plus':0};
+ for(const row of invoices){const days=Number(row.daysOverdue||0),amount=Number(row.outstandingPkr||0);if(days<=30)bucketsPkr['1_30']+=amount;else if(days<=60)bucketsPkr['31_60']+=amount;else if(days<=90)bucketsPkr['61_90']+=amount;else bucketsPkr['90_plus']+=amount}
+ return json({data:{invoices,bucketsPkr}})
+}
+async function repSummary(env,oid){
+ const [revenue,outstanding,counts]=await Promise.all([
+  env.DB.prepare("SELECT strftime('%Y-%m',paid_at) AS month,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0) AS revenue FROM payments WHERE organization_id=? AND status='completed' AND paid_at>=datetime('now','-6 months') GROUP BY strftime('%Y-%m',paid_at) ORDER BY month").bind(oid).all(),
+  env.DB.prepare("SELECT COALESCE(SUM(MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0))),0) AS outstanding FROM invoices i WHERE i.organization_id=? AND i.status IN ('pending','overdue')").bind(oid).first(),
+  env.DB.prepare('SELECT status,COUNT(*) AS count FROM invoices WHERE organization_id=? GROUP BY status').bind(oid).all()
+ ]);
+ const monthlyRevenue=revenue.results||[],revenuePkr=monthlyRevenue.reduce((sum,row)=>sum+Number(row.revenue||0),0);
+ return json({data:{revenuePkr,outstandingPkr:Number(outstanding?.outstanding||0),monthlyRevenue,invoiceCounts:counts.results||[]}})
+}
 async function repRev(env,url,oid){const months=parseInt(url.searchParams.get('months')||'6');const rows=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COUNT(*)c,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now',?)GROUP BY m ORDER BY m").bind(oid,'-'+months+' months').all();return json({data:rows.results||[]})}
 async function repCust(env,oid){const bs=await env.DB.prepare('SELECT status,COUNT(*)c FROM customers WHERE organization_id=? GROUP BY status').bind(oid).all();return json({byStatus:bs.results||[]})}
 async function repSubs(env,oid){const bs=await env.DB.prepare('SELECT status,COUNT(*)c FROM subscriptions WHERE organization_id=? GROUP BY status').bind(oid).all();const bp=await env.DB.prepare('SELECT p.name package_name,COUNT(s.id)c FROM packages p LEFT JOIN subscriptions s ON p.id=s.package_id AND s.organization_id=? WHERE p.organization_id=? GROUP BY p.id').bind(oid,oid).all();return json({byStatus:bs.results||[],byPackage:bp.results||[]})}
@@ -909,7 +1050,7 @@ async function getSet(env,oid){const rows=await env.DB.prepare('SELECT key,value
 async function updSet(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);const limits={support_phone:80,support_email:160,whatsapp_support:80,payment_instructions:2000};if(Object.entries(b).some(([k,v])=>!(k in limits)||typeof v!=='string'||v.length>limits[k]))return json({error:'Unsupported or oversized workspace setting'},400);if(b.support_email&&!vEmail(b.support_email))return json({error:'Invalid support email'},400);for(const[k,v]of Object.entries(b)){const ex=await env.DB.prepare('SELECT id FROM settings WHERE organization_id=? AND key=?').bind(oid,k).first();if(ex)await env.DB.prepare("UPDATE settings SET value=?,updated_at=datetime('now')WHERE id=?").bind(String(v),ex.id).run();else await env.DB.prepare('INSERT INTO settings(id,organization_id,key,value)VALUES(?,?,?,?)').bind(uuid(),oid,k,String(v)).run()}await audit(env,oid,uid,'update_settings','Settings updated',ip);return json({success:true})}
 async function getProf(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=?').bind(auth.userId).first();return json(u||{error:'Not found'},u?200:404)}
 async function updProf(r,env,auth,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Name must be 1-120 characters'},400);if(b.phone!==undefined&&String(b.phone).length>50)return json({error:'Phone is too long'},400);const f=['name','phone'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(auth.userId);await env.DB.prepare('UPDATE users SET '+u.join(', ')+' WHERE id=?').bind(...p).run();return json(await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=?').bind(auth.userId).first())}
-async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords required'},400);if(b.newPassword.length<8)return json({error:'Password must be at least 8 characters'},400);const u=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.userId).first();if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt))return json({error:'Current password incorrect'},401);const{hash,salt}=await hashPw(b.newPassword);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now')WHERE id=?").bind(hash,salt,auth.userId).run();return json({success:true,message:'Password changed'})}
+async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords required'},400);if(typeof b.newPassword!=='string'||b.newPassword.length<8||b.newPassword.length>128)return json({error:'Password must be 8-128 characters'},400);const u=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.userId).first();if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt))return json({error:'Current password incorrect'},401);const{hash,salt}=await hashPw(b.newPassword);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now')WHERE id=?").bind(hash,salt,auth.userId).run();return json({success:true,message:'Password changed'})}
 async function getCo(env,oid){const o=await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first();return json(o||{error:'Not found'},o?200:404)}
 async function updCo(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Company name must be 1-120 characters'},400);if(b.email&&!vEmail(b.email))return json({error:'Invalid company email'},400);if(b.currency!==undefined&&!/^[A-Z]{3}$/.test(String(b.currency)))return json({error:'Currency must be a 3-letter ISO code'},400);const f=['name','email','phone','address','logo','currency'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(oid);await env.DB.prepare('UPDATE organizations SET '+u.join(', ')+' WHERE id=?').bind(...p).run();await audit(env,oid,uid,'update_company','Company updated',ip);return json(await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first())}
 

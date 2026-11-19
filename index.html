@@ -2,20 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b3b58">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#10243e">
 <meta name="description" content="Nexus ISP Management — subscriber, billing and fiber operations dashboard.">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="NEXUS">
-<link rel="manifest" href="./manifest.webmanifest">
-<link rel="icon" href="./assets/icons/nexus-icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="./assets/icons/nexus-icon.svg">
 <title>Nexus | ISP Management</title>
-<link rel="stylesheet" href="assets/css/styles.css?v=nexus-admin-dashboard-v2-20261117">
-<link rel="stylesheet" href="assets/css/mobile.css?v=nexus-android-pwa-v1">
-<link rel="stylesheet" href="assets/css/professional.css?v=nexus-professional-mobile-fix-20261117">
+<link rel="stylesheet" href="assets/css/styles.css?v=nexus-video-dashboard-v2-20261114">
 </head>
 <body>
 <div class="app-shell">
@@ -34,8 +25,9 @@
       <a class="nav-item" href="#staff"><span>♙</span> Staff</a>
       <a class="nav-item" href="#reports"><span>▥</span> Reports</a>
       <a class="nav-item" href="#audit"><span>≡</span> Activity Log</a>
-      <a class="nav-item" href="#tr069"><span>◉</span> TR-069 / ACS</a>
     </nav>
+    <p class="nav-label">NETWORK MANAGEMENT</p>
+    <nav class="nav" aria-label="Network management"></nav>
     <div class="sidebar-bottom">
       <div class="profile"><div class="avatar">VN</div><span><b>Workspace Admin</b><small>Signed-in account</small></span><span class="more">•••</span></div>
     </div>
@@ -44,7 +36,7 @@
     <header class="topbar">
       <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
       <div class="crumb">Workspace <span>/</span> <b>Dashboard</b></div>
-      <div class="top-actions"><span id="offlineStatus" role="status" style="font-size:10px;font-weight:700;white-space:nowrap">Checking connection…</span><button class="primary-btn" id="installApp" type="button" hidden>Install NEXUS</button><span class="demo-pill"><i></i> NEXUS WORKSPACE</span><div class="avatar small-avatar">VN</div></div>
+      <div class="top-actions"><span class="demo-pill"><i></i> NEXUS WORKSPACE</span><div class="avatar small-avatar">VN</div></div>
     </header>
     <section class="content" aria-live="polite">
       <div class="page-heading"><div><p class="eyebrow">NEXUS ISP MANAGEMENT</p><h1>Dashboard</h1><p class="subheading">Your ISP operations at a glance.</p></div><button class="primary-btn" id="addCustomer">＋ Add customer</button></div>
@@ -53,8 +45,6 @@
   </main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="assets/js/offline-store.js?v=nexus-offline-cache-v1"></script>
-<script src="assets/js/app.js?v=nexus-offline-standalone-v1"></script>
-<script src="assets/js/pwa.js?v=nexus-android-pwa-v1"></script>
+<script src="assets/js/app.js?v=nexus-hosted-workflows-v1-20261117"></script>
 </body>
 </html>

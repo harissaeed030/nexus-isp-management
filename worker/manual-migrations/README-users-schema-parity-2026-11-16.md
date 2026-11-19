@@ -1,4 +1,4 @@
-# D1 users schema parity — migration 0010
+# D1 users schema parity — migration 0011
 
 ## Target and decision
 
@@ -22,7 +22,7 @@ Live read-only preflight (2026-11-16):
 6. Run bash worker/scripts/test-d1-users-strict-schema-parity.sh.
 7. Only after the disposable D1 restore passes, apply the staging migration to nexus-saas-staging-db, then run staging login, staff, notification, ticket and tenant-isolation E2E tests.
 8. Finally apply 2026-11-16-production-users-schema-parity-ledger.sql to production. This is ledger-only: production users table is already the target schema and must not be rebuilt.
-9. Re-read both DDL definitions and compare all schema objects. Both ledgers must show version 10.
+9. Re-read both DDL definitions and compare all schema objects. Both ledgers must show version 11; migration 0010 remains reserved for payment promises.
 
 ## Safety
 

@@ -1,55 +1,21 @@
 (() => {
+// Hosted network connector management uses the tenant-scoped Worker API; device writes remain unavailable in this UI.
 const $=(s,r=document)=>r.querySelector(s),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let api=(()=>{const local=["localhost","127.0.0.1"].includes(location.hostname),saved=(localStorage.getItem("nexus_api")||sessionStorage.getItem("nexus_api"));if(saved&&(local||!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/i.test(saved)))return saved;if(saved&&!local)sessionStorage.removeItem("nexus_api");return location.port==="4000"?location.origin:(local?"http://127.0.0.1:4000":"https://nexus-saas-api.harissaeed030.workers.dev")})(),token=(localStorage.getItem("nexus_token")||sessionStorage.getItem("nexus_token"))||"",view="dashboard";
+let api=(()=>{const local=["localhost","127.0.0.1"].includes(location.hostname),saved=sessionStorage.getItem("nexus_api");if(saved&&(local||!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/i.test(saved)))return saved;if(saved&&!local)sessionStorage.removeItem("nexus_api");return location.port==="4000"?location.origin:(local?"http://127.0.0.1:4000":"https://nexus-saas-api.harissaeed030.workers.dev")})(),token=sessionStorage.getItem("nexus_token")||"",view="dashboard";
 const shell=$(".app-shell"),content=$(".content"),toast=$("#toast");
-const menuButton=$("#menuBtn"),sidebar=$("#sidebar");
-let menuBackdrop=null;
-function closeMenu(){
-  if(!sidebar)return;
-  sidebar.classList.remove("open");
-  menuButton?.setAttribute("aria-expanded","false");
-  menuBackdrop?.remove();
-  menuBackdrop=null;
-}
-function openMenu(){
-  if(!sidebar||!menuButton)return;
-  sidebar.classList.add("open");
-  menuButton.setAttribute("aria-expanded","true");
-  if(!menuBackdrop){
-    menuBackdrop=document.createElement("button");
-    menuBackdrop.type="button";
-    menuBackdrop.className="nx-menu-backdrop";
-    menuBackdrop.setAttribute("aria-label","Close navigation");
-    menuBackdrop.addEventListener("click",closeMenu);
-    document.body.append(menuBackdrop);
-  }
-}
-if(menuButton&&sidebar){
-  menuButton.type="button";
-  menuButton.setAttribute("aria-controls","sidebar");
-  menuButton.setAttribute("aria-expanded","false");
-  menuButton.addEventListener("click",()=>sidebar.classList.contains("open")?closeMenu():openMenu());
-  sidebar.querySelectorAll(".nav-item").forEach(link=>link.addEventListener("click",closeMenu));
-  document.addEventListener("keydown",event=>{if(event.key==="Escape")closeMenu()});
-  window.addEventListener("resize",()=>{if(window.innerWidth>760)closeMenu()});
-}
-const menuStyle=document.createElement("style");
-menuStyle.textContent=".nx-menu-backdrop{position:fixed;inset:0;z-index:40;border:0;background:rgba(3,18,31,.48);touch-action:manipulation}@media(min-width:761px){.nx-menu-backdrop{display:none}}@media(max-width:760px){.sidebar{z-index:50}.menu-btn{position:relative;z-index:60;display:grid;place-items:center;width:42px;height:42px;min-width:42px;border-radius:10px;background:#eaf5f3;color:#0b756d;font-size:21px}.menu-btn:focus-visible{outline:3px solid #24c6b4;outline-offset:2px}}";
-document.head.append(menuStyle);
-
 const st=document.createElement("style");st.textContent=".nx-auth{position:fixed;inset:0;z-index:99;background:#f4f8f6;display:grid;place-items:center;padding:18px}.nx-card,.nx-panel,.nx-kpi{background:white;border:1px solid #e5eeea;border-radius:12px;padding:16px;margin:12px 0}.nx-card{width:min(100%,430px);padding:24px}.nx-form,.nx-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.nx-form{display:grid}.nx-form input,.nx-row input,.nx-row select{padding:10px;border:1px solid #dce7e2;border-radius:7px;min-width:120px}.nx-btn{border:0;border-radius:7px;background:#137e62;color:white;padding:10px 14px;font-weight:700}.nx-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.nx-kpi small{display:block;color:#82918e}.nx-kpi b{font-size:22px}.nx-table{border-collapse:collapse;width:100%;min-width:520px}.nx-table th,.nx-table td{text-align:left;padding:10px;border-bottom:1px solid #edf2ef;font-size:11px}.nx-table th{color:#82918e;font-size:9px}@media(max-width:650px){.nx-grid{grid-template-columns:repeat(2,1fr)}}.nx-customer-name{border:0;background:transparent;color:#287fb4;font:700 12px Arial;padding:2px 0;cursor:pointer;text-align:left}.nx-customer-name span{color:#87949b;margin-left:5px}.nx-customer-menu{position:relative;z-index:3;background:#fff;border:1px solid #e1e9ed;border-radius:8px;box-shadow:0 8px 24px #20374418;padding:5px;margin-top:7px;min-width:190px}.nx-customer-menu[hidden]{display:none}.nx-customer-menu button{display:block;width:100%;text-align:left;border:0;background:#fff;padding:9px 10px;border-radius:5px;color:#42545d;font-size:11px;cursor:pointer}.nx-customer-menu button:hover{background:#f0f6fa;color:#1684c4}.nx-customer-menu button.danger{color:#c34f4f}.nx-customer-overlay{position:fixed;inset:0;background:#142a3580;z-index:120;display:grid;place-items:center;padding:16px}.nx-customer-dialog{width:min(100%,620px);max-height:85vh;overflow:auto;background:#fff;border-radius:12px;box-shadow:0 20px 70px #102b3a40}.nx-customer-dialog-head{position:sticky;top:0;background:#fff;padding:15px 18px;border-bottom:1px solid #e8edf0;display:flex;justify-content:space-between;align-items:center}.nx-customer-dialog-head button{border:0;background:#f2f5f7;border-radius:6px;font-size:20px;width:30px;height:30px}.nx-customer-dialog-body{padding:16px}.nx-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.nx-detail-grid div{background:#f6f8fa;border-radius:7px;padding:11px}.nx-detail-grid small,.nx-detail-grid b{display:block}.nx-detail-grid small{font-size:9px;color:#819099;margin-bottom:5px}.nx-detail-grid b{font-size:12px;overflow-wrap:anywhere}";document.head.append(st);const acsStyle=document.createElement("style");acsStyle.textContent=".nx-acs-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.nx-acs-device{padding:13px;border:1px solid #e6edf0;border-radius:9px;background:#fff}.nx-acs-device b,.nx-acs-device small{display:block}.nx-acs-device small{margin-top:5px;color:#81919a;font-size:10px}.nx-acs-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.nx-acs-actions button{border:1px solid #dce7eb;border-radius:6px;background:#f7fafb;padding:7px 9px;color:#315263;font-size:10px}.nx-acs-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.nx-acs-form input{min-width:0;width:100%;padding:10px;border:1px solid #dce5ea;border-radius:7px}.nx-acs-wide{grid-column:1/-1}@media(max-width:650px){.nx-acs-grid,.nx-acs-form{grid-template-columns:1fr}}";document.head.append(acsStyle);
 function msg(t){if(toast){toast.textContent=t;toast.classList.add("show");setTimeout(()=>toast.classList.remove("show"),2400)}}
-async function call(path,opt={}){let h={"Content-Type":"application/json",...(opt.headers||{})};if(token)h.Authorization="Bearer "+token;const method=String(opt.method||"GET").toUpperCase();let r;try{r=await fetch(api.replace(/\/$/,"")+path,{...opt,headers:h});}catch(error){if(method==="GET"&&window.NexusOffline){const cacheKey=api+"|"+(token||"anonymous")+"|"+path;const cached=await window.NexusOffline.get(cacheKey);if(cached){cached._offline=true;return cached;}}throw Error(method==="GET"?"Internet unavailable and no saved offline copy exists for this screen.":"Offline mode cannot submit changes yet. Reconnect to the internet and try again.");}let d=await r.json().catch(()=>({error:"Invalid server response"}));if(!r.ok||d.success===false)throw Error(d.error||"Request failed");if(method==="GET"&&window.NexusOffline){const cacheKey=api+"|"+(token||"anonymous")+"|"+path;window.NexusOffline.put(cacheKey,d).catch(()=>{});}return d;}
-function auth(setup=false){let p=$("#nxAuth");if(!p){p=document.createElement("div");p.id="nxAuth";p.className="nx-auth";document.body.append(p)}if(shell)shell.style.display="none";p.innerHTML='<div class="nx-card"><h1>NEXUS</h1><p>ISP Management · Unified workspace</p><form id="nxLogin" class="nx-form"><label>API address<input name="api" required value="'+esc(api)+'"></label>'+(setup?'<label>Company<input name="companyName" required value="Vancom Networks"></label><label>Owner name<input name="fullName" required></label>':'')+'<label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required minlength="'+(setup?10:1)+'"></label><button class="nx-btn">'+(setup?"Create owner account":"Sign in")+'</button></form><p id="nxErr" style="color:#b64e3b"></p><button id="nxToggle" class="nx-btn" type="button">'+(setup?"Back to sign in":"First time? Set up Nexus")+'</button><p>Password private rakhein; chat mein share na karein.</p></div>';$("#nxToggle").onclick=()=>auth(!setup);$("#nxLogin").onsubmit=async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));api=b.api.replace(/\/+$/,"");try{let d=await call(setup?"/api/v1/setup":"/api/v1/auth/login",{method:"POST",body:JSON.stringify(b)});token=d.token;localStorage.setItem("nexus_token",token);localStorage.setItem("nexus_api",api);sessionStorage.setItem("nexus_token",token);sessionStorage.setItem("nexus_api",api);p.remove();shell.style.display="";load("dashboard")}catch(x){$("#nxErr").textContent=x.message}}}
+async function call(path,opt={}){let h={"Content-Type":"application/json",...(opt.headers||{})};if(token)h.Authorization="Bearer "+token;if(api.includes("workers.dev")&&opt.method==="PATCH")opt={...opt,method:"PUT"};let r;try{r=await fetch(api.replace(/\/$/,"")+path,{...opt,headers:h})}catch{throw Error("API connect nahi hua. Backend aur API address check karein.")}let d=await r.json().catch(()=>({error:"Invalid server response"}));if(!r.ok||d.success===false)throw Error(d.error||"Request failed");return d}
+function auth(setup=false){let p=$("#nxAuth");if(!p){p=document.createElement("div");p.id="nxAuth";p.className="nx-auth";document.body.append(p)}if(shell)shell.style.display="none";p.innerHTML='<div class="nx-card"><h1>NEXUS</h1><p>ISP Management · Unified workspace</p><form id="nxLogin" class="nx-form"><label>API address<input name="api" required value="'+esc(api)+'"></label>'+(setup?'<label>Company<input name="companyName" required value="Vancom Networks"></label><label>Owner name<input name="fullName" required></label>':'')+'<label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required minlength="'+(setup?10:1)+'"></label><button class="nx-btn">'+(setup?"Create owner account":"Sign in")+'</button></form><p id="nxErr" style="color:#b64e3b"></p><button id="nxToggle" class="nx-btn" type="button">'+(setup?"Back to sign in":"First time? Set up Nexus")+'</button><p>Password private rakhein; chat mein share na karein.</p></div>';$("#nxToggle").onclick=()=>auth(!setup);$("#nxLogin").onsubmit=async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));api=b.api.replace(/\/+$/,"");try{let d=await call(setup?"/api/v1/setup":"/api/v1/auth/login",{method:"POST",body:JSON.stringify(b)});token=d.token;sessionStorage.setItem("nexus_token",token);sessionStorage.setItem("nexus_api",api);p.remove();shell.style.display="";load("dashboard")}catch(x){$("#nxErr").textContent=x.message}}}
 const money=n=>"₨ "+Number(n||0).toLocaleString("en-PK");
 function table(head,rows){return '<div class="nx-panel" style="overflow:auto"><table class="nx-table"><thead><tr>'+head.map(x=>"<th>"+x+"</th>").join("")+'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+head.length+'">No records found.</td></tr>')+'</tbody></table></div>'}
 function showCustomerPanel(title,body){content.querySelector("#nxCustomerPanel")?.remove();content.insertAdjacentHTML("beforeend",'<div class="nx-customer-overlay" id="nxCustomerPanel"><section class="nx-customer-dialog"><div class="nx-customer-dialog-head"><b>'+esc(title)+'</b><button type="button" id="nxCustomerClose">×</button></div><div class="nx-customer-dialog-body">'+body+'</div></section></div>');$("#nxCustomerClose").onclick=()=>$("#nxCustomerPanel").remove();$("#nxCustomerPanel").onclick=e=>{if(e.target.id==="nxCustomerPanel")e.currentTarget.remove()}}
 function page(title,sub,body){content.innerHTML='<div class="page-heading"><div><p class="eyebrow">NEXUS WORKSPACE</p><h1>'+title+'</h1><p class="subheading">'+sub+'</p></div><button class="nx-btn" id="nxRefresh">Refresh</button></div>'+body;$("#nxRefresh").onclick=()=>load(view)}
 async function load(v){view=v;try{
 if(v==="dashboard"){
- const settled=await Promise.allSettled([call("/api/v1/dashboard"),call("/api/v1/reports/summary"),call("/api/v1/subscriptions"),call("/api/v1/invoices"),call("/api/v1/payments"),call("/api/v1/tickets")]);
+ const settled=await Promise.allSettled([call("/api/v1/dashboard/stats"),call("/api/v1/reports/summary"),call("/api/v1/subscriptions"),call("/api/v1/invoices"),call("/api/v1/payments"),call("/api/v1/tickets")]);
  if(settled[0].status!=="fulfilled") throw settled[0].reason;
- const stats=settled[0].value.stats;
+ const rawStats=settled[0].value.stats||settled[0].value;const stats={...rawStats,revenuePkr:rawStats.revenuePkr??rawStats.totalRevenue??0};
  const report=settled[1].status==="fulfilled"?settled[1].value.data:{monthlyRevenue:[],outstandingPkr:0};
  const subscriptions=settled[2].status==="fulfilled"?settled[2].value.data:[];
  const invoices=settled[3].status==="fulfilled"?settled[3].value.data:[];
@@ -126,7 +92,7 @@ if(v==="customers"){
    $("#nxCustomerEdit").onsubmit=async e=>{e.preventDefault();try{await call("/api/v1/customers/"+id,{method:"PATCH",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});msg("Customer profile updated");$("#nxCustomerPanel")?.remove();renderCustomers(currentPage)}catch(err){msg(err.message)}};
   }catch(e){msg(e.message)}
  };
- $("#nxCustomerRegister").onsubmit=async e=>{e.preventDefault();try{const d=await call("/api/v1/customers",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});msg("Customer registered · "+d.data.account_number);e.currentTarget.reset();renderCustomers(1)}catch(err){msg(err.message)}};
+ $("#nxCustomerRegister").onsubmit=async e=>{e.preventDefault();try{const d=await call("/api/v1/customers",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});msg("Customer registered · "+((d.data||d).account_number||(d.data||d).customer_code||"saved"));e.currentTarget.reset();renderCustomers(1)}catch(err){msg(err.message)}};
  renderCustomers(1);
 }
 if(v==="packages"){
@@ -163,6 +129,26 @@ if(v==="promises"){
  (aging?"":'<p class="nx-panel">Aging report is unavailable for this staff role; payment promises remain available.</p>'));
  $("#nxPromiseAdd").onsubmit=async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));data.amountPkr=Number(data.amountPkr);try{await call("/api/v1/operations/payment-promises",{method:"POST",body:JSON.stringify(data)});msg("Payment promise saved");load("promises")}catch(error){msg(error.message)}};
  content.querySelectorAll("[data-promise-save]").forEach(button=>button.onclick=async()=>{const id=button.dataset.promiseSave,status=content.querySelector('[data-promise-status="'+id+'"]').value;try{await call("/api/v1/operations/payment-promises/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({status})});msg("Promise status updated");load("promises")}catch(error){msg(error.message)}});
+}
+if(v==="routers"&&api.includes("workers.dev")){const d=(await call("/api/v1/network/devices")).data||[];const rows=d.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.device_type)+'</td><td>'+esc(x.host||"—")+'</td><td>'+esc(x.port||"—")+'</td><td>'+esc(x.model||"—")+'</td><td>'+esc(x.status)+'</td></tr>').join("");page("Network device inventory","Hosted D1 inventory only. Live RouterOS commands and credential storage are not enabled in this Worker.",'<form id="nxAdd" class="nx-panel nx-row"><input name="name" required placeholder="Device name"><select name="device_type"><option value="mikrotik">MikroTik</option><option value="olt">OLT</option><option value="acs">ACS</option><option value="other">Other</option></select><input name="host" placeholder="Management IP / hostname"><input name="port" type="number" min="1" max="65535" placeholder="Management port"><input name="model" placeholder="Model"><input name="management_protocol" placeholder="Protocol"><input name="notes" placeholder="Location / notes"><button class="nx-btn">Save inventory record</button></form>'+table(["NAME","TYPE","HOST","PORT","MODEL","STATUS"],rows));return}
+if(v==="network-connectors"){
+ if(!api.startsWith("https://")){
+  page("Network Connectors & Jobs","Hosted SaaS feature.",'<div class="nx-panel">Network connector management is available in the hosted Cloudflare SaaS API. Sign in to the hosted workspace to use this page.</div>');
+  return;
+ }
+ const [connectorResponse,jobResponse,deviceResponse]=await Promise.all([
+  call("/api/v1/network/connectors"),call("/api/v1/network/jobs"),call("/api/v1/network/devices")
+ ]);
+ const connectors=connectorResponse.data||[],jobs=jobResponse.data||[],devices=(deviceResponse.data||[]).filter(x=>x.device_type==="mikrotik"&&x.status==="active");
+ const connectorRows=connectors.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.status)+'</td><td>'+esc((x.capabilities||[]).join(", "))+'</td><td>'+esc(x.last_seen_at||"Never")+'</td><td><button class="nx-btn" data-connector-disable="'+esc(x.id)+'">Disable</button></td></tr>').join("");
+ const jobRows=jobs.map(x=>'<tr><td>'+esc(x.id)+'</td><td>'+esc(x.device_name||x.device_id)+'</td><td>'+esc(x.capability)+'</td><td>'+esc(x.status)+'</td><td>'+esc(x.attempts)+'</td><td>'+esc(x.created_at)+'</td></tr>').join("");
+ const connectorOptions=connectors.filter(x=>x.status==="active").map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
+ const deviceOptions=devices.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' · '+esc(x.host||"host not set")+'</option>').join("");
+ page("Network Connectors & Jobs","Private ISP connector · Read-only MikroTik automation. Device writes are not available here.",'<div class="nx-panel"><b>Safety status</b><p>Only identity, resource, interfaces and active PPPoE session reads can be queued. Connector tokens are shown once only. Never paste a connector token into chat or commit it to GitHub.</p></div><div class="nx-panel"><h3>Register private connector</h3><form id="nxConnectorCreate" class="nx-row"><input name="name" required minlength="2" maxlength="80" placeholder="e.g. Vancom Office Connector"><button class="nx-btn">Create connector</button></form><div id="nxConnectorToken" hidden></div></div><div class="nx-panel"><h3>Registered connectors</h3>'+table(["NAME","STATUS","CAPABILITIES","LAST SEEN","ACTION"],connectorRows)+'</div><div class="nx-panel"><h3>Queue a read-only MikroTik check</h3><form id="nxNetworkJob" class="nx-form"><label>Connector<select name="connector_id" required><option value="">Select connector</option>'+connectorOptions+'</select></label><label>Active MikroTik device<select name="device_id" required><option value="">Select active device</option>'+deviceOptions+'</select></label><label>Read operation<select name="capability" required><option value="mikrotik.identity.read">Router identity</option><option value="mikrotik.resource.read">Resource health</option><option value="mikrotik.interfaces.read">Interface status</option><option value="mikrotik.pppoe.sessions.read">Active PPPoE sessions</option></select></label><button class="nx-btn">Queue read-only job</button></form><small>Only devices marked Active in Network Inventory appear here. The connector must have a matching local device mapping.</small></div><div class="nx-panel"><h3>Recent network jobs</h3>'+table(["JOB ID","DEVICE","CAPABILITY","STATUS","ATTEMPTS","CREATED"],jobRows)+'</div>');
+ $("#nxConnectorCreate")?.addEventListener("submit",async e=>{e.preventDefault();const name=new FormData(e.currentTarget).get("name");try{const result=await call("/api/v1/network/connectors",{method:"POST",body:JSON.stringify({name})});const box=$("#nxConnectorToken");box.hidden=false;box.innerHTML='<p><b>Copy this token now. It cannot be viewed again.</b></p><textarea id="nxNewConnectorToken" readonly style="width:100%;min-height:70px">'+esc(result.token)+'</textarea><button type="button" class="nx-btn" id="nxCopyConnectorToken">Copy token</button>';$("#nxCopyConnectorToken").onclick=async()=>{try{await navigator.clipboard.writeText(result.token);msg("Connector token copied. Save it securely in the connector .env file.")}catch{msg("Select and copy the token manually.")}};msg("Connector created. Save the one-time token securely.");}catch(x){msg(x.message)}});
+ $("#nxNetworkJob")?.addEventListener("submit",async e=>{e.preventDefault();const b=Object.fromEntries(new FormData(e.currentTarget));b.idempotency_key="nexus-"+(crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(16).slice(2));try{await call("/api/v1/network/jobs",{method:"POST",body:JSON.stringify(b)});msg("Read-only network job queued");load("network-connectors")}catch(x){msg(x.message)}});
+ content.querySelectorAll("[data-connector-disable]").forEach(btn=>btn.addEventListener("click",async()=>{if(!confirm("Disable this connector and cancel its pending jobs?"))return;try{await call("/api/v1/network/connectors/"+encodeURIComponent(btn.dataset.connectorDisable),{method:"DELETE"});msg("Connector disabled");load("network-connectors")}catch(x){msg(x.message)}}));
+ return;
 }
 if(v==="routers"){
  let d=(await call("/api/v1/routers")).data;
@@ -220,6 +206,7 @@ if(v==="staff"){
  };
  content.querySelectorAll("[data-staff-permissions]").forEach(button=>button.onclick=()=>editPermissions(button.dataset.staffPermissions,button.dataset.staffName));
 }
+if(v==="tr069"&&api.includes("workers.dev")){page("TR-069 / ACS","The hosted Worker does not yet expose ACS connection, device synchronization or configuration endpoints.",'<div class="nx-panel"><b>Hosted TR-069 integration pending</b><p>The existing local GenieACS adapter is a separate runtime. Do not enter ACS credentials into this hosted page until encrypted tenant-scoped storage and audited device-control endpoints are implemented.</p></div>');return}
 if(v==="tr069"){
  const [connections,devices,auditRows]=await Promise.all([call("/api/v1/acs/connections"),call("/api/v1/tr069/devices"),call("/api/v1/tr069/audit-logs")]);
  const conns=connections.data,devs=devices.data;
@@ -239,15 +226,92 @@ if(v==="tr069"){
 if(v==="reports"){let d=(await call("/api/v1/reports/summary")).data;page("Reports","Revenue and outstanding receivables.",'<div class="nx-grid"><div class="nx-kpi"><small>Payments received</small><b>'+money(d.revenuePkr)+'</b></div><div class="nx-kpi"><small>Outstanding</small><b>'+money(d.outstandingPkr)+'</b></div></div>'+table(["MONTH","REVENUE"],d.monthlyRevenue.map(x=>'<tr><td>'+esc(x.month)+'</td><td>'+money(x.revenue)+'</td></tr>').join(""))+table(["INVOICE STATUS","COUNT"],d.invoiceCounts.map(x=>'<tr><td>'+esc(x.status)+'</td><td>'+x.count+'</td></tr>').join("")))}
 if(v==="tickets"){
  let z=await Promise.all([call("/api/v1/tickets"),call("/api/v1/customers")]),d=z[0].data,c=z[1].data;
- const rows=d.map(x=>'<tr><td>'+esc(x.customer_name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.priority)+'</td><td><select data-ticket-status="'+esc(x.id)+'">'+["open","in_progress","resolved","closed"].map(s=>'<option value="'+s+'" '+(x.status===s?"selected":"")+'>'+s.replace("_"," ")+'</option>').join("")+'</select></td><td><button class="nx-btn" type="button" data-ticket-save="'+esc(x.id)+'">Update</button></td></tr>').join("");
+ const rows=d.map(x=>'<tr><td>'+esc(x.customer_name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.priority)+'</td><td><select data-ticket-status="'+esc(x.id)+'">'+["open","in_progress","resolved","closed"].map(s=>'<option value="'+s+'" '+(x.status===s?"selected":"")+'>'+s.replace("_"," ")+'</option>').join("")+'</select></td><td><button class="nx-btn" type="button" data-ticket-save="'+esc(x.id)+'">Update</button>'+(api.includes("workers.dev")?' <button class="nx-btn" type="button" data-ticket-messages="'+esc(x.id)+'" data-ticket-subject="'+esc(x.subject)+'">Messages</button>':'')+'</td></tr>').join("");
  page("Support tickets","Register complaints, assign priority and update each ticket through resolution.",'<form id="nxAdd" class="nx-panel nx-row"><select name="customerId" required><option value="">Customer</option>'+c.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+'</option>').join("")+'</select><input name="subject" required maxlength="180" placeholder="Complaint subject"><select name="priority"><option value="normal">Normal</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select><input name="description" placeholder="Details"><button class="nx-btn">Create ticket</button></form>'+table(["CUSTOMER","SUBJECT","PRIORITY","STATUS","ACTIONS"],rows));
  content.querySelectorAll("[data-ticket-save]").forEach(button=>button.onclick=async()=>{const id=button.dataset.ticketSave,status=content.querySelector('[data-ticket-status="'+id+'"]').value;try{await call("/api/v1/tickets/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({status})});msg("Ticket status updated");load("tickets")}catch(error){msg(error.message)}});
+ content.querySelectorAll("[data-ticket-messages]").forEach(button=>button.onclick=async()=>{
+  const id=button.dataset.ticketMessages,subject=button.dataset.ticketSubject||"Ticket";
+  try{
+   const response=await call("/api/v1/tickets/"+encodeURIComponent(id)+"/messages");
+   const messages=(response.data||[]).map(x=>'<div class="nx-panel"><b>'+esc(x.sender_name|| (Number(x.is_staff)===1?"Staff":"Customer"))+'</b><p>'+esc(x.message)+'</p><small>'+esc(x.created_at||"")+'</small></div>').join("")||'<p>No replies yet.</p>';
+   showCustomerPanel("Ticket conversation · "+subject,messages+'<form id="nxTicketReply" class="nx-form"><textarea name="message" rows="3" required maxlength="4000" placeholder="Write a reply"></textarea><button class="nx-btn">Send reply</button></form>');
+   $("#nxTicketReply").onsubmit=async e=>{e.preventDefault();const message=new FormData(e.currentTarget).get("message");try{await call("/api/v1/tickets/"+encodeURIComponent(id)+"/messages",{method:"POST",body:JSON.stringify({message})});msg("Reply sent");button.click()}catch(error){msg(error.message)}};
+  }catch(error){msg(error.message)}
+ });
 }
 if(v==="audit"){let d=(await call("/api/v1/audit-logs")).data;page("Activity log","Recent workspace actions.",table(["ACTION","TYPE","RECORD","DATE"],d.map(x=>'<tr><td>'+esc(x.action)+'</td><td>'+esc(x.resource_type)+'</td><td>'+esc(x.resource_id)+'</td><td>'+esc(x.created_at)+'</td></tr>').join("")))}
-$("#nxAdd")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget)),paths={customers:"/api/v1/customers",packages:"/api/v1/packages",subscriptions:"/api/v1/subscriptions",billing:"/api/v1/invoices",tickets:"/api/v1/tickets",routers:"/api/v1/routers",staff:"/api/v1/staff"};try{await call(paths[view],{method:"POST",body:JSON.stringify(b)});msg("Saved successfully");load(view)}catch(x){msg(x.message)}});
+$("#nxAdd")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget)),paths={customers:"/api/v1/customers",packages:"/api/v1/packages",subscriptions:"/api/v1/subscriptions",billing:"/api/v1/invoices",tickets:"/api/v1/tickets",routers:api.includes("workers.dev")?"/api/v1/network/devices":"/api/v1/routers",staff:"/api/v1/staff"};try{await call(paths[view],{method:"POST",body:JSON.stringify(b)});msg("Saved successfully");load(view)}catch(x){msg(x.message)}});
 $("#nxGenerate")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{let d=await call("/api/v1/billing/generate",{method:"POST",body:JSON.stringify(b)});msg(d.invoicesCreated+" invoices generated");load("billing")}catch(x){msg(x.message)}});
 $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.currentTarget));try{await call("/api/v1/payments",{method:"POST",body:JSON.stringify(b)});msg("Payment recorded");load("billing")}catch(x){msg(x.message)}});
 }catch(e){page("Could not load",e.message,'<div class="nx-panel" style="color:#b64e3b">'+esc(e.message)+'</div>')}}
-document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit","tr069"].includes(v)){e.preventDefault();load(v);$("#sidebar")?.classList.remove("open")}}));
+document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit"].includes(v)){e.preventDefault();load(v);$("#sidebar")?.classList.remove("open")}}));
+const navs=document.querySelectorAll(".nav");const nav=navs[1]||navs[0];
+
+$("#addCustomer")?.addEventListener("click",()=>load("customers"));$("#dismissNotice")?.addEventListener("click",()=>$(".notice")?.remove());$("#menuBtn")?.addEventListener("click",()=>$("#sidebar")?.classList.toggle("open"));
+const actions=$(".top-actions");if(actions)actions.insertAdjacentHTML("beforeend",'<button id="nxLogout" class="nx-btn" type="button" style="padding:7px 10px">Sign out</button>');$("#nxLogout")?.addEventListener("click",async()=>{try{if(token)await call("/api/v1/auth/logout",{method:"POST"})}catch{}token="";sessionStorage.removeItem("nexus_token");auth(false)});
+
+const moduleGroups=[
+["CUSTOMER MANAGEMENT",["Area / Coverage","Country, City & Locality","User Profiles","New Queries","Box / Media Inventory","Connection Providers","Radius Users"]],
+["FIELD OPERATIONS",["Dealers Profile","Recovery Officers","Area Allocation","Promise Dates","Operator Collections"]],
+["COMMERCIAL",["Transactions","Bills Creator","User Collections","Dealer Collections","Allocated Collections","Recharge System","Internet Recharge","Recharge Packages"]],
+["COMMUNICATION",["New Messages","Expiry Messages","WhatsApp Draft Messages","Sent Messages"]],
+["FINANCE & REPORTS",["Account Heads","Account Entries","One Day Accounts","Users Reports","Defaulter Reports","Package Wise Report","Monthly Collection Report","Unpaid Collection","Transaction Wise Report"]],
+["ADMINISTRATION",["Company Profile","User Rights","Configurations","Change Username / Password","Deleted Users","Activity Logs"]],
+["FIBER NETWORK",["OLT Devices","ONU / ONT Inventory","TR-069 / ACS","Connection Status","Network Connectors & Jobs"]]
+];
+const moduleSlug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+const moduleNav=moduleGroups.map(([group,items])=>'<section class="nav-section"><div class="nav-section-heading"><span>'+group+'</span><i>'+items.length+'</i></div><div class="nav-sub">'+items.map(item=>'<a class="nav-item nx-module-link" href="#module-'+moduleSlug(item)+'" data-module="'+esc(item)+'"><span class="nav-icon">•</span><span class="nav-text">'+esc(item)+'</span></a>').join("")+'</div></section>').join("");
+nav?.insertAdjacentHTML("beforeend",moduleNav);
+nav?.querySelectorAll(".nx-module-link").forEach(a=>a.addEventListener("click",e=>{
+ e.preventDefault();const name=a.dataset.module;if(name==="Promise Dates"){load("promises");$("#sidebar")?.classList.remove("open");return;}if(["New Messages","Expiry Messages","WhatsApp Draft Messages","Sent Messages"].includes(name)){window.location.href="/notifications";return;}if(name==="TR-069 / ACS"||name==="Connection Status"){load("tr069");$("#sidebar")?.classList.remove("open");return;}if(name==="Network Connectors & Jobs"){load("network-connectors");$("#sidebar")?.classList.remove("open");return;}
+ const descriptions={
+ "Area / Coverage":"Define service zones, neighborhoods and coverage boundaries.",
+ "Country, City & Locality":"Organize customer locations and service areas.",
+ "User Profiles":"Manage subscriber records, contact details and service status.",
+ "New Queries":"Capture new service requests and installation leads.",
+ "Box / Media Inventory":"Track splitters, distribution boxes and fiber materials.",
+ "Connection Providers":"Record upstream and connectivity providers.",
+ "Radius Users":"Prepare subscriber identity and PPP/RADIUS integration records.",
+ "Dealers Profile":"Manage dealer accounts, assigned areas and collections.",
+ "Recovery Officers":"Assign collection staff and recovery territories.",
+ "Area Allocation":"Allocate customers and collection responsibilities by area.",
+ "Promise Dates":"Track customer payment commitments and follow-up dates.",
+ "Operator Collections":"Record collections received by field operators.",
+ "Transactions":"Review financial transactions and payment records.",
+ "Bills Creator":"Create customer invoices and monthly billing runs.",
+ "User Collections":"Record and reconcile subscriber payments.",
+ "Dealer Collections":"Track dealer deposits and settlements.",
+ "Allocated Collections":"Review collections allocated to staff or dealers.",
+ "Recharge System":"Manage prepaid recharge workflows and package top-ups.",
+ "Internet Recharge":"Record internet package recharge activity.",
+ "Recharge Packages":"Configure prepaid recharge products.",
+ "New Messages":"Prepare customer notices and service announcements.",
+ "Expiry Messages":"Prepare package expiry and due-payment reminders.",
+ "WhatsApp Draft Messages":"Create WhatsApp-ready customer message drafts.",
+ "Sent Messages":"Review communication history.",
+ "Account Heads":"Configure income, expense and ledger categories.",
+ "Account Entries":"Record business income and expense entries.",
+ "One Day Accounts":"Review daily cash and account balances.",
+ "Users Reports":"Build subscriber activity and status reports.",
+ "Defaulter Reports":"Identify overdue invoices and unpaid subscribers.",
+ "Package Wise Report":"Analyze subscribers by internet package.",
+ "Monthly Collection Report":"Review monthly collection performance.",
+ "Unpaid Collection":"Track outstanding customer balances.",
+ "Transaction Wise Report":"Review payment transactions by date and method.",
+ "Company Profile":"Manage ISP company identity and contact information.",
+ "User Rights":"Control staff roles and module permissions.",
+ "Configurations":"Manage workspace settings and operational defaults.",
+ "Change Username / Password":"Update account credentials securely.",
+ "Deleted Users":"Review removed or deactivated subscriber records.",
+ "Activity Logs":"Review workspace actions and audit history.",
+ "OLT Devices":"Inventory optical line terminals and PON ports.",
+ "ONU / ONT Inventory":"Track customer optical network units and serial numbers.",
+ "TR-069 / ACS":"Plan ACS connectivity and remote ONU management.",
+ "Connection Status":"View live service state after network integrations are configured.",
+ "Network Connectors & Jobs":"Register private-network connectors and queue read-only MikroTik checks."
+ };
+ page(name,descriptions[name]||"Nexus module",'<div class="nx-panel"><b>Module setup is not connected yet.</b><p>'+esc(descriptions[name]||"This module is planned for the Nexus workspace.")+'</p><p style="color:#82918e">This section is listed for the complete ISP workflow. It will become operational after its database, API, permissions and tests are implemented. No sample records or fake live status are shown.</p></div>');
+}));
+
 if(token){if(shell)shell.style.display="";load("dashboard")}else auth(false);
 })();

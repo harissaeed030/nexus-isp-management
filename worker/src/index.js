@@ -1,13 +1,18 @@
+import { NETWORK_READ_CAPABILITIES, validateNetworkConnectorName, isNetworkConnectorToken, validateNetworkJobRequest, redactNetworkResult } from "./network-connector-contract.js";
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 function uuid(){return crypto.randomUUID()}
 function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
-function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
+function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Cache-Control':'no-store','Pragma':'no-cache','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
-async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
-async function verifyPw(pw,h,salt){if(!h)return false;if(!salt)return pw===h;const{hash}=await hashPw(pw,salt);return hash===h}
+const PASSWORD_HASH_ITERATIONS=600000;
+const HASH_SEPARATOR=String.fromCharCode(36);
+function isCurrentPasswordHash(h){if(typeof h!=='string')return false;const p=h.split(HASH_SEPARATOR);return p.length===3&&p[0]==='pbkdf2-sha256'&&Number(p[1])===PASSWORD_HASH_ITERATIONS&&/^[0-9a-f]{64}$/i.test(p[2])}
+async function hashPw(pw,salt){if(typeof pw!=='string'||pw.length<8||pw.length>128)throw new Error('Password must be 8-128 characters');const saltBytes=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:saltBytes,iterations:PASSWORD_HASH_ITERATIONS,hash:'SHA-256'},km,256);return{hash:'pbkdf2-sha256'+HASH_SEPARATOR+PASSWORD_HASH_ITERATIONS+HASH_SEPARATOR+b2h(new Uint8Array(bits)),salt:b2h(saltBytes)}}
+async function verifyPw(pw,h,salt){if(typeof pw!=='string'||pw.length>1024||typeof h!=='string'||typeof salt!=='string'||!/^[0-9a-f]{32}$/i.test(salt))return false;let iterations=100000,expected=h;const parts=h.split(HASH_SEPARATOR);if(parts.length===3){if(parts[0]!=='pbkdf2-sha256'||!/^[0-9a-f]{64}$/i.test(parts[2]))return false;iterations=Number(parts[1]);if(!Number.isSafeInteger(iterations)||iterations<100000||iterations>1000000)return false;expected=parts[2]}else if(!/^[0-9a-f]{64}$/i.test(h))return false;const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:hex2b(salt),iterations,hash:'SHA-256'},km,256);const actual=b2h(new Uint8Array(bits));let diff=0;for(let i=0;i<actual.length;i++)diff|=actual.charCodeAt(i)^expected.toLowerCase().charCodeAt(i);return diff===0}
+
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
 async function signJWT(p,sec){const e=new TextEncoder();const h=b64u(e.encode(JSON.stringify({alg:'HS256',typ:'JWT'})));const p64=b64u(e.encode(JSON.stringify(p)));const d=h+'.'+p64;const k=await crypto.subtle.importKey('raw',e.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=await crypto.subtle.sign('HMAC',k,e.encode(d));return d+'.'+b64u(new Uint8Array(sig))}
@@ -51,6 +56,10 @@ const PERMISSIONS=[
  {key:'tickets.manage',group:'Support',label:'Create and update complaints'},
  {key:'routers.read',group:'Network',label:'View router and OLT inventory'},
  {key:'routers.manage',group:'Network',label:'Manage router and OLT inventory'},
+ {key:'network.connectors.read',group:'Network',label:'View network connectors'},
+ {key:'network.connectors.manage',group:'Network',label:'Register and disable network connectors'},
+ {key:'network.jobs.read',group:'Network',label:'View network automation jobs'},
+ {key:'network.jobs.manage',group:'Network',label:'Queue approved read-only network jobs'},
  {key:'pppoe.read',group:'Network',label:'View PPPoE accounts'},
  {key:'pppoe.manage',group:'Network',label:'Manage PPPoE accounts'},
  {key:'onus.read',group:'Network',label:'View ONU / ONT inventory'},
@@ -65,7 +74,7 @@ const ROLE_PERMISSIONS={
  owner:['*'],admin:['*'],
  billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read','refunds.read','refunds.manage'],
  support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read','notifications.read'],
- technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read'],
+ technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read','network.connectors.read','network.jobs.read'],
  staff:['dashboard.read','notifications.read']
 };
 function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
@@ -81,6 +90,10 @@ function permissionForRoute(path,method){
  if(path==='/api/payments')return v==='GET'?'billing.read':null;
  if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
  if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
+ if(path==='/api/network/connectors')return v==='GET'?'network.connectors.read':v==='POST'?'network.connectors.manage':null;
+ if(path.match(/^\/api\/network\/connectors\/[^/]+$/))return v==='GET'?'network.connectors.read':v==='DELETE'?'network.connectors.manage':null;
+ if(path==='/api/network/jobs')return v==='GET'?'network.jobs.read':v==='POST'?'network.jobs.manage':null;
+ if(path.match(/^\/api\/network\/jobs\/[^/]+$/))return v==='GET'?'network.jobs.read':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
  if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
@@ -140,19 +153,32 @@ async function loginRateLimited(env,ip,email){
  return (a?.n||0)>=30||(b?.n||0)>=10
 }
 async function recordLoginFailure(env,ip,email){await env.DB.prepare("INSERT INTO login_attempts(id,ip_address,email)VALUES(?,?,?)").bind(uuid(),ip,email).run()}
-async function pppoeCryptoKey(env,usages){
- if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
- const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']);
- return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-PPPOE-SALT-V1'),info:new TextEncoder().encode('NEXUS-PPPOE-PASSWORD-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,usages)
+async function registrationRateLimited(env,ip,email){
+ await env.DB.prepare("DELETE FROM registration_attempts WHERE attempted_at<datetime('now','-1 day')").run();
+ const [byIp,byEmail]=await Promise.all([
+  env.DB.prepare("SELECT COUNT(*) AS n FROM registration_attempts WHERE ip_address=? AND attempted_at>=datetime('now','-15 minutes')").bind(ip).first(),
+  email?env.DB.prepare("SELECT COUNT(*) AS n FROM registration_attempts WHERE email=? AND attempted_at>=datetime('now','-15 minutes')").bind(email).first():Promise.resolve({n:0})
+ ]);
+ if(Number(byIp?.n||0)>=5||Number(byEmail?.n||0)>=3)return true;
+ await env.DB.prepare("INSERT INTO registration_attempts(id,ip_address,email)VALUES(?,?,?)").bind(uuid(),ip,email||null).run();
+ return false
+}
+async function pppoeCryptoKey(env,usages,legacy=false){
+ const secret=legacy?env.JWT_SECRET:env.PPPOE_ENCRYPTION_KEY;
+ if(!secret)throw new Error(legacy?'JWT_SECRET required to decrypt legacy PPPoE records':'PPPOE_ENCRYPTION_KEY must be configured before storing PPPoE passwords');
+ if(!legacy&&new TextEncoder().encode(secret).length<32)throw new Error('PPPOE_ENCRYPTION_KEY must contain at least 32 bytes');
+ const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),'HKDF',false,['deriveKey']);
+ const salt=legacy?'NEXUS-PPPOE-SALT-V1':'NEXUS-PPPOE-SALT-V2',info=legacy?'NEXUS-PPPOE-PASSWORD-ENCRYPTION':'NEXUS-PPPOE-PASSWORD-ENCRYPTION-V2';
+ return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode(salt),info:new TextEncoder().encode(info)},material,{name:'AES-GCM',length:256},false,usages)
 }
 async function encryptPppoePassword(password,env){
  const key=await pppoeCryptoKey(env,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12));
  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(password));
- return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(cipher))
+ return 'enc:v2:'+b64u(iv)+':'+b64u(new Uint8Array(cipher))
 }
 async function decryptPppoePassword(value,env){
- const p=String(value||'').split(':');if(p.length!==4||p[0]!=='enc'||p[1]!=='v1')throw new Error('Unsupported PPPoE password format');
- const key=await pppoeCryptoKey(env,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
+ const p=String(value||'').split(':');if(p.length!==4||p[0]!=='enc'||!['v1','v2'].includes(p[1]))throw new Error('Unsupported PPPoE password format');
+ const key=await pppoeCryptoKey(env,['decrypt'],p[1]==='v1'),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
  return new TextDecoder().decode(plain)
 }
 
@@ -191,11 +217,27 @@ async function runMigrations(env){
  ['network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT'],
  ['network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT'],
  ['network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER'],
+
+ ['network_connectors',"CREATE TABLE IF NOT EXISTS network_connectors(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,name TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),capabilities_json TEXT NOT NULL DEFAULT '[]',last_seen_at TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,name),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id))"],
+ ['network_connectors.org_index','CREATE INDEX IF NOT EXISTS idx_network_connectors_org_status ON network_connectors(organization_id,status)'],
+ ['network_connectors.tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_network_connectors_tenant_guard BEFORE INSERT ON network_connectors BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'network connector creator tenant mismatch') END; END"],
+ ['network_jobs',"CREATE TABLE IF NOT EXISTS network_jobs(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,connector_id TEXT NOT NULL,device_id TEXT NOT NULL,capability TEXT NOT NULL,payload_json TEXT NOT NULL DEFAULT '{}',idempotency_key TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','claimed','completed','failed','cancelled')),attempts INTEGER NOT NULL DEFAULT 0,result_json TEXT,error_code TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),claimed_at TEXT,completed_at TEXT,lease_expires_at TEXT,UNIQUE(organization_id,idempotency_key),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(connector_id) REFERENCES network_connectors(id) ON DELETE CASCADE,FOREIGN KEY(device_id) REFERENCES network_devices(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id))"],
+ ['network_jobs.queue_index','CREATE INDEX IF NOT EXISTS idx_network_jobs_connector_queue ON network_jobs(connector_id,status,created_at)'],
+ ['network_jobs.org_index','CREATE INDEX IF NOT EXISTS idx_network_jobs_org_created ON network_jobs(organization_id,created_at)'],
+ ['network_jobs.tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_network_jobs_tenant_guard BEFORE INSERT ON network_jobs BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM network_connectors WHERE id=NEW.connector_id AND organization_id=NEW.organization_id AND status='active') THEN RAISE(ABORT,'network job connector tenant mismatch or disabled') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.device_id AND organization_id=NEW.organization_id AND device_type='mikrotik') THEN RAISE(ABORT,'network job device tenant mismatch or unsupported type') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'network job creator tenant mismatch') END; END"],
  ['onu_devices',"CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT 'unknown',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,serial_number))"],
  ['user_permissions',"CREATE TABLE IF NOT EXISTS user_permissions(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,permission TEXT NOT NULL,allowed INTEGER NOT NULL CHECK(allowed IN(0,1)),updated_by TEXT,updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,user_id,permission))"],
  ['invoices.period_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL'],
  ['onu_devices.index','CREATE INDEX IF NOT EXISTS idx_onu_devices_org_status ON onu_devices(organization_id,status)'],
  ['invoices.number_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id,invoice_number)'],
+ ['registration_attempts',"CREATE TABLE IF NOT EXISTS registration_attempts(id TEXT PRIMARY KEY,ip_address TEXT NOT NULL,email TEXT,attempted_at TEXT NOT NULL DEFAULT(datetime('now')))"],
+ ['registration_attempts.ip_index','CREATE INDEX IF NOT EXISTS idx_registration_attempts_ip_time ON registration_attempts(ip_address,attempted_at)'],
+ ['registration_attempts.email_index','CREATE INDEX IF NOT EXISTS idx_registration_attempts_email_time ON registration_attempts(email,attempted_at)'],
+ ['payment_promises',"CREATE TABLE IF NOT EXISTS payment_promises(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),promise_date TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','kept','broken','cancelled')),notes TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id))"],
+ ['payment_promises.org_date_index','CREATE INDEX IF NOT EXISTS idx_payment_promises_org_date ON payment_promises(organization_id,promise_date,status)'],
+ ['payment_promises.customer_tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_payment_promises_customer_tenant_insert BEFORE INSERT ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer tenant mismatch') END; END"],
+ ['payment_promises.creator_tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_payment_promises_creator_tenant_insert BEFORE INSERT ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator tenant mismatch') END; END"],
+ ['payment_promises.tenant_update_guard',"CREATE TRIGGER IF NOT EXISTS trg_payment_promises_tenant_update BEFORE UPDATE OF organization_id,customer_id,created_by ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer tenant mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator tenant mismatch') END; END"],
  ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"]
  ];
  const results=[];
@@ -218,15 +260,16 @@ async function handleApi(request,env,url,path,m){if(path.startsWith('/api/custom
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
 if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
+if(path.startsWith('/api/network/agent/'))return await handleNetworkConnectorAgent(request,env,path,m,ip);
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
-const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status,token_version FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
+const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status,token_version,email FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
 // Staging-only E2E teardown. This route is unreachable on production hostnames.
 if(path==='/api/e2e/tenant'&&m==='DELETE'){
  if(url.hostname!=='nexus-saas-api-staging.harissaeed030.workers.dev')return json({error:'Not Found'},404);
- if(role!=='owner')return json({error:'Owner access required'},403);
+ if(role!=='owner'||!String(currentUser.email||'').toLowerCase().endsWith('@e2e.invalid'))return json({error:'Owner access required'},403);
  const body=await parseBody(request),org=await env.DB.prepare('SELECT id,slug FROM organizations WHERE id=?').bind(orgId).first();
- if(!org||typeof body?.slug!=='string'||org.slug!==body.slug||!org.slug.startsWith('nexus-stage-'))return json({error:'Not Found'},404);
+ if(!org||typeof body?.slug!=='string'||org.slug!==body.slug||!/^nexus-stage-[0-9]+-[0-9]+-[a-z0-9-]+$/.test(org.slug))return json({error:'Not Found'},404);
  const statements=[
   env.DB.prepare('DELETE FROM login_attempts WHERE email IN (SELECT email FROM users WHERE organization_id=?) OR email IN (SELECT email FROM customer_portal_accounts WHERE organization_id=?)').bind(orgId,orgId),
   env.DB.prepare('DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE organization_id=?)').bind(orgId),
@@ -251,6 +294,8 @@ if(path==='/api/e2e/tenant'&&m==='DELETE'){
   env.DB.prepare('DELETE FROM users WHERE organization_id=?').bind(orgId),
   env.DB.prepare('DELETE FROM organizations WHERE id=? AND slug=?').bind(orgId,org.slug)
  ];
+ const paymentPromisesTable=await env.DB.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='payment_promises'").first();
+ if(paymentPromisesTable)statements.splice(3,0,env.DB.prepare('DELETE FROM payment_promises WHERE organization_id=?').bind(orgId));
  await env.DB.batch(statements);
  return json({success:true,deletedTenant:org.slug})
 }
@@ -295,6 +340,12 @@ if(path==='/api/pppoe'&&m==='POST')return await createPppoe(request,env,orgId,us
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='GET')return await getPppoe(env,path,orgId);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='PUT')return await updatePppoe(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='DELETE')return await delPppoe(env,path,orgId,userId,ip);
+if(path==='/api/network/connectors'&&m==='GET')return await listNetworkConnectors(env,orgId);
+if(path==='/api/network/connectors'&&m==='POST')return await createNetworkConnector(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/network\/connectors\/[^/]+$/)&&m==='DELETE')return await disableNetworkConnector(env,path,orgId,userId,ip);
+if(path==='/api/network/jobs'&&m==='GET')return await listNetworkJobs(env,url,orgId);
+if(path==='/api/network/jobs'&&m==='POST')return await createNetworkJob(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/network\/jobs\/[^/]+$/)&&m==='GET')return await getNetworkJob(env,path,orgId);
 if(path==='/api/network/devices'&&m==='GET')return await listNetworkDevices(env,url,orgId);
 if(path==='/api/network/devices'&&m==='POST')return await createNetworkDevice(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='GET')return await getNetworkDevice(env,path,orgId);
@@ -361,7 +412,8 @@ async function portalLogin(r,env,ip){
  if(!account||account.customer_status!=='active'||!await verifyPw(b.password,account.password_hash,account.password_salt)){
   await recordLoginFailure(env,ip,rateKey);return json({error:'Invalid portal credentials'},401);
  }
- await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
+ if(!isCurrentPasswordHash(account.password_hash)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE customer_portal_accounts SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(upgraded.hash,upgraded.salt,account.id,org.id).run();}
+  await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
  await env.DB.prepare("UPDATE customer_portal_accounts SET last_login=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(account.id,org.id).run();
  const token=await signJWT({principalType:'customer',portalAccountId:account.id,customerId:account.customer_id,orgId:org.id,tokenVersion:Number(account.token_version||0),exp:Date.now()+604800000},getSec(env));
  await audit(env,org.id,null,'customer_portal_login','Customer portal login',ip);
@@ -386,7 +438,7 @@ async function savePortalAccount(r,env,path,oid,uid,role,ip){
  const email=s(b.email||customer.email||'').toLowerCase(),password=typeof b.password==='string'?b.password:'',status=b.status||'active';
  if(!vEmail(email))return json({error:'A valid customer portal email is required'},400);
  if(!['active','disabled'].includes(status))return json({error:'Portal status must be active or disabled'},400);
- if(password&&password.length<8)return json({error:'Portal password must be at least 8 characters'},400);
+ if(password&&(password.length<8||password.length>128))return json({error:'Portal password must be 8-128 characters'},400);
  const existing=await env.DB.prepare('SELECT id FROM customer_portal_accounts WHERE customer_id=? AND organization_id=?').bind(id,oid).first();
  if(!existing&&!password)return json({error:'Set an initial portal password of at least 8 characters'},400);
  const credentials=password?await hashPw(password):null;
@@ -493,11 +545,12 @@ async function changePortalPassword(r,env,account){
 
 async function authReg(r,env,ip){
  const raw=await parseBody(r);if(!raw||typeof raw!=='object'||Array.isArray(raw))return json({error:'Invalid body'},400);
+ const attemptEmail=String(raw.email||'').trim().toLowerCase().slice(0,254);if(await registrationRateLimited(env,ip,attemptEmail))return json({error:'Registration limit reached. Try again in 15 minutes.'},429);
  const b={companyName:s(raw.companyName??raw.company_name??raw.company??''),slug:s(raw.slug??raw.organizationSlug??raw.organization_slug??''),email:s(raw.email??''),password:raw.password,name:s(raw.name??raw.fullName??raw.full_name??raw.owner_name??raw.ownerName??''),phone:s(raw.phone??'')};
  if(!b.slug&&b.companyName)b.slug=b.companyName.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48);
  const missing=vReq(b,['companyName','email','password','name']);if(missing.length)return json({error:'Missing fields',fields:missing},400);
  if(!vEmail(b.email))return json({error:'Invalid email'},400);
- if(typeof b.password!=='string'||b.password.length<8)return json({error:'Password must be at least 8 characters'},400);
+ if(typeof b.password!=='string'||b.password.length<8||b.password.length>128)return json({error:'Password must be 8-128 characters'},400);
  if(typeof b.companyName!=='string'||b.companyName.length>120)return json({error:'Company name must be 1-120 characters'},400);
  if(typeof b.name!=='string'||b.name.length>120)return json({error:'Owner name must be 1-120 characters'},400);
  if(!b.slug)return json({error:'A valid organization slug could not be generated'},400);
@@ -526,6 +579,7 @@ if(b.workspace!==undefined&&b.workspace!==null&&String(b.workspace).trim()!=='')
  u=rows[0]||null;
 }
 if(!u||!await verifyPw(b.password,u.password_hash,u.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid credentials'},401);}
+if(!isCurrentPasswordHash(u.password_hash)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(upgraded.hash,upgraded.salt,u.id,u.organization_id).run();}
 await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,email).run();
 await env.DB.prepare("UPDATE users SET last_login=datetime('now'),updated_at=datetime('now')WHERE id=? AND organization_id=?").bind(u.id,u.organization_id).run();
 const tk=await signJWT({userId:u.id,orgId:u.organization_id,role:u.role,email:u.email,name:u.name||u.email,tokenVersion:Number(u.token_version||0),exp:Date.now()+604800000},getSec(env));
@@ -751,7 +805,7 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
  if(role!=='owner'&&ex.role==='admin')return json({error:'Only the owner can manage administrators'},403);
  const allowed=['admin','billing','support','technician','staff'];
  if(b.role!==undefined&&!allowed.includes(b.role))return json({error:'Invalid role'},400);
- if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8))return json({error:'Password must be at least 8 characters'},400);
+ if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8||b.password.length>128))return json({error:'Password must be 8-128 characters'},400);
  if(b.status!==undefined&&!['active','disabled'].includes(b.status))return json({error:'Invalid user status'},400);
  if(id===uid&&b.role!==undefined&&b.role!==role)return json({error:'You cannot change your own role'},400);
  const fields=['name','role','phone','status'],sets=[],params=[];
@@ -810,6 +864,119 @@ async function delPppoe(env,path,oid,uid,ip){
  if(!r.meta?.changes)return json({error:'Not found'},404);
  await audit(env,oid,uid,'delete_pppoe','PPPoE:'+id,ip);return json({success:true})
 }
+
+
+async function sha256Hex(value){
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
+ return b2h(new Uint8Array(digest));
+}
+function connectorPublic(row){
+ return {id:row.id,name:row.name,status:row.status,capabilities:JSON.parse(row.capabilities_json||'[]'),last_seen_at:row.last_seen_at,created_at:row.created_at,updated_at:row.updated_at};
+}
+async function listNetworkConnectors(env,oid){
+ const rows=await env.DB.prepare('SELECT id,name,status,capabilities_json,last_seen_at,created_at,updated_at FROM network_connectors WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();
+ return json({data:(rows.results||[]).map(connectorPublic)});
+}
+async function createNetworkConnector(request,env,oid,uid,ip){
+ if(env.NETWORK_CONNECTOR_ENABLED!=='true')return json({error:'Network connector API is disabled until explicitly enabled for this environment'},503);
+ const b=await parseBody(request);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const name=s(b.name||'');
+ if(!validateNetworkConnectorName(name))return json({error:'Connector name must be 2-80 characters'},400);
+ const token='nxc_'+b64u(crypto.getRandomValues(new Uint8Array(32))),tokenHash=await sha256Hex(token),id=uuid();
+ const capabilities=Array.isArray(b.capabilities)?[...new Set(b.capabilities)]:[...NETWORK_READ_CAPABILITIES];
+ if(!capabilities.length||capabilities.some(x=>!NETWORK_READ_CAPABILITIES.has(x)))return json({error:'Only supported MikroTik read-only capabilities may be registered'},400);
+ try{
+  await env.DB.prepare('INSERT INTO network_connectors(id,organization_id,name,token_hash,status,capabilities_json,created_by)VALUES(?,?,?,?,?,?,?)').bind(id,oid,name,tokenHash,'active',JSON.stringify(capabilities),uid).run();
+ }catch(e){if(/unique|constraint/i.test(String(e.message)))return json({error:'Connector name already exists in this workspace'},409);throw e}
+ await audit(env,oid,uid,'create_network_connector','Connector:'+name,ip);
+ const row=await env.DB.prepare('SELECT id,name,status,capabilities_json,last_seen_at,created_at,updated_at FROM network_connectors WHERE id=? AND organization_id=?').bind(id,oid).first();
+ return json({connector:connectorPublic(row),token,token_notice:'Copy this token now. It is stored only as a SHA-256 hash and cannot be shown again.'},201);
+}
+async function disableNetworkConnector(env,path,oid,uid,ip){
+ if(env.NETWORK_CONNECTOR_ENABLED!=='true')return json({error:'Network connector API is disabled'},503);
+ const id=path.split('/')[4],row=await env.DB.prepare('SELECT id,name FROM network_connectors WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!row)return json({error:'Connector not found'},404);
+ await env.DB.batch([
+  env.DB.prepare("UPDATE network_connectors SET status='disabled',updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid),
+  env.DB.prepare("UPDATE network_jobs SET status='cancelled',completed_at=datetime('now'),lease_expires_at=NULL WHERE connector_id=? AND organization_id=? AND status IN ('pending','claimed')").bind(id,oid)
+ ]);
+ await audit(env,oid,uid,'disable_network_connector','Connector:'+row.name,ip);
+ return json({success:true});
+}
+async function createNetworkJob(request,env,oid,uid,ip){
+ if(env.NETWORK_CONNECTOR_ENABLED!=='true')return json({error:'Network connector API is disabled'},503);
+ const b=await parseBody(request);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ let validated;
+ try{validated=validateNetworkJobRequest(b)}catch(e){return json({error:e.message},400)}
+ const{connectorId,deviceId,capability,idempotencyKey:key}=validated;
+ const [connector,device]=await Promise.all([
+  env.DB.prepare("SELECT id,capabilities_json FROM network_connectors WHERE id=? AND organization_id=? AND status='active'").bind(connectorId,oid).first(),
+  env.DB.prepare("SELECT id,name FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik' AND status='active'").bind(deviceId,oid).first()
+ ]);
+ if(!connector)return json({error:'Active connector not found'},404);
+ if(!device)return json({error:'Active MikroTik inventory device not found'},404);
+ if(!JSON.parse(connector.capabilities_json||'[]').includes(capability))return json({error:'Connector does not advertise this capability'},409);
+ const existing=await env.DB.prepare('SELECT id,device_id,capability,status FROM network_jobs WHERE organization_id=? AND idempotency_key=?').bind(oid,key).first();
+ if(existing){
+  if(existing.device_id!==deviceId||existing.capability!==capability)return json({error:'Idempotency key was already used for a different operation'},409);
+  return json({data:existing,reused:true});
+ }
+ const id=uuid();
+ try{
+  await env.DB.prepare("INSERT INTO network_jobs(id,organization_id,connector_id,device_id,capability,payload_json,idempotency_key,status,created_by)VALUES(?,?,?,?,?,'{}',?,'pending',?)").bind(id,oid,connectorId,deviceId,capability,key,uid).run();
+ }catch(e){if(/unique|constraint/i.test(String(e.message)))return json({error:'Network job conflicts with an existing record'},409);throw e}
+ await audit(env,oid,uid,'queue_network_job',capability+':'+device.name,ip);
+ return json({data:await env.DB.prepare('SELECT id,connector_id,device_id,capability,status,attempts,idempotency_key,created_at FROM network_jobs WHERE id=? AND organization_id=?').bind(id,oid).first()},201);
+}
+async function listNetworkJobs(env,url,oid){
+ const{page,pp,off}=pg(url,30),status=url.searchParams.get('status')||'';
+ let where='WHERE j.organization_id=?',params=[oid];
+ if(status){if(!['pending','claimed','completed','failed','cancelled'].includes(status))return json({error:'Invalid job status'},400);where+=' AND j.status=?';params.push(status)}
+ const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_jobs j '+where).bind(...params).first();
+ const rows=await env.DB.prepare('SELECT j.id,j.connector_id,j.device_id,j.capability,j.status,j.attempts,j.error_code,j.created_at,j.claimed_at,j.completed_at,c.name connector_name,d.name device_name FROM network_jobs j JOIN network_connectors c ON c.id=j.connector_id AND c.organization_id=j.organization_id JOIN network_devices d ON d.id=j.device_id AND d.organization_id=j.organization_id '+where+' ORDER BY j.created_at DESC LIMIT ? OFFSET ?').bind(...params,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:count.n,total_pages:Math.ceil(count.n/pp)}});
+}
+async function getNetworkJob(env,path,oid){
+ const id=path.split('/')[4],row=await env.DB.prepare('SELECT j.id,j.connector_id,j.device_id,j.capability,j.status,j.attempts,j.error_code,j.result_json,j.created_at,j.claimed_at,j.completed_at,c.name connector_name,d.name device_name FROM network_jobs j JOIN network_connectors c ON c.id=j.connector_id AND c.organization_id=j.organization_id JOIN network_devices d ON d.id=j.device_id AND d.organization_id=j.organization_id WHERE j.id=? AND j.organization_id=?').bind(id,oid).first();
+ if(!row)return json({error:'Network job not found'},404);
+ let result=null;try{result=row.result_json?JSON.parse(row.result_json):null}catch{}
+ return json({data:{...row,result}});
+}
+async function authenticateNetworkConnector(request,env){
+ if(env.NETWORK_CONNECTOR_ENABLED!=='true')return null;
+ const header=request.headers.get('Authorization')||'';
+ if(!header.startsWith('Connector '))return null;
+ const token=header.slice(10);
+ if(!isNetworkConnectorToken(token))return null;
+ const tokenHash=await sha256Hex(token);
+ return await env.DB.prepare("SELECT id,organization_id,name,capabilities_json,created_by FROM network_connectors WHERE token_hash=? AND status='active'").bind(tokenHash).first();
+}
+async function handleNetworkConnectorAgent(request,env,path,m,ip){
+ const connector=await authenticateNetworkConnector(request,env);
+ if(!connector)return json({error:'Valid active connector token required'},401);
+ await env.DB.prepare("UPDATE network_connectors SET last_seen_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(connector.id,connector.organization_id).run();
+ if(path==='/api/network/agent/jobs/next'&&m==='GET'){
+  await env.DB.prepare("UPDATE network_jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,error_code=CASE WHEN attempts>=3 THEN 'CONNECTOR_LEASE_EXPIRED' ELSE error_code END,claimed_at=NULL,lease_expires_at=NULL,completed_at=CASE WHEN attempts>=3 THEN datetime('now') ELSE completed_at END WHERE connector_id=? AND organization_id=? AND status='claimed' AND lease_expires_at<=datetime('now')").bind(connector.id,connector.organization_id).run();
+  const next=await env.DB.prepare("SELECT id,device_id,capability,payload_json,attempts FROM network_jobs WHERE connector_id=? AND organization_id=? AND status='pending' ORDER BY created_at LIMIT 1").bind(connector.id,connector.organization_id).first();
+  if(!next)return json({job:null});
+  const claimed=await env.DB.prepare("UPDATE network_jobs SET status='claimed',claimed_at=datetime('now'),lease_expires_at=datetime('now','+60 seconds'),attempts=attempts+1 WHERE id=? AND connector_id=? AND organization_id=? AND status='pending'").bind(next.id,connector.id,connector.organization_id).run();
+  if(!claimed.meta?.changes)return json({job:null,retry_after_seconds:2});
+  return json({job:{id:next.id,device_id:next.device_id,capability:next.capability,payload:JSON.parse(next.payload_json||'{}'),attempt:next.attempts+1,lease_seconds:60}});
+ }
+ const resultMatch=path.match(/^\/api\/network\/agent\/jobs\/([^/]+)\/result$/);
+ if(resultMatch&&m==='POST'){
+  const body=await parseBody(request);if(!body||!['completed','failed'].includes(body.status))return json({error:'status must be completed or failed'},400);
+  const safeResult=redactNetworkResult(body.result??{}),encoded=JSON.stringify(safeResult);
+  if(encoded.length>16384)return json({error:'Result payload exceeds 16 KB'},413);
+  const errorCode=body.status==='failed'?String(body.error_code||'CONNECTOR_OPERATION_FAILED').replace(/[^A-Z0-9_-]/gi,'').slice(0,80):null;
+  const updated=await env.DB.prepare("UPDATE network_jobs SET status=?,result_json=?,error_code=?,completed_at=datetime('now'),lease_expires_at=NULL WHERE id=? AND connector_id=? AND organization_id=? AND status='claimed' AND lease_expires_at>datetime('now')").bind(body.status,encoded,errorCode,resultMatch[1],connector.id,connector.organization_id).run();
+  if(!updated.meta?.changes)return json({error:'Claimed job not found or lease no longer active'},409);
+  await audit(env,connector.organization_id,connector.created_by,'network_job_'+body.status,'Job:'+resultMatch[1],ip);
+  return json({success:true});
+ }
+ return json({error:'Not found'},404);
+}
+
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
  const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
@@ -940,7 +1107,7 @@ async function getSet(env,oid){const rows=await env.DB.prepare('SELECT key,value
 async function updSet(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);const limits={support_phone:80,support_email:160,whatsapp_support:80,payment_instructions:2000};if(Object.entries(b).some(([k,v])=>!(k in limits)||typeof v!=='string'||v.length>limits[k]))return json({error:'Unsupported or oversized workspace setting'},400);if(b.support_email&&!vEmail(b.support_email))return json({error:'Invalid support email'},400);for(const[k,v]of Object.entries(b)){const ex=await env.DB.prepare('SELECT id FROM settings WHERE organization_id=? AND key=?').bind(oid,k).first();if(ex)await env.DB.prepare("UPDATE settings SET value=?,updated_at=datetime('now')WHERE id=?").bind(String(v),ex.id).run();else await env.DB.prepare('INSERT INTO settings(id,organization_id,key,value)VALUES(?,?,?,?)').bind(uuid(),oid,k,String(v)).run()}await audit(env,oid,uid,'update_settings','Settings updated',ip);return json({success:true})}
 async function getProf(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=?').bind(auth.userId).first();return json(u||{error:'Not found'},u?200:404)}
 async function updProf(r,env,auth,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Name must be 1-120 characters'},400);if(b.phone!==undefined&&String(b.phone).length>50)return json({error:'Phone is too long'},400);const f=['name','phone'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(auth.userId);await env.DB.prepare('UPDATE users SET '+u.join(', ')+' WHERE id=?').bind(...p).run();return json(await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=?').bind(auth.userId).first())}
-async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords required'},400);if(b.newPassword.length<8)return json({error:'Password must be at least 8 characters'},400);const u=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.userId).first();if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt))return json({error:'Current password incorrect'},401);const{hash,salt}=await hashPw(b.newPassword);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now')WHERE id=?").bind(hash,salt,auth.userId).run();return json({success:true,message:'Password changed'})}
+async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords required'},400);if(typeof b.newPassword!=='string'||b.newPassword.length<8||b.newPassword.length>128)return json({error:'Password must be 8-128 characters'},400);const u=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.userId).first();if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt))return json({error:'Current password incorrect'},401);const{hash,salt}=await hashPw(b.newPassword);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now')WHERE id=?").bind(hash,salt,auth.userId).run();return json({success:true,message:'Password changed'})}
 async function getCo(env,oid){const o=await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first();return json(o||{error:'Not found'},o?200:404)}
 async function updCo(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Company name must be 1-120 characters'},400);if(b.email&&!vEmail(b.email))return json({error:'Invalid company email'},400);if(b.currency!==undefined&&!/^[A-Z]{3}$/.test(String(b.currency)))return json({error:'Currency must be a 3-letter ISO code'},400);const f=['name','email','phone','address','logo','currency'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(oid);await env.DB.prepare('UPDATE organizations SET '+u.join(', ')+' WHERE id=?').bind(...p).run();await audit(env,oid,uid,'update_company','Company updated',ip);return json(await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first())}
 
