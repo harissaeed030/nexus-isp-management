@@ -94,3 +94,28 @@ Until those controls exist, use each runtime only for its declared purpose and e
 - Production: deploy only with `worker/wrangler.production.toml`; verify backup, migration state, inherited secrets/bindings and staging E2E first.
 - Never run `worker/schema.sql` on an existing D1 database.
 - Never claim SQLite/D1 data parity or synchronization unless a separately reviewed sync implementation and reconciliation report exist.
+
+
+## Feature-branch addition — 2026-11-17
+
+The hosted billing implementation adds `cloudflare/d1/migrations/0023_payment_promises.sql` for tenant-scoped payment commitments. Live production and staging already assign ID 10 to `0010_pppoe_connection_metadata`, and staging has assigned IDs 11–21 to other migrations. The earlier payment-promises file at ID 10 was therefore a collision and has been removed. Migration 0023 adds the table, index and tenant-integrity triggers; it is committed to the development branch only and has **not** been applied to either live database.
+
+Security hardening is separately numbered 0022 and does not depend on the payment-promises table. The canonical schema snapshot remains the verified v7 baseline; migrations 0022 and 0023 remain incremental additions.
+
+
+## Users-schema parity migration safety gate (2026-11-17)
+
+The proposed strict users-table rebuild remains a **staging-only manual migration** and is not approved for execution merely because its SQL exists. Before any staging rehearsal:
+
+1. Export the exact staging D1 database and verify the export can be restored to a disposable D1 with matching table/row counts and zero foreign-key violations.
+2. Run the read-only report `worker/manual-migrations/2026-11-16-staging-users-schema-parity-preflight.sql` against staging. Every `issue_count` must be zero. In particular, a single NULL `password_hash` blocks the rebuild because the target production-compatible users table requires `password_hash NOT NULL`.
+3. Review duplicate exact emails, case-insensitive per-organization email collisions, missing organization references and every user-dependent relationship before proceeding. Do not delete, normalize or silently repair rows to make the preflight pass.
+4. Rehearse the migration against the disposable restored copy, compare every preserved dependent row, verify all six tenant-integrity triggers and required indexes, and require an empty `PRAGMA foreign_key_check`.
+5. Only after independent review and explicit owner approval may a separate staging change be considered. Production requires its own fresh export, restore rehearsal, review and explicit approval; this staging SQL must never be pointed at production.
+
+The local parity regression script now also asserts that cross-tenant notification, ticket-assignee and ticket-message writes are rejected after the rebuild. These are local SQLite-backed migration tests, not proof that a live D1 migration has run. No production or staging D1 database was changed by this documentation or test update.
+
+
+### D1 migration-number allocation correction (2026-11-17)
+
+Migration identifiers are globally unique within the shared `schema_migrations` ledger. A read-only audit of live staging found IDs 10–21 already assigned, including ID 10 `0010_pppoe_connection_metadata`, ID 11 `0011_sync_staging_with_production`, ID 12 `0012_customer_workspace_compatibility`, and IDs 14–21 for router/network/field features. Consequently, the former payment-promises ID 10 and the former users-parity ID 12 both collided with live history and must never be applied. The corrected development sequence is ID 22 `0022_security_hardening`, ID 23 `0023_payment_promises`, and ID 24 `0024_users_strict_schema_parity`. ID 24 remains a manual staging-only candidate requiring the complete backup/restore rehearsal and explicit owner approval; no live D1 migration was applied by these source corrections.

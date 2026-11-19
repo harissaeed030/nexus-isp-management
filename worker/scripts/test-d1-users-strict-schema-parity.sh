@@ -10,6 +10,7 @@ sqlite3 "$DB" <<'SQL'
 PRAGMA foreign_keys=ON;
 CREATE TABLE organizations(id TEXT PRIMARY KEY,name TEXT NOT NULL,slug TEXT NOT NULL UNIQUE);
 CREATE TABLE schema_migrations(id INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL DEFAULT(datetime('now')));
+INSERT INTO schema_migrations(id,name) VALUES(10,'0010_pppoe_connection_metadata'),(11,'0011_sync_staging_with_production'),(12,'0012_customer_workspace_compatibility'),(13,'0013_subscription_workspace_status'),(14,'0014_router_credential_cipher'),(15,'0015_network_jobs'),(16,'0016_acs_connections'),(17,'0017_tr069_devices'),(18,'0018_network_connector_scopes'),(19,'0019_field_operations'),(20,'0020_inventory'),(21,'0021_field_operations'),(100,'sync_ledger_and_failures_tables');
 CREATE TABLE customers(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE);
 CREATE TABLE users(
  id TEXT PRIMARY KEY DEFAULT(lower(hex(randomblob(16)))),organization_id TEXT NOT NULL,
@@ -47,6 +48,7 @@ CREATE TRIGGER trg_d1_ticket_org_u BEFORE UPDATE OF organization_id,customer_id,
 CREATE TRIGGER trg_d1_message_org_i BEFORE INSERT ON ticket_messages WHEN NEW.user_id IS NOT NULL BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM support_tickets t JOIN users u ON u.id=NEW.user_id WHERE t.id=NEW.ticket_id AND t.organization_id=u.organization_id) THEN RAISE(ABORT,'ticket message user organization mismatch') END; END;
 CREATE TRIGGER trg_d1_message_org_u BEFORE UPDATE OF ticket_id,user_id ON ticket_messages WHEN NEW.user_id IS NOT NULL BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM support_tickets t JOIN users u ON u.id=NEW.user_id WHERE t.id=NEW.ticket_id AND t.organization_id=u.organization_id) THEN RAISE(ABORT,'ticket message user organization mismatch') END; END;
 INSERT INTO organizations VALUES('org-a','ISP A','isp-a'),('org-b','ISP B','isp-b');
+INSERT INTO users(id,organization_id,email,password_hash,role,name) VALUES('user-b','org-b','owner-b@example.test','hash-b','owner','Owner B');
 INSERT INTO customers VALUES('cust-a','org-a');
 INSERT INTO users(id,organization_id,email,password_hash,role,name) VALUES('user-a','org-a','owner@example.test','hash-a','owner','Owner A');
 INSERT INTO sessions(id,user_id,token,expires_at) VALUES('session-a','user-a','session-token','2099-01-01');
@@ -67,7 +69,7 @@ test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM ticket_messages WHERE id='message-a'
 test -z "$(sqlite3 "$DB" "PRAGMA foreign_key_check;")"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_d1_%';")" = "6"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('idx_users_organization','idx_users_email_global','idx_users_org_email_ci');")" = "3"
-test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM schema_migrations WHERE id=10 AND name='0010_users_strict_schema_parity';")" = "1"
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM schema_migrations WHERE id=24 AND name='0024_users_strict_schema_parity';")" = "1"
 
 # Production-compatible constraints: missing password hash rejected; role defaults to staff.
 if sqlite3 "$DB" "INSERT INTO users(id,organization_id,email,role) VALUES('bad-null-hash','org-a','nullhash@example.test','staff');" >/dev/null 2>&1; then
@@ -84,7 +86,26 @@ if sqlite3 "$DB" "INSERT INTO users(id,organization_id,email,password_hash,role)
 fi
 
 echo "PASS: all user/dependent rows preserved"
+test "$(sqlite3 "$DB" "SELECT name FROM schema_migrations WHERE id=11;")" = "0011_sync_staging_with_production"
 echo "PASS: exact production users constraints/defaults and column order restored"
+echo "PASS: existing migration IDs 10–21 preserved and users parity recorded as 0024"
 echo "PASS: global and organization-scoped email indexes preserved"
 echo "PASS: six organization-integrity triggers restored"
+
+# Cross-tenant relationships must be rejected by the restored integrity triggers.
+if sqlite3 "$DB" "INSERT INTO notifications(id,organization_id,user_id,title) VALUES('bad-notification','org-a','user-b','Cross-tenant');" >/dev/null 2>&1; then
+ echo "FAIL: cross-tenant notification user was accepted" >&2; exit 1
+fi
+if sqlite3 "$DB" "INSERT INTO support_tickets(id,organization_id,subject,assigned_to) VALUES('bad-ticket','org-a','Cross-tenant assignee','user-b');" >/dev/null 2>&1; then
+ echo "FAIL: cross-tenant ticket assignee was accepted" >&2; exit 1
+fi
+if sqlite3 "$DB" "INSERT INTO ticket_messages(id,ticket_id,user_id,message) VALUES('bad-message','ticket-a','user-b','Cross-tenant message');" >/dev/null 2>&1; then
+ echo "FAIL: cross-tenant ticket message user was accepted" >&2; exit 1
+fi
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM notifications WHERE id='bad-notification';")" = "0"
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM support_tickets WHERE id='bad-ticket';")" = "0"
+test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM ticket_messages WHERE id='bad-message';")" = "0"
+echo "PASS: cross-tenant notification, ticket-assignee and ticket-message writes rejected"
+
+echo "PASS: users schema parity migration 0024; existing live migration IDs 10–21 preserved" 
 echo "PASS: PRAGMA foreign_key_check is clean"

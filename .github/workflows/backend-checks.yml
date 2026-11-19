@@ -23,3 +23,19 @@ jobs:
         working-directory: backend
       - run: node --check ../assets/js/app.js
         working-directory: backend
+
+      - name: Verify both hosted Worker bundles
+        run: |
+          node --check worker/src/index.js
+          node --check worker/src/production-worker.js
+          node --check worker/src/network-connector-contract.js
+      - name: Verify password hashing and security migration contracts
+        run: node worker/scripts/verify-security-hardening.mjs
+      - name: Verify frontend and production Worker API contract
+        run: node worker/scripts/verify-frontend-worker-contract.mjs
+      - name: Test hosted network connector contracts and tenant migration guards
+        run: |
+          node --test worker/scripts/network-connector-contract.test.js
+          node --test worker/scripts/network-connector-migration.test.js
+      - name: Test security migration idempotency and numbering
+        run: python3 worker/scripts/test-security-hardening-migration.py
