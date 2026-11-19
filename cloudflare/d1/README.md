@@ -1,5 +1,36 @@
 # Cloudflare D1 schema and migrations
 
+## Live state recheck — 2026-11-19
+
+This section supersedes any statement above that both live databases currently have identical migration ledgers or that the global email index is present in both environments. The earlier sections describe the historical 2026-11-15 release and backup record; they are not a current parity certificate.
+
+A read-only Cloudflare D1 recheck on 2026-11-19 observed:
+
+| Check | Production | Staging |
+|---|---|---|
+| Recorded migration IDs | 1–10, 12, 13, 100, 101 | 1–21, 100 |
+| `users.password_hash` | NOT NULL | nullable |
+| `users.role` default | `staff` | `member` |
+| `idx_users_email_global` | present | absent |
+| `PRAGMA foreign_key_check` | 0 violations | 0 violations |
+
+The production-only ledger entry 101 is `2026-11-17-staging-schema-additive-reconcile`. Staging-only entries are 11 and 14–21. A ledger difference alone does not prove every schema object differs, but the ledger histories are not currently a shared, linear upgrade path.
+
+The staging users table currently has organization-scoped email indexes but does not have the global unique email index. This conflicts with the earlier migration 0009 verification narrative and with production's current global-unique-email index. Do not run migration 0009 or the manual users parity rebuild against either live database until the intended account identity policy is decided and a fresh duplicate-email preflight is completed.
+
+The checked-in manual users parity migration and fixture also require a refreshed rehearsal. The live staging database currently contains 128 `notifications` rows and 127 `support_tickets` rows; the documented fixture/preflight was based on one row in each. The live schema has 15 tables with foreign-key references to `users`, while the manual parity script explicitly snapshots/recreates only a subset of dependent tables. Its preconditions must be expanded to assert all dependent tables, rows, indexes, triggers, and foreign keys before any migration is considered.
+
+### Required reconciliation gate
+
+1. Export current production and staging databases again; restore staging into a disposable D1 database for the rehearsal.
+2. Capture exact row counts and primary-key sets for every users-referencing table, plus dependent indexes, triggers, and foreign keys.
+3. Decide and document whether email uniqueness is global or tenant/workspace scoped; test login, invitations, and tenant isolation for that model.
+4. Reconcile migration ledgers 1–21/100/101 into a documented forward-only plan without rewriting applied migration IDs.
+5. Update the migration registry, schema snapshots, tests, and this README only after the disposable rehearsal passes.
+
+No live migration was performed as part of this recheck. All queries were read-only and reported zero rows written. Production and staging data, Workers, secrets, and live network devices were not modified.
+
+
 ## Databases
 
 - Production: `nexus-saas-db` (`ce88098b-bff4-4d06-a0df-7bf29622a085`)
