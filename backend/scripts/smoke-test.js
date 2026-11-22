@@ -31,6 +31,16 @@ try{
  const setup=await request("/api/v1/setup","POST",{companyName:"Nexus Test ISP",fullName:"Test Owner",email:"owner@nexus.test",password:"Strong-Test-Password-123"});
  assert.equal(setup.status,201);
  const token=setup.data.token;
+ const workspaceBefore=await request("/api/v1/tenant","GET",undefined,token);
+ assert.equal(workspaceBefore.status,200);
+ assert.equal(workspaceBefore.data.data.name,"Nexus Test ISP");
+ const workspaceUpdate=await request("/api/v1/tenant","PATCH",{name:"Nexus Test ISP Updated"},token);
+ assert.equal(workspaceUpdate.status,200);
+ assert.equal(workspaceUpdate.data.data.name,"Nexus Test ISP Updated");
+ const workspaceIdentity=await request("/api/v1/auth/me","GET",undefined,token);
+ assert.equal(workspaceIdentity.status,200);
+ assert.equal(workspaceIdentity.data.tenant.name,"Nexus Test ISP Updated");
+
  assert.equal(db.prepare("SELECT COUNT(*) n FROM schema_migrations WHERE version='001_database_hardening'").get().n,1);
  db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run("other-tenant","Other ISP","other-isp");
  const ownerHash=db.prepare("SELECT password_hash FROM users WHERE id=?").get(setup.data.user.id).password_hash;
