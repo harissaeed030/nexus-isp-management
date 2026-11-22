@@ -190,4 +190,18 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(sql
   }
 }
 
+const ticketMigrationVersion = "012_ticket_numbers_and_assignment";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(ticketMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/012_ticket_numbers_and_assignment.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(ticketMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${ticketMigrationVersion} failed: ${error.message}`);
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}

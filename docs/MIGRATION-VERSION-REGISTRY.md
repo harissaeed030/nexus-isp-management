@@ -13,6 +13,7 @@ The SQLite migration history for the local/backend runtime uses the complete des
 | 007 | `007_isp_business_modules.sql` | Task 10 business operations, inventory and ledger |
 | 008 | `008_financial_management.sql` | Invoice sequences, credit notes, reversals and unallocated receipts |
 | 009 | `009_session_hardening.sql` | Session lifecycle metadata |
+| 012 | `012_ticket_numbers_and_assignment.sql` | Complaint numbers (per tenant), staff assignment, resolved time and ticket history |
 
 ## Conflict resolution
 
