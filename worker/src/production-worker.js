@@ -1008,7 +1008,7 @@ export async function encryptRouterSecret(value,env){
  const iv=crypto.getRandomValues(new Uint8Array(12)),cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(value));
  return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(cipher));
 }
-export export async function decryptRouterSecret(value,env){
+export async function decryptRouterSecret(value,env){
  if(!value)return '';if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
  const parts=String(value).split(':');if(parts.length!==4||parts[0]!=='enc'||parts[1]!=='v1')throw new Error('Router credential ciphertext is invalid');
  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']);
