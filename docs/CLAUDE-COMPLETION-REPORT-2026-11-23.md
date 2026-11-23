@@ -26,13 +26,13 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 - `cd backend && npm run verify` passes (all earlier tests plus `scripts/tenant-isolation-tickets.test.js`).
 - Migration upgrade tested against a database created by the previous code (existing tickets back-filled, new ticket numbered correctly).
 - Headless Chromium at 390×844: login, Complaints (number, assign, status save), Settings (save, brand colour persists after reload).
-- Test Node version: v22. Not yet run on Node v26 or on a physical Android device.
+- Original browser/migration verification used Node v22. A new CI matrix now runs the full backend verification on Node 22 and Node 26 to cover the Termux runtime version; the new matrix results are pending.
 
 ## Follow-up completed during continuation
 - Updated the dashboard activity panel to use server-calculated daily/monthly collection and outstanding receivables, plus suspended-customer and seven-day subscription-expiry counts. Existing customer/payment tables remain unchanged.
 - Exact commit `fed1ad9ed209d20112d648002dd505b5f4d6e34b` passed backend verification, tenant-isolation/customer-portal E2E, production/staging endpoint smoke, migration reconciliation and database-hardening workflows. Android debug APK build subsequently passed in workflow run `45115338510`; artifact `nexus-android-debug-apk` was uploaded successfully (expires 2026-12-23).
 
-## Known limitations
+## Additional audit fixes\n- Removed the accidentally committed `backend/node_modules` absolute-path symlink (`/home/claude/nexus-isp-management/backend/node_modules`) from this PR branch. It must not be included in the merge.\n- Added migration `013_tenant_plan_branding.sql` to the SQLite migration version registry.\n- Expanded `.github/workflows/backend-checks.yml` to verify on Node 22 and 26.\n\n## Known limitations
 - No UI to change plan and no payment collection for SaaS plans (plan is changed in the database).
 - Dashboard KPI cards now display daily/monthly collections, outstanding receivables, suspended customers and subscriptions expiring within seven days. The dashboard JavaScript change is included in commit `eba7e012c4f6d2ae7767fdeca6b885a6bca847f8`.
 - Router, OLT and payment-gateway behaviour is not tested on real devices.
