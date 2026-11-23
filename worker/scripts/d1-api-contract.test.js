@@ -447,3 +447,12 @@ test("D1 Worker AI endpoint keeps Gemini credentials server-side and validates b
 test("D1 Worker AI defaults to the same Gemini model as the local backend", () => {
   assert.match(source, /GEMINI_MODEL\|\|'gemini-2\.5-flash'/);
 });
+
+
+test("Worker password verification rejects plaintext or malformed legacy credentials and compares derived hashes without early exit", () => {
+  assert.match(source, /async function verifyPw\(pw,h,salt\)\{if\(typeof pw!=='string'\|\|typeof h!=='string'\|\|typeof salt!=='string'\)return false/);
+  assert.match(source, /!\/\^\[a-f0-9\]\{64\}\$\/i\.test\(h\)/);
+  assert.match(source, /!\/\^\[a-f0-9\]\{32\}\$\/i\.test\(salt\)/);
+  assert.match(source, /for\(let i=0;i<64;i\+\+\)diff\|=hash\.charCodeAt\(i\)\^expected\.charCodeAt\(i\)/);
+  assert.doesNotMatch(source, /if\(!salt\)return pw===h/);
+});
