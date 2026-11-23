@@ -26,8 +26,8 @@ The RouterOS and HSGQ adapters must be treated according to their documented cap
 
 - Production D1 binding: `DB` -> `nexus-saas-db`
 - Staging D1 binding: `DB` -> `nexus-saas-staging-db`
-- Secret bindings: `JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY`
-- Never put secret values in source files, Wrangler vars, frontend code or GitHub commits.
+- Secret bindings: `JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY`, `ROUTER_CREDENTIALS_KEY`
+- `ROUTER_CREDENTIALS_KEY` must be a dedicated random secret of at least 32 characters, set separately on staging and production with the secret-management workflow. Router credential create/rotation returns 503 until it is configured. Losing or rotating this key makes stored router passwords undecryptable and requires credential re-entry. Never put secret values in source files, Wrangler vars, frontend code or GitHub commits.
 
 ## Schema
 
