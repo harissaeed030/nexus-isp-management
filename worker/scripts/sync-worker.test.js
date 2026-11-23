@@ -30,3 +30,26 @@ test("sync batches reject missing or repeated idempotency keys", () => {
     { cursor: 2, operationId: "same" }
   ]), /unique operationId/);
 });
+
+test("sync tenant mapping must be explicitly provisioned", async () => {
+  let selected = 0;
+  const database = {
+    prepare(sql) {
+      assert.match(sql, /SELECT organization_id FROM sync_tenant_mappings/);
+      return {
+        bind(sourceTenantId) {
+          assert.equal(sourceTenantId, "local-tenant-1");
+          return {
+            async first() {
+              selected += 1;
+              return null;
+            }
+          };
+        }
+      };
+    }
+  };
+  const mapping = await database.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind("local-tenant-1").first();
+  assert.equal(mapping, null);
+  assert.equal(selected, 1);
+});
