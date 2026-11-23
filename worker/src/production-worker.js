@@ -902,11 +902,11 @@ async function markAllNotificationsRead(env,oid,uid){
  return json({success:true});
 }
 
-async function listStaff(env,oid){const rows=await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();return json({data:rows.results||[]})}
+async function listStaff(env,oid){const rows=await env.DB.prepare('SELECT id,email,name,name AS full_name,role,phone,status,last_login,created_at FROM users WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();return json({data:rows.results||[]})}
 async function createStaff(r,env,oid,uid,role,ip){
  if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
- const ms=vReq(b,['email','password','name']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
+ const name=b.name??b.fullName;const ms=[];for(const key of ['email','password'])if(!b[key])ms.push(key);if(!name)ms.push('fullName');if(ms.length)return json({error:'Missing fields',fields:ms},400);
  if(!vEmail(b.email))return json({error:'Invalid email'},400);
  if(typeof b.password!=='string'||b.password.length<8)return json({error:'Password must be at least 8 characters'},400);
  const allowed=['admin','billing','support','technician','staff'],assigned=b.role||'staff';
@@ -914,9 +914,9 @@ async function createStaff(r,env,oid,uid,role,ip){
  if(assigned==='admin'&&role!=='owner')return json({error:'Only the owner can create administrators'},403);
  if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(b.email.toLowerCase()).first())return json({error:'Email exists'},409);
  const id=uuid(),{hash,salt}=await hashPw(b.password);
- await env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.email.toLowerCase(),hash,salt,s(b.name),assigned,b.phone||null).run();
- await audit(env,oid,uid,'create_staff','Staff:'+b.name,ip);
- return json({id,email:b.email,name:b.name,role:assigned},201)
+ await env.DB.prepare('INSERT INTO users(id,organization_id,email,password_hash,password_salt,name,role,phone)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.email.toLowerCase(),hash,salt,s(name),assigned,b.phone||null).run();
+ await audit(env,oid,uid,'create_staff','Staff:'+name,ip);
+ return json({success:true,data:{id,email:b.email,name,full_name:name,role:assigned}},201)
 }
 async function updateStaff(r,env,path,oid,uid,role,ip){
  if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);
@@ -927,16 +927,16 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
  const allowed=['admin','billing','support','technician','staff'];
  if(b.role!==undefined&&!allowed.includes(b.role))return json({error:'Invalid role'},400);
  if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8))return json({error:'Password must be at least 8 characters'},400);
- if(b.status!==undefined&&!['active','disabled'].includes(b.status))return json({error:'Invalid user status'},400);
+ if(b.status!==undefined&&!['active','disabled','inactive'].includes(b.status))return json({error:'Invalid user status'},400);const nextStatus=b.status==='inactive'?'disabled':b.status;
  if(id===uid&&b.role!==undefined&&b.role!==role)return json({error:'You cannot change your own role'},400);
- const fields=['name','role','phone','status'],sets=[],params=[];
- for(const f of fields)if(b[f]!==undefined){sets.push(f+'=?');params.push(b[f])}
- if(b.password){const{hash,salt}=await hashPw(b.password);sets.push('password_hash=?','password_salt=?');params.push(hash,salt)}if(b.password||(b.role!==undefined&&b.role!==ex.role)||(b.status!==undefined&&b.status!==ex.status))sets.push('token_version=COALESCE(token_version,0)+1');
+ const fields={name:b.name??b.fullName,role:b.role,phone:b.phone,status:nextStatus},sets=[],params=[];
+ for(const[f,v]of Object.entries(fields))if(v!==undefined){sets.push(f+'=?');params.push(v)}
+ if(b.password){const{hash,salt}=await hashPw(b.password);sets.push('password_hash=?','password_salt=?');params.push(hash,salt)}if(b.password||(b.role!==undefined&&b.role!==ex.role)||(nextStatus!==undefined&&nextStatus!==ex.status))sets.push('token_version=COALESCE(token_version,0)+1');
  if(!sets.length)return json({error:'No fields'},400);
  sets.push("updated_at=datetime('now')");params.push(id,oid);
  await env.DB.prepare('UPDATE users SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...params).run();
  await audit(env,oid,uid,'update_staff','Staff:'+id,ip);
- return json(await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE id=? AND organization_id=?').bind(id,oid).first())
+ return json({success:true,data:await env.DB.prepare('SELECT id,email,name,name AS full_name,role,phone,status,last_login,created_at FROM users WHERE id=? AND organization_id=?').bind(id,oid).first()})
 }
 async function delStaff(env,path,oid,role,uid,ip){if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);const id=path.split('/')[3];if(id===uid)return json({error:'Cannot delete self'},400);const target=await env.DB.prepare('SELECT id,role FROM users WHERE id=? AND organization_id=?').bind(id,oid).first();if(!target)return json({error:'Not found'},404);if(target.role==='owner')return json({error:'The owner account cannot be deleted from staff management'},403);if(role!=='owner'&&target.role==='admin')return json({error:'Only the owner can delete administrators'},403);await env.DB.prepare('DELETE FROM users WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_staff','Staff:'+id,ip);return json({success:true})}
 
