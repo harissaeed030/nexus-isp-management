@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree } from "../src/production-worker.js";
+import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask } from "../src/production-worker.js";
 
 test("normalizes versioned API paths to D1 routes", () => {
   assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
