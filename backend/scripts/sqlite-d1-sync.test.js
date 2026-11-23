@@ -46,6 +46,35 @@ test("sync outbox records all five business entities and changes", () => {
   db.prepare("DELETE FROM sync_outbox WHERE tenant_id=?").run(tenant);
 });
 
+
+test("sync export pins the configured tenant and paginates without leaking other tenant records", () => {
+  const tenantA=randomUUID(),tenantB=randomUUID(),customerA=randomUUID(),customerB=randomUUID();
+  db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run(tenantA,"Tenant A","tenant-a-"+tenantA.slice(0,8));
+  db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run(tenantB,"Tenant B","tenant-b-"+tenantB.slice(0,8));
+  db.prepare("INSERT INTO customers(id,tenant_id,customer_code,full_name,status) VALUES(?,?,?,?,?)").run(customerA,tenantA,"A-001","Tenant A Customer","active");
+  db.prepare("INSERT INTO customers(id,tenant_id,customer_code,full_name,status) VALUES(?,?,?,?,?)").run(customerB,tenantB,"B-001","Tenant B Customer","active");
+  let handler;
+  registerSyncExportRoutes({get(_path,fn){handler=fn;}},{db,env:{syncExportToken:"pinned-token",syncTenantId:tenantA}});
+  const invoke=query=>{
+    const response={statusCode:200,body:null,headers:{},status(code){this.statusCode=code;return this;},set(name,value){this.headers[name]=value;return this;},json(value){this.body=value;return this;}};
+    handler({headers:{authorization:"Bearer pinned-token"},query},response);
+    return response;
+  };
+  const first=invoke({after:"0",limit:"1"});
+  assert.equal(first.statusCode,200);
+  assert.equal(first.body.tenantId,tenantA);
+  assert.equal(first.body.count,1);
+  assert.ok(first.body.events.every(event=>event.record?.tenant_id===tenantA));
+  const second=invoke({after:String(first.body.nextCursor),limit:"1"});
+  assert.equal(second.statusCode,200);
+  assert.ok(second.body.events.every(event=>event.record?.tenant_id===tenantA));
+  const invalid=invoke({after:"-1",limit:"1"});
+  assert.equal(invalid.statusCode,400);
+  const oversized=invoke({after:"0",limit:"101"});
+  assert.equal(oversized.statusCode,400);
+  db.prepare("DELETE FROM sync_outbox WHERE tenant_id IN (?,?)").run(tenantA,tenantB);
+});
+
 test.after(() => {
   try { db.close(); } catch {}
   rmSync(dir,{recursive:true,force:true});
