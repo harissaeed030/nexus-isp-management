@@ -146,7 +146,7 @@ if(v==="routers"){
 if(v==="staff"){
  const [staffResult,meResult]=await Promise.all([call("/api/v1/staff"),call("/api/v1/auth/me")]);
  const d=staffResult.data,me=meResult.user;
- const roleChoices=[["billing","Billing"],["noc","Network / NOC"],["support","Customer support"],["technician","Field technician"],["staff","Limited staff"]];
+ const roleChoices=[["billing","Billing"],["support","Customer support"],["technician","Network / NOC & Field Technician"],["staff","Limited staff"]];
  if(me.role==="owner")roleChoices.push(["admin","Administrator"]);
  const roleOptions=roleChoices.map(item=>'<option value="'+item[0]+'">'+item[1]+'</option>').join("");
  const rows=d.map(x=>{
