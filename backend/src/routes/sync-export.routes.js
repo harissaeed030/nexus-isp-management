@@ -28,8 +28,14 @@ export function registerSyncExportRoutes(app, { db, env }) {
       if (localTenants.length !== 1) return res.status(503).json({ success: false, error: "Set SYNC_TENANT_ID when the local database has zero or multiple tenants." });
       tenantId = localTenants[0].id;
     }
-    const after = Number.parseInt(req.query.after || "0", 10);
-    const limit = Number.parseInt(req.query.limit || "50", 10);
+    const afterRaw = req.query.after ?? "0";
+    const limitRaw = req.query.limit ?? "50";
+    // Reject parseInt-style partial values (for example "12oops" or "5.5").
+    if (!/^(0|[1-9][0-9]*)$/.test(String(afterRaw)) || !/^(0|[1-9][0-9]*)$/.test(String(limitRaw))) {
+      return res.status(400).json({ success: false, error: "Use whole-number after and limit values." });
+    }
+    const after = Number(afterRaw);
+    const limit = Number(limitRaw);
     if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_BATCH) {
       return res.status(400).json({ success: false, error: "Use after >= 0 and limit between 1 and 100." });
     }
