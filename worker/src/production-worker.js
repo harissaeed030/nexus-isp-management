@@ -275,7 +275,7 @@ if(path.match(/^\/api\/invoices\/[^/]+\/payments$/)&&m==='POST')return await rec
 if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
 if(path==='/api/operations/payment-promises'&&m==='GET')return await listPaymentPromises(env,url,orgId);
 if(path==='/api/operations/payment-promises'&&m==='POST')return await createPaymentPromise(request,env,orgId,userId,ip);
-if(path.match(/^\\/api\\/operations\\/payment-promises\\/[^/]+$/)&&m==='PUT')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
+if(path.match(/^\/api\/operations\/payment-promises\/[^/]+$/)&&m==='PUT')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
 if(path==='/api/financial/aging'&&m==='GET')return await financialAging(env,orgId);
 if(path==='/api/refunds'&&m==='GET')return await listRefunds(env,url,orgId);
 if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId,userId,ip);
@@ -913,7 +913,8 @@ async function listPaymentPromises(env,url,oid){
 }
 async function createPaymentPromise(request,env,oid,uid,ip){
  const b=await parseBody(request);
- if(!b||!b.customerId||!Number.isSafeInteger(Number(b.amountPkr))||Number(b.amountPkr)<=0||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(b.promiseDate||'')))return json({error:'Customer, positive whole-rupee amount and valid promise date are required'},400);
+ const promiseDate=String(b?.promiseDate||''),parsedDate=new Date(promiseDate+'T00:00:00Z');
+ if(!b||!b.customerId||!Number.isSafeInteger(Number(b.amountPkr))||Number(b.amountPkr)<=0||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(promiseDate)||Number.isNaN(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==promiseDate)return json({error:'Customer, positive whole-rupee amount and valid promise date are required'},400);
  if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customerId,oid).first())return json({error:'Customer not found'},404);
  const id=uuid(),notes=typeof b.notes==='string'?b.notes.trim().slice(0,500):null;
  await env.DB.prepare("INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,status,notes,created_by) VALUES(?,?,?,?,?,'open',?,?)").bind(id,oid,b.customerId,Number(b.amountPkr),b.promiseDate,notes||null,uid).run();
