@@ -1001,7 +1001,7 @@ export async function decryptAcsSecret(value,env){
  const key=await acsCryptoKey(env,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
  return new TextDecoder().decode(plain);
 }
-export export async function encryptRouterSecret(value,env){
+export async function encryptRouterSecret(value,env){
  if(!value)return null;if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']);
  const key=await crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-ROUTER-SALT-V1'),info:new TextEncoder().encode('NEXUS-ROUTER-CREDENTIAL-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,['encrypt']);
