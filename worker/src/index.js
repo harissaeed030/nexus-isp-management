@@ -59,11 +59,12 @@ const PERMISSIONS=[
  {key:'audit.read',group:'Administration',label:'View activity log'},
  {key:'notifications.read',group:'Administration',label:'View notifications'},
  {key:'refunds.read',group:'Billing',label:'View refunds'},
- {key:'refunds.manage',group:'Billing',label:'Record and process refunds'}
+ {key:'refunds.manage',group:'Billing',label:'Record and process refunds'},
+ {key:'payment_promises.manage',group:'Billing',label:'Create and update payment promises'}
 ];
 const ROLE_PERMISSIONS={
  owner:['*'],admin:['*'],
- billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read','refunds.read','refunds.manage'],
+ billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read','refunds.read','refunds.manage','payment_promises.manage'],
  support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read','notifications.read'],
  technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read'],
  staff:['dashboard.read','notifications.read']
@@ -85,8 +86,8 @@ function permissionForRoute(path,method){
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
  if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
  if(match('/api/reports')||path==='/api/financial/aging')return v==='GET'?'reports.read':null;
- if(path==='/api/operations/payment-promises')return v==='GET'?'reports.read':v==='POST'?'billing.read':null;
- if(match('/api/operations/payment-promises'))return v==='PATCH'?'billing.read':null;
+ if(path==='/api/operations/payment-promises')return v==='GET'?'billing.read':v==='POST'?'payment_promises.manage':null;
+ if(match('/api/operations/payment-promises'))return v==='PATCH'?'payment_promises.manage':null;
  if(path.startsWith('/api/exports/')){if(v!=='GET')return null;const resource=path.slice('/api/exports/'.length);return ({'customers.csv':'customers.read','packages.csv':'packages.read','subscriptions.csv':'subscriptions.read','invoices.csv':'billing.read','payments.csv':'billing.read','tickets.csv':'tickets.read','routers.csv':'routers.read','olt.csv':'routers.read','acs.csv':'routers.read','pppoe.csv':'pppoe.read','onus.csv':'onus.read'})[resource]||null}
  if(path==='/api/audit-logs')return v==='GET'?'audit.read':null;
  if(match('/api/notifications'))return ['GET','PUT'].includes(v)?'notifications.read':null;
@@ -707,7 +708,7 @@ async function createPaymentPromise(request,env,oid,uid,ip){
  const b=await parseBody(request),customerId=b?.customerId,amount=Number(b?.amountPkr),promiseDate=b?.promiseDate,notes=typeof b?.notes==='string'?b.notes.trim():'';
  if(typeof customerId!=='string'||!customerId)return json({error:'Customer is required'},400);
  if(!Number.isSafeInteger(amount)||amount<=0)return json({error:'Promised amount must be a positive whole number of rupees'},400);
- if(typeof promiseDate!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(promiseDate)||new Date(promiseDate+'T00:00:00Z').toISOString().slice(0,10)!==promiseDate)return json({error:'A valid promise date is required'},400);
+ if(typeof promiseDate!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(promiseDate)||!Number.isFinite(Date.parse(promiseDate+'T00:00:00Z'))||new Date(promiseDate+'T00:00:00Z').toISOString().slice(0,10)!==promiseDate)return json({error:'A valid promise date is required'},400);
  if(notes.length>500)return json({error:'Notes must be 500 characters or fewer'},400);
  if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(customerId,oid).first())return json({error:'Customer not found'},404);
  const id=uuid();
@@ -724,7 +725,7 @@ async function updatePaymentPromise(request,env,path,oid,uid,ip){
  const sets=[],values=[];
  if(b.status!==undefined){if(!['open','kept','broken','cancelled'].includes(b.status))return json({error:'Invalid payment promise status'},400);sets.push('status=?');values.push(b.status)}
  if(b.notes!==undefined){if(typeof b.notes!=='string'||b.notes.length>500)return json({error:'Notes must be text up to 500 characters'},400);sets.push('notes=?');values.push(b.notes.trim()||null)}
- if(b.promiseDate!==undefined){if(typeof b.promiseDate!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(b.promiseDate)||new Date(b.promiseDate+'T00:00:00Z').toISOString().slice(0,10)!==b.promiseDate)return json({error:'Invalid promise date'},400);sets.push('promise_date=?');values.push(b.promiseDate)}
+ if(b.promiseDate!==undefined){if(typeof b.promiseDate!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(b.promiseDate)||!Number.isFinite(Date.parse(b.promiseDate+'T00:00:00Z'))||new Date(b.promiseDate+'T00:00:00Z').toISOString().slice(0,10)!==b.promiseDate)return json({error:'Invalid promise date'},400);sets.push('promise_date=?');values.push(b.promiseDate)}
  if(!sets.length)return json({error:'No supported fields to update'},400);
  sets.push("updated_at=datetime('now')",'updated_by=?');values.push(uid,id,oid);
  await env.DB.prepare('UPDATE payment_promises SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...values).run();
