@@ -7,6 +7,8 @@ on:
       - "worker/src/d1-api-worker.js"
       - "worker/wrangler.api.toml"
       - "worker/scripts/d1-api-contract.test.js"
+      - "worker/scripts/d1-staging-readonly-smoke.mjs"
+      - ".github/workflows/d1-staging-readonly-smoke.yml"
       - "backend/package.json"
       - "backend/scripts/architecture-boundaries.test.js"
       - ".github/workflows/d1-api-worker.yml"
@@ -16,6 +18,8 @@ on:
       - "worker/src/d1-api-worker.js"
       - "worker/wrangler.api.toml"
       - "worker/scripts/d1-api-contract.test.js"
+      - "worker/scripts/d1-staging-readonly-smoke.mjs"
+      - ".github/workflows/d1-staging-readonly-smoke.yml"
       - ".github/workflows/d1-api-worker.yml"
 
 jobs:
@@ -27,4 +31,5 @@ jobs:
         with:
           node-version: 22
       - run: node --check worker/src/d1-api-worker.js
+      - run: node --check worker/scripts/d1-staging-readonly-smoke.mjs
       - run: node --test worker/scripts/d1-api-contract.test.js
