@@ -38,8 +38,15 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 - Expanded `.github/workflows/backend-checks.yml` to verify on Node 22 and 26.
 - Confirmed the hosted D1 Worker on `main` does not expose `/api/v1/tenant`; updated the Settings screen to explain this hosted API gap instead of incorrectly telling every user they lack owner access. This small frontend fallback change was committed after the successful CI run and has not yet had a fresh CI result attached.
 
+## Hosted D1 tenant-settings parity tranche
+- Added `GET/PATCH /api/v1/tenant` to the Worker source on this branch, matching the local SQLite Settings screen contract.
+- Both operations are owner-only and scoped to the authenticated `organization_id`; updates validate company name, hex brand colour, support phone and address, and write an audit event.
+- Added an additive runtime D1 migration for `organizations.brand_color`. Existing phone/address columns are reused.
+- The Worker returns `customer_limit: null` because hosted D1 plan-limit policy is not yet implemented; the UI now says the limit is not configured instead of inventing a number.
+- `worker/wrangler.toml` targets `nexus-saas-api-staging` / `nexus-saas-staging-db`. No Worker deployment or D1 migration was run. This is source-level parity only, not deployed or production-verified.
+
 ## Known limitations
-- No UI to change plan and no payment collection for SaaS plans (plan is changed in the database).
+- No UI to change plan and no payment collection for SaaS plans (plan is changed in the database). Hosted D1 customer-limit enforcement is also not implemented.
 - Dashboard KPI cards now display daily/monthly collections, outstanding receivables, suspended customers and subscriptions expiring within seven days. The dashboard JavaScript change is included in commit `eba7e012c4f6d2ae7767fdeca6b885a6bca847f8`.
 - Router, OLT and payment-gateway behaviour is not tested on real devices.
 - `build/nexus-isp-core` and `main` have diverged and were not merged.
