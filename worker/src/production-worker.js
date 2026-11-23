@@ -201,6 +201,7 @@ async function runMigrations(env){
  ['network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT'],
  ['network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT'],
  ['network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER'],
+ ['network_devices.credential_password_cipher','ALTER TABLE network_devices ADD COLUMN credential_password_cipher TEXT'],
  ['acs_connections',"CREATE TABLE IF NOT EXISTS acs_connections(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,name TEXT NOT NULL,base_url TEXT NOT NULL,username_cipher TEXT,password_cipher TEXT,token_cipher TEXT,timeout_ms INTEGER NOT NULL DEFAULT 8000,enabled INTEGER NOT NULL DEFAULT 1,last_test_at TEXT,last_test_ok INTEGER,last_error TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,name),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"],
  ['acs_connections.index','CREATE INDEX IF NOT EXISTS idx_acs_connections_org ON acs_connections(organization_id)'],
  ['tr069_devices',"CREATE TABLE IF NOT EXISTS tr069_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,acs_connection_id TEXT NOT NULL,device_id TEXT NOT NULL,manufacturer TEXT,oui TEXT,product_class TEXT,model TEXT,serial_number TEXT,last_inform_at TEXT,last_boot_at TEXT,inform_status TEXT NOT NULL DEFAULT 'unknown',parameter_snapshot TEXT NOT NULL DEFAULT '{}',last_synced_at TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,acs_connection_id,device_id),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(acs_connection_id) REFERENCES acs_connections(id) ON DELETE CASCADE)"],
@@ -243,7 +244,7 @@ export function normalizeApiPath(input){
 }
 export function normalizeApiMethod(path,method){
  const verb=String(method||'GET').toUpperCase();
- if(verb==='PATCH'&&(/^\/api\/(customers|complaints|packages|subscriptions)\/[^/]+$/.test(path)||/^\/api\/operations\/payment-promises\/[^/]+$/.test(path)))return 'PUT';
+ if(verb==='PATCH'&&(/^\/api\/(customers|complaints|packages|subscriptions|network\/devices)\/[^/]+$/.test(path)||/^\/api\/operations\/payment-promises\/[^/]+$/.test(path)))return 'PUT';
  return verb;
 }
 let _migrated=false;
@@ -1175,7 +1176,7 @@ async function deleteOnu(env,path,oid,uid,ip){
 }
 async function createNetworkDevice(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
- const name=s(b.name),type=b.device_type||b.deviceType||b.type,portValue=b.port??b.apiPort,port=portValue===undefined||portValue===null||portValue===''?null:parseInt(portValue,10);
+ const name=s(b.name),type=b.device_type||b.deviceType||b.type||'mikrotik',portValue=b.port??b.apiPort,port=portValue===undefined||portValue===null||portValue===''?null:parseInt(portValue,10);
  if(!name||!['mikrotik','olt','acs','other'].includes(type))return json({error:'name and valid device_type are required'},400);
  if(port!==null&&(!Number.isInteger(port)||port<1||port>65535))return json({error:'port must be between 1 and 65535'},400);
  if(b.status!==undefined&&!['active','inactive','maintenance'].includes(b.status))return json({error:'Invalid status'},400);
