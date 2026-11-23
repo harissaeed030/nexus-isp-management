@@ -68,6 +68,15 @@ try{
  assert.equal(pack.status,201);
  const sub=await request("/api/v1/subscriptions","POST",{customerId:customer.data.data.id,packageId:pack.data.data.id,status:"active"},token);
  assert.equal(sub.status,201);
+ // Package records are isolated by tenant and support reversible archive status.
+ assert.equal((await request("/api/v1/packages/"+pack.data.data.id,"PATCH",{name:"Cross Tenant Package"},scopedLogin.data.token)).status,404);
+ const archivedPackage=await request("/api/v1/packages/"+pack.data.data.id,"PATCH",{status:"archived"},token);
+ assert.equal(archivedPackage.status,200);
+ assert.equal(archivedPackage.data.data.status,"archived");
+ const restoredPackage=await request("/api/v1/packages/"+pack.data.data.id,"PATCH",{status:"active"},token);
+ assert.equal(restoredPackage.status,200);
+ assert.equal(restoredPackage.data.data.status,"active");
+ assert.equal((await request("/api/v1/packages/"+pack.data.data.id,"PATCH",{speedDownMbps:0},token)).status,400);
  assert.match(customer.data.data.account_number,/^NXS-[0-9]{7}$/);
  assert.equal(customer.data.data.connection_status,"pending");
  assert.equal(db.prepare("SELECT COUNT(*) n FROM schema_migrations WHERE version='002_customer_subscription_management'").get().n,1);
