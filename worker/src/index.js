@@ -963,8 +963,8 @@ async function delPppoe(env,path,oid,uid,ip){
 async function listRouters(env,url,oid){
  const {page,pp,off}=pg(url);
  const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM network_devices WHERE organization_id=? AND device_type='mikrotik'").bind(oid).first();
- const rows=await env.DB.prepare("SELECT id,name,host,port,notes,username,status,model,management_protocol,created_at,updated_at FROM network_devices WHERE organization_id=? AND device_type='mikrotik' ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
- return json({success:true,data:(rows.results||[]).map(x=>({...x,apiPort:x.port,location:x.notes||null})),pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+ const rows=await env.DB.prepare("SELECT id,name,host,port,notes,username,status,model,management_protocol,CASE WHEN credentials_ciphertext IS NOT NULL AND credentials_ciphertext<>'' THEN 1 ELSE 0 END AS credentials_configured,created_at,updated_at FROM network_devices WHERE organization_id=? AND device_type='mikrotik' ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
+ return json({success:true,data:(rows.results||[]).map(x=>({...x,apiPort:x.port,location:x.notes||null,credentialsConfigured:Number(x.credentials_configured)===1})),pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
 }
 async function createRouter(request,env,oid,uid,ip){
  const b=await parseBody(request);
@@ -977,8 +977,8 @@ async function createRouter(request,env,oid,uid,ip){
  const id=uuid(),ciphertext=await encryptRouterPassword(password,env);
  await env.DB.prepare("INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,credentials_ciphertext) VALUES(?,?,?,'mikrotik',?,?,?,'inactive',?,'RouterOS 7','routeros-api-ssl',?)").bind(id,oid,name,host,port,username,location||null,ciphertext).run();
  await audit(env,oid,uid,'create_router','Router:'+id,ip);
- const row=await env.DB.prepare("SELECT id,name,host,port,username,status,notes,model,management_protocol,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?").bind(id,oid).first();
- return json({success:true,data:{...row,apiPort:row.port,location:row.notes||null,credentialsConfigured:true}},201);
+ const row=await env.DB.prepare("SELECT id,name,host,port,username,status,notes,model,management_protocol,CASE WHEN credentials_ciphertext IS NOT NULL AND credentials_ciphertext<>'' THEN 1 ELSE 0 END AS credentials_configured,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?").bind(id,oid).first();
+ return json({success:true,data:{...row,apiPort:row.port,location:row.notes||null,credentialsConfigured:Number(row.credentials_configured)===1}},201);
 }
 async function updateRouter(request,env,path,oid,uid,ip){
  const id=decodeURIComponent(path.split('/')[3]),b=await parseBody(request);
@@ -1010,7 +1010,7 @@ async function updateRouter(request,env,path,oid,uid,ip){
  await env.DB.prepare("UPDATE network_devices SET "+sets.join(', ')+" WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(...values).run();
  await audit(env,oid,uid,'update_router','Router:'+id,ip);
  const row=await env.DB.prepare("SELECT id,name,host,port,username,status,notes,model,management_protocol,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?").bind(id,oid).first();
- return json({success:true,data:{...row,apiPort:row.port,location:row.notes||null,credentialsConfigured:true}});
+ return json({success:true,data:{...row,apiPort:row.port,location:row.notes||null,credentialsConfigured:Number(row.credentials_configured)===1}});
 }
 async function deleteRouter(env,path,oid,uid,ip){
  const id=decodeURIComponent(path.split('/')[3]);
