@@ -718,18 +718,36 @@ async function updateRefund(request,env,path,oid,uid,ip){
 
 async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*) AS total FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT t.*,('TKT-'||upper(substr(t.id,1,8))) AS ticket_number,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name,COALESCE(NULLIF(u.name,''),u.email,'Unassigned') AS assigned_to_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id AND c.organization_id=t.organization_id LEFT JOIN users u ON t.assigned_to=u.id AND u.organization_id=t.organization_id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,per_page:pp,total:Number(cnt?.total||0),total_pages:Math.ceil(Number(cnt?.total||0)/pp)}})}
 async function createComp(r,env,oid,uid,ip){
- const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
- const ms=vReq(b,['subject']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
+ const raw=await parseBody(r);if(!raw||typeof raw!=='object'||Array.isArray(raw))return json({error:'Invalid body'},400);
+ const b={...raw,customer_id:raw.customer_id??raw.customerId,assigned_to:raw.assigned_to??raw.assignedTo};
+ if(typeof b.subject!=='string'||!b.subject.trim()||b.subject.trim().length>180)return json({error:'Subject must be 1-180 characters'},400);
+ if(typeof (b.description??'')!=='string'||String(b.description||'').length>4000)return json({error:'Description must be text up to 4000 characters'},400);
+ if(!['low','normal','medium','high','urgent'].includes(b.priority||'normal'))return json({error:'Invalid ticket priority'},400);
  if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);
  if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);
  const id=uuid();
- await env.DB.prepare('INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status,assigned_to)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id||null,s(b.subject),b.description||null,b.priority||'medium','open',b.assigned_to||null).run();
- await audit(env,oid,uid,'create_ticket','Ticket:'+b.subject,ip);
- await notifyAdmins(env,oid,'New support ticket',String(b.subject).slice(0,180),'support');
- return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first(),201)
+ await env.DB.prepare('INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status,assigned_to)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id||null,b.subject.trim(),(b.description||'').trim()||null,b.priority||'normal','open',b.assigned_to||null).run();
+ await audit(env,oid,uid,'create_ticket','Ticket:'+id,ip);
+ await notifyAdmins(env,oid,'New support ticket',b.subject.trim(),'support');
+ return json({success:true,data:await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first()},201)
 }
-async function updateComp(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);const f=['status','priority','assigned_to','resolution','description'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE support_tickets SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=?').bind(id).first())}
-
+async function updateComp(r,env,path,oid,uid,ip){
+ const id=path.split('/')[3],raw=await parseBody(r);
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))return json({error:'Invalid body'},400);
+ const b={...raw,assigned_to:raw.assigned_to??raw.assignedTo};
+ const ex=await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!ex)return json({error:'Not found'},404);
+ if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);
+ if(b.status!==undefined&&!['open','in_progress','resolved','closed'].includes(b.status))return json({error:'Invalid ticket status'},400);
+ if(b.priority!==undefined&&!['low','normal','medium','high','urgent'].includes(b.priority))return json({error:'Invalid ticket priority'},400);
+ const fields=['status','priority','assigned_to','resolution','description'],sets=[],values=[];
+ for(const field of fields){if(b[field]!==undefined){sets.push(field+'=?');values.push(b[field])}}
+ if(!sets.length)return json({error:'No fields to update'},400);
+ sets.push("updated_at=datetime('now')");values.push(id,oid);
+ await env.DB.prepare('UPDATE support_tickets SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...values).run();
+ await audit(env,oid,uid,'update_ticket','Ticket:'+id,ip);
+ return json({success:true,data:await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first()})
+}
 
 async function notifyAdmins(env,oid,title,message,type='info'){
  try{
