@@ -886,13 +886,13 @@ function acsCryptoKey(env,usages){
  if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
  return crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']).then(material=>crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-ACS-SALT-V1'),info:new TextEncoder().encode('NEXUS-ACS-CREDENTIAL-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,usages));
 }
-async function encryptAcsSecret(value,env){
+export async function encryptAcsSecret(value,env){
  if(!value)return null;
  const key=await acsCryptoKey(env,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12));
  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(value));
  return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(cipher));
 }
-async function decryptAcsSecret(value,env){
+export async function decryptAcsSecret(value,env){
  if(!value)return '';
  const p=String(value).split(':');if(p.length!==4||p[0]!=='enc'||p[1]!=='v1')throw new Error('ACS credential ciphertext is invalid');
  const key=await acsCryptoKey(env,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
@@ -933,7 +933,7 @@ async function acsRequest(connection,env,pathname,query='',body=null){
  try{const response=await fetch(url.toString(),{method:body===null?'GET':'POST',headers,body:body===null?undefined:JSON.stringify(body),signal:controller.signal,redirect:'error'});const raw=await response.text();if(!response.ok)throw new Error('ACS returned HTTP '+response.status);let data;try{data=raw?JSON.parse(raw):{}}catch{throw new Error('ACS returned invalid JSON')}return data}finally{clearTimeout(timer)}
 }
 function tr069IdFromPath(path){return decodeURIComponent(path.split('/')[4]||'')}
-function tr069Status(lastInform){if(!lastInform)return'unknown';const age=Date.now()-Date.parse(lastInform);if(!Number.isFinite(age))return'unknown';return age<=600000?'online':'offline'}
+export function tr069Status(lastInform){if(!lastInform)return'unknown';const age=Date.now()-Date.parse(lastInform);if(!Number.isFinite(age))return'unknown';return age<=600000?'online':'offline'}
 export function redactTr069Tree(value,key=''){
  if(/password|passphrase|secret|token|private.?key|pre.?shared|wep.?key|network.?key|psk/i.test(key))return undefined;
  if(Array.isArray(value))return value.slice(0,100).map(x=>redactTr069Tree(x,key)).filter(x=>x!==undefined);
