@@ -37,7 +37,7 @@ export const ROLE_PERMISSIONS = {
   owner: ["*"],
   admin: ["*"],
   billing: ["dashboard.read","customers.read","packages.read","subscriptions.read","billing.read","invoices.create","payments.create","billing.adjust","refunds.manage","billing.reconcile","billing.generate","reports.read","notifications.manage","operations.read","collections.read","collections.manage"],
-  noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage","routers.provision","olts.read","olts.manage","operations.read","operations.manage","collections.read"],
+  noc: ["dashboard.read","customers.read","packages.read","subscriptions.read","subscriptions.manage","tickets.read","tickets.manage","routers.read","routers.manage","routers.provision","olts.read","olts.manage","acs.manage","operations.read","operations.manage","collections.read"],
   support: ["dashboard.read","customers.read","packages.read","subscriptions.read","tickets.read","tickets.manage","operations.read"],
   technician: ["dashboard.read","customers.read","subscriptions.read","tickets.read","tickets.manage","routers.read","olts.read","operations.read"],
   staff: ["dashboard.read"]
@@ -97,7 +97,7 @@ export function permissionFor(path,method) {
     if(["POST","PATCH"].includes(verb)) return "routers.provision";
     return null;
   }
-  if(matches("/api/v1/acs")||matches("/api/v1/tr069"))return verb==="GET"?"olts.read":["POST","PATCH","DELETE"].includes(verb)?"olts.manage":null;
+  if(matches("/api/v1/acs")||matches("/api/v1/tr069"))return verb==="GET"?"olts.read":["POST","PATCH","DELETE"].includes(verb)?"acs.manage":null;
   if(matches("/api/v1/olts")||matches("/api/v1/onus")||matches("/api/v1/pons")||matches("/api/v1/olt-alarms"))return verb==="GET"?"olts.read":["POST","PATCH","DELETE"].includes(verb)?"olts.manage":null;
   if(matches("/api/v1/portal-admin"))return ["POST"].includes(verb)?"customers.update":null;
   if(matches("/api/v1/notifications"))return ["GET","POST","PATCH"].includes(verb)?"notifications.manage":null;
