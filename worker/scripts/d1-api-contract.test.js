@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload, corsHeaders } from "../src/d1-api-worker.js";
+import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, mapStaffRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload, corsHeaders } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
@@ -30,6 +30,13 @@ test("D1 API Worker includes core ISP billing and customer modules", () => {
   for (const route of ["/api/customers", "/api/packages", "/api/subscriptions", "/api/invoices", "/api/payments", "/api/billing/generate", "/api/refunds", "/api/complaints"]) {
     assert.ok(source.includes(route), `Missing API route family: ${route}`);
   }
+});
+
+test("staff API contract supports frontend edits and DTO compatibility", () => {
+  assert.ok(source.includes("path.match(/^\\/api\\/staff\\/[^/]+$/)&&m==='PUT')return await updateStaff"));
+  assert.ok(source.includes("path.match(/^\\/api\\/staff\\/[^/]+$/)&&m==='DELETE')return await delStaff"));
+  assert.deepEqual(mapStaffRow({id:"u1",name:"A Khan",status:"disabled"}), {id:"u1",name:"A Khan",status:"inactive",full_name:"A Khan"});
+  assert.deepEqual(mapStaffRow({id:"u2",full_name:"S Khan",status:"active"}), {id:"u2",full_name:"S Khan",status:"active",name:undefined});
 });
 
 test("D1 API Worker includes network inventory and staff permission modules", () => {
