@@ -155,3 +155,14 @@ The CI-verified source from commit `809b12f51afb4c45f7855ffcf74b3efb7fcf003d` wa
 Version 33 was promoted to the staging Worker at 100% traffic. The active deployment was verified as deployment `688f07f3-f80a-4db3-ad20-ab44a08a4567`, routing 100% to version 33. Version 32 is no longer active. The browser-based live health/login path remains unverified because the available browser fetch path cannot reach the Workers endpoint; automated source and contract tests passed for the source commit.
 
 A separate production audit found that the current production Worker is version 31 (not the previously recorded version 29), at 100% traffic, with production D1 ID `ce88098b-bff4-4d06-a0df-7bf29622a085`. Its downloaded script still contains the legacy plaintext fallback and does not yet contain the portal priority helper. Production has not been modified in this follow-up. Do not promote a production build until a staging live-authentication smoke test, a reviewed production binding/config comparison, and a rollback plan are complete.
+
+
+## Health endpoint and read-only staging smoke — 2026-11-23
+
+A further safety review found that the Worker previously ran startup schema migrations before serving `/api/health`. This made a nominal health probe capable of invoking D1 DDL. The request order is now: CORS preflight, read-only health probe (`SELECT 1`), then startup migrations for other API paths. A contract test asserts that ordering and the D1 API workflow validates it.
+
+The new manual workflow `.github/workflows/d1-staging-readonly-smoke.yml` and script `worker/scripts/d1-staging-readonly-smoke.mjs` check staging health, trusted Pages CORS, and rejection of untrusted origins without creating synthetic tenants or financial records. The D1 Worker CI now syntax-checks this smoke script. The manual live workflow has not yet been run from this environment.
+
+The health-ordering source commit `9684487370a30f85fb7fca27f31148bcea2e5071` was uploaded as staging Worker version 34 (ID `71940c3c-b004-4737-a7c5-c699dd88a623`) and promoted after the contract tests passed. Active staging deployment is `b4bc3375-00db-4888-9c34-68ca8bf9e11d`, routing 100% to version 34. The staging D1 binding and secret binding names were rechecked; secret values were not read. GitHub workflows for the follow-up branch commit `356b72f7b6e958d15eb2572ea023e4d83219269e` all passed, including Worker syntax/contract tests, read-only smoke-script syntax, backend checks, and both backend verification workflows.
+
+The read-only smoke workflow is prepared for a manual run. Direct browser-based access to the Workers endpoint remains unavailable through the current browser path, so live health/CORS response assertions have not yet been observed. Production Worker version 31 remains unchanged and still has the legacy password fallback; do not deploy production until the live staging smoke and production release review are complete.
