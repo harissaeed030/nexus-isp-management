@@ -52,6 +52,7 @@ test("sync export pins the configured tenant and paginates without leaking other
   db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run(tenantA,"Tenant A","tenant-a-"+tenantA.slice(0,8));
   db.prepare("INSERT INTO tenants(id,name,slug) VALUES(?,?,?)").run(tenantB,"Tenant B","tenant-b-"+tenantB.slice(0,8));
   db.prepare("INSERT INTO customers(id,tenant_id,customer_code,full_name,status) VALUES(?,?,?,?,?)").run(customerA,tenantA,"A-001","Tenant A Customer","active");
+  db.prepare("INSERT INTO packages(id,tenant_id,name,speed_down_mbps,speed_up_mbps,monthly_price_pkr) VALUES(?,?,?,?,?,?)").run(randomUUID(),tenantA,"Tenant A 10M",10,10,1000);
   db.prepare("INSERT INTO customers(id,tenant_id,customer_code,full_name,status) VALUES(?,?,?,?,?)").run(customerB,tenantB,"B-001","Tenant B Customer","active");
   let handler;
   registerSyncExportRoutes({get(_path,fn){handler=fn;}},{db,env:{syncExportToken:"pinned-token",syncTenantId:tenantA}});
@@ -67,6 +68,8 @@ test("sync export pins the configured tenant and paginates without leaking other
   assert.ok(first.body.events.every(event=>event.record?.tenant_id===tenantA));
   const second=invoke({after:String(first.body.nextCursor),limit:"1"});
   assert.equal(second.statusCode,200);
+  assert.equal(second.body.count,1);
+  assert.ok(second.body.nextCursor>first.body.nextCursor);
   assert.ok(second.body.events.every(event=>event.record?.tenant_id===tenantA));
   const invalid=invoke({after:"-1",limit:"1"});
   assert.equal(invalid.statusCode,400);
