@@ -107,3 +107,31 @@ test("sync ownership check accepts absent IDs and rejects unsupported tables", a
   assert.equal(await assertSyncRecordOwnership(database, "invoices", "target-org", "new-id"), false);
   await assert.rejects(assertSyncRecordOwnership(database, "users", "target-org", "id"), /Unsupported sync entity/);
 });
+
+test("sync HTTP endpoint rejects unauthenticated, oversized, malformed, and unmapped pushes safely", async () => {
+  const { default: worker } = await import("../src/sync-worker.js");
+  const unauth = await worker.fetch(new Request("https://sync.example/sync/push",{method:"POST",body:"{}"}),{SYNC_PUSH_TOKEN:"secret",DB:{}});
+  assert.equal(unauth.status,401);
+  const missingDb = await worker.fetch(new Request("https://sync.example/sync/push",{method:"POST",headers:{Authorization:"Bearer secret"},body:"{}"}),{SYNC_PUSH_TOKEN:"secret"});
+  assert.equal(missingDb.status,503);
+  const badJson = await worker.fetch(new Request("https://sync.example/sync/push",{method:"POST",headers:{Authorization:"Bearer secret"},body:"{"}),{SYNC_PUSH_TOKEN:"secret",DB:{}});
+  assert.equal(badJson.status,400);
+  const oversized = await worker.fetch(new Request("https://sync.example/sync/push",{method:"POST",headers:{Authorization:"Bearer secret"},body:"x".repeat(900001)}),{SYNC_PUSH_TOKEN:"secret",DB:{}});
+  assert.equal(oversized.status,413);
+  let mappingQuery="";
+  const DB={prepare(sql){mappingQuery=sql;return{bind(source){assert.equal(source,"local-tenant");return{async first(){return null;}};}};}};
+  const unmapped = await worker.fetch(new Request("https://sync.example/sync/push",{method:"POST",headers:{Authorization:"Bearer secret","Content-Type":"application/json"},body:JSON.stringify({sourceTenantId:"local-tenant",events:[{cursor:1,operationId:"op-1"}]})}),{SYNC_PUSH_TOKEN:"secret",DB});
+  assert.equal(unmapped.status,409);
+  assert.match(mappingQuery,/sync_tenant_mappings/);
+  assert.match(mappingQuery,/active=1/);
+  assert.match(await unmapped.text(),/No approved SQLite tenant mapping/);
+});
+
+test("sync endpoint reports health without exposing configuration secrets", async () => {
+  const { default: worker } = await import("../src/sync-worker.js");
+  const response=await worker.fetch(new Request("https://sync.example/health"),{DB:{}});
+  assert.equal(response.status,200);
+  const body=await response.json();
+  assert.deepEqual(body,{success:true,service:"NEXUS SQLite-to-D1 sync",database:"configured"});
+  assert.doesNotMatch(JSON.stringify(body),/secret|token|password/i);
+});
