@@ -32,16 +32,25 @@ The backend workflow initially failed because an architecture-boundary test stil
 No production or staging credentials were changed. No Worker was deployed as part of this change.
 
 
-## Deployed Worker verification (read-only)
+## Current deployed Worker verification (read-only; 2026-11-23)
 
-The live Worker script uploads were inspected after the source change. The current 100%-traffic deployments are:
-- Production `nexus-saas-api`, version 28, uploaded 2026-11-23 05:27:32 UTC.
-- Staging `nexus-saas-api-staging`, version 29, uploaded 2026-11-23 05:26:35 UTC.
+The current 100%-traffic deployments were re-checked against Cloudflare's deployment and script APIs:
 
-Both deployed script bundles still contain the previous verifier, including the `if(!salt)return pw===h` fallback. Therefore the fail-closed verifier change is **saved and CI-verified in GitHub, but is not yet deployed to either Worker**.
+| Environment | Active Worker version | Upload time (UTC) | Live password verifier |
+|---|---:|---|---|
+| Production `nexus-saas-api` | 29 | 06:07:50 | **Old verifier** — still contains `if(!salt)return pw===h` |
+| Staging `nexus-saas-api-staging` | 31 | 06:04:37 | **Hardened verifier** — rejects malformed inputs and unsalted hashes, derives PBKDF2-SHA256, and compares all 64 characters |
 
-The production version binds the production D1 database; staging binds the staging D1 database. Both have secret bindings (JWT, CORS, Turnstile; staging also has PPPoE encryption). Secret values were not read. No deployment was initiated because replacing a live Worker requires preserving all current bindings and reconciling the branch source against the deployed bundle; a blind upload could break authentication, CORS, RouterOS encryption or production traffic.
+The staging version 30 candidate recorded earlier has been superseded by active version 31. The staging bundle also contains the Pages preview-origin CORS change. It does not yet contain the newest customer-complaint priority persistence change from this branch.
 
+Current binding names were checked without reading any secret values:
+
+- Production: `ALLOWED_ORIGINS` (secret), `DB` (D1), `ENVIRONMENT`, `JWT_SECRET` (secret), `NETWORK_CONNECTOR_ENABLED`, `TURNSTILE_SECRET_KEY` (secret).
+- Staging: the same names plus `PPPOE_ENCRYPTION_KEY` (secret).
+
+The production D1 binding remains `ce88098b-bff4-4d06-a0df-7bf29622a085`; staging remains `194f62e2-2766-48ab-be17-81248610c0cd`. Secret values were not read or changed.
+
+**Current security status:** staging is running the fail-closed verifier, but production still runs the old verifier. No Worker was deployed or promoted during this continuation. Production deployment remains blocked pending a reviewed bundle/config comparison and staging end-to-end verification; a blind upload could break authentication, CORS, D1 access, Turnstile, or PPPoE encryption.
 
 ## Frontend/API integration follow-up
 
