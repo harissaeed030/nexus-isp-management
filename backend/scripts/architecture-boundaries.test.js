@@ -62,6 +62,7 @@ test("Cloudflare Pages routes API traffic to the environment-specific Worker wit
   assert.doesNotMatch(dashboardSource, /https:\/\/nexus-saas-api\.harissaeed030\.workers\.dev/);
   assert.match(pagesProxy, /env\.API_URL\s*\|\|\s*env\.VITE_API_URL/);
   assert.match(pagesProxy, /new Request\(upstream, request\)/);
+  assert.match(packageJson.scripts.check, /node --input-type=module --check < "\\.\\.\\/functions\\/api\\/\\[\\[path\\]\\]\\.js"/);
   assert.match(pagesProxy, /incoming\.pathname\.startsWith\("\/api\/"\)/);
   assert.deepEqual(pagesRoutes, { version: 1, include: ["/api/*"], exclude: [] });
   assert.match(portalSource, /fetch\("\/api\/v1\/customer-portal"/);
