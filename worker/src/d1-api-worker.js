@@ -974,7 +974,8 @@ async function markAllNotificationsRead(env,oid,uid){
  return json({success:true});
 }
 
-export function mapStaffRow(row){return {...row,full_name:row.full_name||row.name||'',status:row.status==='disabled'?'inactive':row.status}}\nasync function listStaff(env,oid){const rows=await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();return json({data:(rows.results||[]).map(mapStaffRow)})}
+export function mapStaffRow(row){return {...row,full_name:row.full_name||row.name||'',status:row.status==='disabled'?'inactive':row.status}}
+async function listStaff(env,oid){const rows=await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();return json({data:(rows.results||[]).map(mapStaffRow)})}
 async function createStaff(r,env,oid,uid,role,ip){
  if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
