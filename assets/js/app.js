@@ -40,7 +40,7 @@ document.addEventListener("click",event=>{
   document.querySelector(".nx-ai-panel")?.remove();
   // Force a clean navigation through the dedicated login route. This also
   // replaces any stale dashboard DOM restored by the mobile PWA cache.
-  window.location.replace("/login.html");
+  window.location.replace("/?login=1");
 });
 let menuBackdrop=null;
 function closeMenu(){
