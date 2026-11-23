@@ -223,7 +223,7 @@ export function normalizeApiPath(input){
 }
 export function normalizeApiMethod(path,method){
  const verb=String(method||'GET').toUpperCase();
- if(verb==='PATCH'&&(/^\/api\/customers\/[^/]+$/.test(path)||/^\/api\/complaints\/[^/]+$/.test(path)))return 'PUT';
+ if(verb==='PATCH'&&(/^\/api\/customers\/[^/]+$/.test(path)||/^\/api\/complaints\/[^/]+$/.test(path)||/^\/api\/operations\/payment-promises\/[^/]+$/.test(path)))return 'PUT';
  return verb;
 }
 let _migrated=false;
