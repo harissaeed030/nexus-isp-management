@@ -82,9 +82,24 @@ CREATE TABLE IF NOT EXISTS network_devices (
         status TEXT NOT NULL DEFAULT 'inactive' CHECK(status IN ('active','inactive','maintenance')),
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')), model TEXT, management_protocol TEXT, pon_ports INTEGER, credentials_ciphertext TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')), model TEXT, management_protocol TEXT, pon_ports INTEGER,
         FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
       );
+
+CREATE TABLE IF NOT EXISTS router_credentials (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  network_device_id TEXT NOT NULL UNIQUE,
+  ciphertext TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (network_device_id) REFERENCES network_devices(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id),
+  FOREIGN KEY (updated_by) REFERENCES users(id)
+);
 
 CREATE TABLE IF NOT EXISTS notifications (
       id              TEXT PRIMARY KEY,
@@ -338,6 +353,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_refunds_org_reference ON refunds(organizat
 
 CREATE INDEX IF NOT EXISTS idx_refunds_payment_status ON refunds(organization_id,payment_id,status);
 
+CREATE INDEX IF NOT EXISTS idx_router_credentials_org_device ON router_credentials(organization_id,network_device_id);
+
 CREATE INDEX IF NOT EXISTS idx_payment_promises_org_status_date ON payment_promises(organization_id,status,promise_date);
 CREATE INDEX IF NOT EXISTS idx_payment_promises_org_customer ON payment_promises(organization_id,customer_id);
 
@@ -456,6 +473,18 @@ CREATE TRIGGER IF NOT EXISTS trg_payment_promise_org_u BEFORE UPDATE OF organiza
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer organization mismatch') END;
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator organization mismatch') END;
  SELECT CASE WHEN NEW.updated_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise updater organization mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_router_credentials_org_i BEFORE INSERT ON router_credentials BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.network_device_id AND organization_id=NEW.organization_id AND device_type='mikrotik') THEN RAISE(ABORT,'router credential device organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential creator organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential updater organization mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_router_credentials_org_u BEFORE UPDATE OF organization_id,network_device_id,created_by,updated_by ON router_credentials BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.network_device_id AND organization_id=NEW.organization_id AND device_type='mikrotik') THEN RAISE(ABORT,'router credential device organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential creator organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential updater organization mismatch') END;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_d1_refund_org_i BEFORE INSERT ON refunds BEGIN
