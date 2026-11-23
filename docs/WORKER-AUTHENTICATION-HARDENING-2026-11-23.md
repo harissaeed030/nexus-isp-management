@@ -184,3 +184,10 @@ Change commit: `fea3cd02411db78f509250ae778d8cf0ee00af31`. All five reported che
 - Deployment-specific preview: https://8f1c81df.nexus-isp-management.pages.dev
 
 This CI result validates the smoke script syntax and contract tests; it is **not** a run of the manual live staging smoke workflow. Live staging health/CORS/security-header assertions remain unverified. Production Worker version 31 remains active; production candidate version 32 remains uploaded but unpromoted. No D1 data/schema writes or production traffic changes were made.
+
+
+## API response cache policy hardened — 2026-11-23
+
+A review of the expanded staging smoke assertions found that the Worker did not yet attach `Cache-Control: no-store` to ordinary API responses (the CSV export path already had its own no-store header). The shared API security-header set now applies `Cache-Control: no-store` to all responses passed through the common CORS/security wrapper, including the read-only health response. This prevents browsers and intermediaries from caching authenticated API payloads and health responses.
+
+Source commit: `2a8c4dc4d1cd39e2bdcbb2e8f475ee7781259338`. All five reported checks completed successfully: Worker syntax/contract, three backend verification/check workflows, and Cloudflare Pages preview. This is source/CI verification only; the staging Worker has not yet been redeployed with this additional header and the manual live smoke workflow has not been run. Production Worker version 31 remains active; candidate version 32 remains unpromoted. No D1 data/schema writes or production traffic changes were made.
