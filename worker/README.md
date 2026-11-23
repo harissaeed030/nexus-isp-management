@@ -62,3 +62,12 @@ The first command targets staging; the second targets production. Before any pro
 Staging Worker version `d79d6f84-62eb-4339-8dbd-927a4aa109a1` was uploaded and deployed at 100% traffic after the logging-redaction source checks passed. The upload preserved the existing `DB` D1 binding and the `ALLOWED_ORIGINS`, `JWT_SECRET`, and `TURNSTILE_SECRET_KEY` secret bindings. Production Worker deployment is kept separate and must follow staging live-smoke verification.
 
 Production Worker version `7f85ed27-e3bc-47bd-9ebc-24a6a0e04dfb` was deployed at 100% traffic after staging version `d79d6f84-62eb-4339-8dbd-927a4aa109a1` passed live endpoint smoke verification and tenant-isolation E2E. The production upload preserved its existing `DB` D1 binding and `ALLOWED_ORIGINS`, `JWT_SECRET`, and `TURNSTILE_SECRET_KEY` secret bindings. The change only redacts organization identifiers and raw exception text from application error logs; it does not alter API routes or database records.
+
+## Production deployment — 2026-11-23 (Worker version 34)
+
+- Source: `worker/src/production-worker.js` from GitHub main commit `13c7d0cedb451a9fdb75575aaed632f5da71ced0`.
+- Cloudflare Worker: `nexus-saas-api`; deployed version `70e8f0a5-c29c-4d06-802d-ea27a3f9b4b9` at 100% traffic.
+- The upload inherited the existing production bindings, including the D1 binding and all secret bindings; no secret values were read, replaced, or committed.
+- Existing production D1 database `nexus-saas-db` remains bound. Worker migrations are additive/idempotent and execute on the first API request in each isolate.
+- Rollback target immediately before this release: version `ed46dad1-3775-4678-ab75-fff91ed3fada` (version 33).
+- Version preview URLs were disabled again after release verification setup.
