@@ -718,8 +718,11 @@ async function createPortalTicket(r,env,account,ip){
  const subject=b.subject.trim(),description=(b.description||'').trim();
  if(!subject||subject.length>180)return json({error:'Subject must be 1-180 characters'},400);
  if(description.length>4000)return json({error:'Description is too long'},400);
+ const requestedPriority=b.priority||'medium';
+ if(!['normal','low','medium','high','urgent'].includes(requestedPriority))return json({error:'Invalid complaint priority'},400);
+ const priority=requestedPriority==='normal'?'medium':requestedPriority;
  const id=uuid();
- await env.DB.prepare("INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status) VALUES(?,?,?,?,?,'medium','open')").bind(id,account.organization_id,account.customer_id,subject,description||null).run();
+ await env.DB.prepare("INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status) VALUES(?,?,?,?,?,?, 'open')").bind(id,account.organization_id,account.customer_id,subject,description||null,priority).run();
  await notifyAdmins(env,account.organization_id,'New customer portal complaint',subject,'support');
  await audit(env,account.organization_id,null,'customer_portal_ticket','Ticket:'+id,ip);
  return json(await env.DB.prepare('SELECT id,subject,description,priority,status,created_at FROM support_tickets WHERE id=? AND organization_id=? AND customer_id=?').bind(id,account.organization_id,account.customer_id).first(),201)
