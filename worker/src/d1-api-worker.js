@@ -25,8 +25,13 @@ function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
-async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
-async function verifyPw(pw,h,salt){if(!h)return false;if(!salt)return pw===h;const{hash}=await hashPw(pw,salt);return hash===h}
+const PASSWORD_HASH_ITERATIONS=600000;
+const LEGACY_PASSWORD_HASH_ITERATIONS=100000;
+async function hashPw(pw){const salt=crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:PASSWORD_HASH_ITERATIONS,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:`v2${PASSWORD_HASH_ITERATIONS}${b2h(salt)}`}}
+function parsePasswordSalt(value){if(typeof value!=='string')return null;const current=/^v2\\$600000\\$([0-9a-f]{32})$/i.exec(value);if(current)return{salt:hex2b(current[1]),iterations:PASSWORD_HASH_ITERATIONS,current:true};if(/^[0-9a-f]{32}$/i.test(value))return{salt:hex2b(value),iterations:LEGACY_PASSWORD_HASH_ITERATIONS,current:false};return null}
+export function needsPasswordUpgrade(value){const parsed=parsePasswordSalt(value);return Boolean(parsed&&!parsed.current)}
+function safeHashEqual(actual,expected){if(typeof actual!=='string'||typeof expected!=='string'||actual.length!==expected.length)return false;let difference=0;for(let i=0;i<actual.length;i++)difference|=actual.charCodeAt(i)^expected.charCodeAt(i);return difference===0}
+export async function verifyPw(pw,h,salt){const parsed=parsePasswordSalt(salt);if(typeof pw!=='string'||typeof h!=='string'||!parsed||!/^[0-9a-f]{64}$/i.test(h))return false;const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:parsed.salt,iterations:parsed.iterations,hash:'SHA-256'},km,256);return safeHashEqual(b2h(new Uint8Array(bits)),h.toLowerCase())}
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
 async function signJWT(p,sec){const e=new TextEncoder();const h=b64u(e.encode(JSON.stringify({alg:'HS256',typ:'JWT'})));const p64=b64u(e.encode(JSON.stringify(p)));const d=h+'.'+p64;const k=await crypto.subtle.importKey('raw',e.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=await crypto.subtle.sign('HMAC',k,e.encode(d));return d+'.'+b64u(new Uint8Array(sig))}
@@ -601,6 +606,7 @@ async function portalLogin(r,env,ip){
  if(!account||account.customer_status!=='active'||account.customer_account_status!=='active'||!await verifyPw(b.password,account.password_hash,account.password_salt)){
   await recordLoginFailure(env,ip,rateKey);return json({error:'Invalid portal credentials'},401);
  }
+ if(needsPasswordUpgrade(account.password_salt)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE customer_portal_accounts SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=? AND password_hash=? AND password_salt=?").bind(upgraded.hash,upgraded.salt,account.id,org.id,account.password_hash,account.password_salt).run();}
  await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
  await env.DB.prepare("UPDATE customer_portal_accounts SET last_login=datetime('now'),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(account.id,org.id).run();
  const token=await signJWT({principalType:'customer',portalAccountId:account.id,customerId:account.customer_id,orgId:org.id,tokenVersion:Number(account.token_version||0),exp:Date.now()+604800000},getSec(env));
@@ -769,6 +775,7 @@ if(workspace!==null){
  u=rows[0]||null;
 }
 if(!u||!await verifyPw(b.password,u.password_hash,u.password_salt)){await recordLoginFailure(env,ip,email);return json({error:'Invalid credentials'},401);}
+if(needsPasswordUpgrade(u.password_salt)){const upgraded=await hashPw(b.password);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=datetime('now') WHERE id=? AND organization_id=? AND password_hash=? AND password_salt=?").bind(upgraded.hash,upgraded.salt,u.id,u.organization_id,u.password_hash,u.password_salt).run();}
 await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,email).run();
 await env.DB.prepare("UPDATE users SET last_login=datetime('now'),updated_at=datetime('now')WHERE id=? AND organization_id=?").bind(u.id,u.organization_id).run();
 const tk=await signJWT({userId:u.id,orgId:u.organization_id,role:u.role,email:u.email,name:u.name||u.email,tokenVersion:Number(u.token_version||0),exp:Date.now()+604800000},getSec(env));
