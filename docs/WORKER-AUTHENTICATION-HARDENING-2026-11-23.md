@@ -30,3 +30,14 @@ A contract test was added to guard against reintroducing the unsalted fallback a
 The backend workflow initially failed because an architecture-boundary test still expected the old health-check Wrangler file to bind the legacy `nexus-db` database. The test was updated to assert the intended isolated development health-check configuration has no D1 binding. Its regular expressions were corrected after the first retry. A new CI run is pending for the latest branch commit.
 
 No production or staging credentials were changed. No Worker was deployed as part of this change.
+
+
+## Deployed Worker verification (read-only)
+
+The live Worker script uploads were inspected after the source change. The current 100%-traffic deployments are:
+- Production `nexus-saas-api`, version 28, uploaded 2026-11-23 05:27:32 UTC.
+- Staging `nexus-saas-api-staging`, version 29, uploaded 2026-11-23 05:26:35 UTC.
+
+Both deployed script bundles still contain the previous verifier, including the `if(!salt)return pw===h` fallback. Therefore the fail-closed verifier change is **saved and CI-verified in GitHub, but is not yet deployed to either Worker**.
+
+The production version binds the production D1 database; staging binds the staging D1 database. Both have secret bindings (JWT, CORS, Turnstile; staging also has PPPoE encryption). Secret values were not read. No deployment was initiated because replacing a live Worker requires preserving all current bindings and reconciling the branch source against the deployed bundle; a blind upload could break authentication, CORS, RouterOS encryption or production traffic.
