@@ -17,9 +17,9 @@ test("SQLite and Cloudflare D1 remain separate runtimes", () => {
   assert.match(database, /schema_migrations/);
   assert.match(workerReadme, /D1 API Worker \(staging\)/);
   assert.match(workerSource, /\/api\/health/);
-  assert.match(wrangler, /name\\s*=\\s*"nexus-healthcheck-dev"/);
-  assert.match(wrangler, /ENVIRONMENT\\s*=\\s*"development"/);
-  assert.doesNotMatch(wrangler, /\\[\\[d1_databases\\]\\]|database_name\\s*=/);
+  assert.match(wrangler, /name\s*=\s*"nexus-healthcheck-dev"/);
+  assert.match(wrangler, /ENVIRONMENT\s*=\s*"development"/);
+  assert.doesNotMatch(wrangler, /\[\[d1_databases\]\]|database_name\s*=/);
   assert.match(reconciliation, /tenants/);
   assert.match(reconciliation, /organizations/);
   assert.match(reconciliation, /tenant_id/);
