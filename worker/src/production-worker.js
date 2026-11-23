@@ -44,6 +44,8 @@ const PERMISSIONS=[
  {key:'subscriptions.read',group:'Subscriptions',label:'View subscriptions'},
  {key:'subscriptions.manage',group:'Subscriptions',label:'Create and change subscriptions'},
  {key:'billing.read',group:'Billing',label:'View invoices and payments'},
+ {key:'payment_promises.read',group:'Billing',label:'View payment promises'},
+ {key:'payment_promises.manage',group:'Billing',label:'Create and update payment promises'},
  {key:'invoices.create',group:'Billing',label:'Create invoices'},
  {key:'payments.create',group:'Billing',label:'Record payments'},
  {key:'billing.generate',group:'Billing',label:'Generate monthly invoices'},
@@ -64,7 +66,7 @@ const PERMISSIONS=[
 ];
 const ROLE_PERMISSIONS={
  owner:['*'],admin:['*'],
- billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read','refunds.read','refunds.manage'],
+ billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','payment_promises.read','payment_promises.manage','reports.read','notifications.read','refunds.read','refunds.manage'],
  support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read','notifications.read'],
  technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read'],
  staff:['dashboard.read','notifications.read']
@@ -76,6 +78,8 @@ function permissionForRoute(path,method){
  if(match('/api/customers'))return ({GET:'customers.read',POST:'customers.create',PUT:'customers.update',DELETE:'customers.delete'})[v]||null;
  if(match('/api/packages'))return v==='GET'?'packages.read':['POST','PUT','DELETE'].includes(v)?'packages.manage':null;
  if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
+ if(match('/api/operations/payment-promises'))return v==='GET'?'payment_promises.read':['POST','PUT'].includes(v)?'payment_promises.manage':null;
+ if(path==='/api/financial/aging')return v==='GET'?'billing.read':null;
  if(path==='/api/billing/generate')return v==='POST'?'billing.generate':null;
  if(path.match(/^\/api\/invoices\/[^/]+\/payments$/))return v==='POST'?'payments.create':null;
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
@@ -125,7 +129,7 @@ function roleAllowed(role,path,method){
  if(path==='/api/profile'&&(method==='GET'||method==='PUT'))return true;
  if(path==='/api/profile/password'&&method==='PUT')return true;
  const grants={
-  billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions'],POST:['/api/invoices','/api/billing/generate'],PUT:['/api/invoices']},
+  billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/operations/payment-promises','/api/financial/aging','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions','/api/reports/summary'],POST:['/api/invoices','/api/billing/generate','/api/operations/payment-promises'],PUT:['/api/invoices','/api/operations/payment-promises']},
   support:{GET:['/api/dashboard/stats','/api/customers','/api/complaints','/api/onus'],POST:['/api/complaints'],PUT:['/api/complaints']},
   technician:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/complaints','/api/pppoe','/api/network/devices','/api/network/status','/api/onus'],POST:['/api/complaints','/api/pppoe','/api/network/devices','/api/onus'],PUT:['/api/complaints','/api/pppoe','/api/network/devices','/api/onus'],DELETE:['/api/pppoe','/api/network/devices','/api/onus']},
   staff:{GET:['/api/dashboard/stats','/api/customers','/api/complaints'],POST:['/api/complaints']}
@@ -269,6 +273,10 @@ if(path==='/api/billing/generate'&&m==='POST')return await generateBilling(reque
 if(path.match(/^\/api\/invoices\/[^/]+$/)&&m==='GET')return await getInv(env,path,orgId);
 if(path.match(/^\/api\/invoices\/[^/]+\/payments$/)&&m==='POST')return await recPay(request,env,path,orgId,userId,ip);
 if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
+if(path==='/api/operations/payment-promises'&&m==='GET')return await listPaymentPromises(env,url,orgId);
+if(path==='/api/operations/payment-promises'&&m==='POST')return await createPaymentPromise(request,env,orgId,userId,ip);
+if(path.match(/^\\/api\\/operations\\/payment-promises\\/[^/]+$/)&&m==='PUT')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
+if(path==='/api/financial/aging'&&m==='GET')return await financialAging(env,orgId);
 if(path==='/api/refunds'&&m==='GET')return await listRefunds(env,url,orgId);
 if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId,userId,ip);
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
@@ -897,13 +905,47 @@ async function networkStatus(env,oid){
  return json({configured:Object.values(counts).reduce((a,b)=>a+b,0)>0,devices:counts,connection_tested:false,note:'Device inventory is configured; live router/OLT connectivity requires reachable management endpoints and credentials.'})
 }
 
+async function listPaymentPromises(env,url,oid){
+ const {page,pp,off}=pg(url);
+ const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM payment_promises WHERE organization_id=?').bind(oid).first();
+ const rows=await env.DB.prepare("SELECT p.id,p.customer_id,p.amount_pkr,p.promise_date,p.status,p.notes,p.created_at,c.first_name||' '||c.last_name AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.promise_date ASC,p.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+}
+async function createPaymentPromise(request,env,oid,uid,ip){
+ const b=await parseBody(request);
+ if(!b||!b.customerId||!Number.isSafeInteger(Number(b.amountPkr))||Number(b.amountPkr)<=0||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(b.promiseDate||'')))return json({error:'Customer, positive whole-rupee amount and valid promise date are required'},400);
+ if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customerId,oid).first())return json({error:'Customer not found'},404);
+ const id=uuid(),notes=typeof b.notes==='string'?b.notes.trim().slice(0,500):null;
+ await env.DB.prepare("INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,status,notes,created_by) VALUES(?,?,?,?,?,'open',?,?)").bind(id,oid,b.customerId,Number(b.amountPkr),b.promiseDate,notes||null,uid).run();
+ await audit(env,oid,uid,'create_payment_promise','Promise:'+id,ip);
+ const row=await env.DB.prepare("SELECT p.*,c.first_name||' '||c.last_name AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row},201);
+}
+async function updatePaymentPromise(request,env,path,oid,uid,ip){
+ const id=path.split('/').pop(),b=await parseBody(request);
+ const allowed=['open','kept','broken','cancelled'];
+ if(!b||!allowed.includes(String(b.status||'')))return json({error:'A valid payment promise status is required'},400);
+ const exists=await env.DB.prepare('SELECT id FROM payment_promises WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!exists)return json({error:'Payment promise not found'},404);
+ await env.DB.prepare("UPDATE payment_promises SET status=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(b.status,id,oid).run();
+ await audit(env,oid,uid,'update_payment_promise','Promise:'+id+':'+b.status,ip);
+ return json({success:true});
+}
+async function financialAging(env,oid){
+ const rows=await env.DB.prepare("SELECT i.id,i.invoice_number,i.due_date,i.total,c.first_name||' '||c.last_name AS customer_name,MAX(0,CAST(julianday('now')-julianday(i.due_date) AS INTEGER)) AS days_overdue,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_pkr FROM invoices i JOIN customers c ON c.id=i.customer_id AND c.organization_id=i.organization_id WHERE i.organization_id=? AND i.status IN ('pending','overdue') AND i.due_date<date('now') ORDER BY i.due_date ASC").bind(oid).all();
+ const invoices=(rows.results||[]).filter(x=>Number(x.outstanding_pkr)>0).map(x=>({customerName:x.customer_name,invoiceNumber:x.invoice_number,dueDate:x.due_date,daysOverdue:Number(x.days_overdue||0),outstandingPkr:Number(x.outstanding_pkr||0)}));
+ const bucketsPkr={'1_30':0,'31_60':0,'61_90':0,'90_plus':0};
+ for(const row of invoices){const d=row.daysOverdue,k=d<=30?'1_30':d<=60?'31_60':d<=90?'61_90':'90_plus';bucketsPkr[k]+=row.outstandingPkr;}
+ return json({data:{invoices,bucketsPkr}});
+}
 async function reportSummary(env,url,oid){
  const [dashboard,revenue]=await Promise.all([
   dashStats(env,oid),
   env.DB.prepare("SELECT strftime('%Y-%m',paid_at) AS month,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0) AS revenue FROM payments WHERE organization_id=? AND status='completed' AND paid_at>=datetime('now','-6 months') GROUP BY strftime('%Y-%m',paid_at) ORDER BY month").bind(oid).all()
  ]);
  const stats=await dashboard.json();
- return json({data:{monthlyRevenue:(revenue.results||[]).map(x=>({month:x.month,revenue:x.revenue})),outstandingPkr:Number(stats.pendingAmount||0)}});
+ const invoiceCounts=await env.DB.prepare('SELECT status,COUNT(*) AS count FROM invoices WHERE organization_id=? GROUP BY status ORDER BY status').bind(oid).all();
+ return json({data:{revenuePkr:Number(stats.totalRevenue||0),monthlyRevenue:(revenue.results||[]).map(x=>({month:x.month,revenue:x.revenue})),outstandingPkr:Number(stats.pendingAmount||0),invoiceCounts:invoiceCounts.results||[]}});
 }
 async function repRev(env,url,oid){const months=parseInt(url.searchParams.get('months')||'6');const rows=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COUNT(*)c,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now',?)GROUP BY m ORDER BY m").bind(oid,'-'+months+' months').all();return json({data:rows.results||[]})}
 async function repCust(env,oid){const bs=await env.DB.prepare('SELECT status,COUNT(*)c FROM customers WHERE organization_id=? GROUP BY status').bind(oid).all();return json({byStatus:bs.results||[]})}
