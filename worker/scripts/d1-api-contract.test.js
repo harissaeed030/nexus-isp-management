@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload } from "../src/d1-api-worker.js";
+import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload, hashPw, verifyPw, needsPasswordUpgrade } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
@@ -446,4 +446,26 @@ test("D1 Worker AI endpoint keeps Gemini credentials server-side and validates b
 
 test("D1 Worker AI defaults to the same Gemini model as the local backend", () => {
   assert.match(source, /GEMINI_MODEL\|\|'gemini-2\.5-flash'/);
+});
+
+
+test("D1 password hashes use versioned PBKDF2-SHA256 at 600,000 iterations and reject plaintext fallback", async () => {
+  const credentials = await hashPw("Nexus-Strong-Password-2026!");
+  assert.match(credentials.salt, /^v2\\$600000\\$[0-9a-f]{32}$/);
+  assert.equal(needsPasswordUpgrade(credentials.salt), false);
+  assert.equal(await verifyPw("Nexus-Strong-Password-2026!", credentials.hash, credentials.salt), true);
+  assert.equal(await verifyPw("wrong-password", credentials.hash, credentials.salt), false);
+  assert.equal(await verifyPw("plaintext", "plaintext", null), false);
+  assert.equal(await verifyPw("password", "not-a-hash", "not-a-salt"), false);
+});
+
+test("legacy salted 100,000-iteration PBKDF2 hashes verify and are marked for transparent upgrade", async () => {
+  const saltBytes = new Uint8Array(16).fill(7);
+  const salt = Array.from(saltBytes).map(value => value.toString(16).padStart(2, "0")).join("");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode("Legacy-Password-2026!"), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: saltBytes, iterations: 100000, hash: "SHA-256" }, key, 256);
+  const hash = Array.from(new Uint8Array(bits)).map(value => value.toString(16).padStart(2, "0")).join("");
+  assert.equal(await verifyPw("Legacy-Password-2026!", hash, salt), true);
+  assert.equal(await verifyPw("incorrect", hash, salt), false);
+  assert.equal(needsPasswordUpgrade(salt), true);
 });
