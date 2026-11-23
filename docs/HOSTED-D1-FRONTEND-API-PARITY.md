@@ -27,7 +27,7 @@ Status: source review only; no Worker deployment or D1 writes.
 | `/api/v1/financial/aging` | None | Implement tenant-scoped invoice aging query and response contract |
 | `/api/v1/operations/payment-promises` | None | Add schema, migration, tenant-scoped CRUD, audit and validation |
 | `/api/v1/routers` | `/api/network/devices` | Map router UI fields to network-device model; do not alias without shape checks |
-| `/api/v1/tickets` | `/api/tickets` (compatibility alias) | Added tenant-scoped list/create/update routes; response now includes customer and assignee display names plus a stable ID-derived ticket label. Frontend camelCase create/assignment fields are normalized. Assignment history and human-readable sequential ticket numbering remain future work |
+| `/api/v1/tickets` | `/api/tickets` (compatibility alias) | Added tenant-scoped list/create/update routes; response now includes customer and assignee display names plus a stable ID-derived ticket label. Frontend camelCase create/assignment fields are normalized; UI priority `normal` maps to the hosted D1 enum `medium`. The displayed `TKT-` label is a stable ID-derived reference, not a sequential counter. Assignment history and ticket conversation endpoints remain future work |
 | `/api/v1/tr069/devices` | `/api/onus` (not equivalent) | Implement ACS/ONU inventory integration; no blind alias |
 | `/api/v1/tr069/audit-logs` | `/api/audit-logs` (not equivalent) | Define TR-069 event model and access boundaries |
 | `/api/v1/acs/connections` | None | Add encrypted credential storage, secret handling and connection test flow |
