@@ -8,6 +8,9 @@ const workerReadme = read("../../worker/README.md");
 const workerSource = read("../../worker/src/index.js");
 const d1WorkerSource = read("../../worker/src/d1-api-worker.js");
 const dashboardSource = read("../../assets/js/app.js");
+const pagesProxy = read("../../functions/api/[[path]].js");
+const pagesRoutes = JSON.parse(read("../../_routes.json"));
+const portalSource = read("../../assets/portal.js");
 const wrangler = read("../../worker/wrangler.toml");
 const architecture = read("../../docs/ARCHITECTURE.md");
 const reconciliation = read("../../docs/DATABASE-ARCHITECTURE-RECONCILIATION.md");
@@ -50,4 +53,16 @@ test("Hosted dashboard staff role choices are accepted by the D1 Worker", () => 
   assert.match(dashboardSource, /const roleChoices=\[\["billing","Billing"\],\["support","Customer support"\],\["technician","Network \/ NOC & Field Technician"\],\["staff","Limited staff"\]\]/);
   assert.match(d1WorkerSource, /const allowed=\['admin','billing','support','technician','staff'\]/);
   assert.doesNotMatch(dashboardSource, /\["noc","Network \/ NOC"\]/);
+});
+
+
+test("Cloudflare Pages routes API traffic to the environment-specific Worker without invoking Functions for static assets", () => {
+  assert.match(dashboardSource, /return location\.port==="4000"\?location\.origin:\(local\?"http:\/\/127\.0\.0\.1:4000":location\.origin\)/);
+  assert.match(dashboardSource, /if\(pages\)sessionStorage\.removeItem\("nexus_api"\)/);
+  assert.doesNotMatch(dashboardSource, /https:\/\/nexus-saas-api\.harissaeed030\.workers\.dev/);
+  assert.match(pagesProxy, /env\.API_URL\s*\|\|\s*env\.VITE_API_URL/);
+  assert.match(pagesProxy, /new Request\(upstream, request\)/);
+  assert.match(pagesProxy, /incoming\.pathname\.startsWith\("\/api\/"\)/);
+  assert.deepEqual(pagesRoutes, { version: 1, include: ["/api/*"], exclude: [] });
+  assert.match(portalSource, /fetch\("\/api\/v1\/customer-portal"/);
 });
