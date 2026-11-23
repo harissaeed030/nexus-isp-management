@@ -160,6 +160,13 @@ async function encryptRouterPassword(password,env){
  const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(password));
  return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(ciphertext));
 }
+async function decryptRouterPassword(value,env){
+ const parts=String(value||'').split(':');
+ if(parts.length!==4||parts[0]!=='enc'||parts[1]!=='v1')throw new Error('Unsupported router credential format');
+ const key=await routerCredentialKey(env,['decrypt']);
+ const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(parts[2])},key,b64uDec(parts[3]));
+ return new TextDecoder().decode(plain);
+}
 
 async function encryptPppoePassword(password,env){
  const key=await pppoeCryptoKey(env,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12));
@@ -362,7 +369,7 @@ if(path==='/api/routers'&&m==='GET')return await listRouters(env,url,orgId);
 if(path==='/api/routers'&&m==='POST')return await createRouter(request,env,orgId,userId,ip);
 if(/^\/api\/routers\/[^/]+$/.test(path)&&m==='PATCH')return await updateRouter(request,env,path,orgId,userId,ip);
 if(/^\/api\/routers\/[^/]+$/.test(path)&&m==='DELETE')return await deleteRouter(env,path,orgId,userId,ip);
-if(/^\/api\/routers\/[^/]+\/(?:test|sync|pppoe(?:\/.*)?)$/.test(path))return json({error:'Live RouterOS operations are not enabled in this hosted Worker yet',code:'ROUTER_LIVE_ADAPTER_UNAVAILABLE',message:'Router inventory and encrypted credential storage are available. Live API-SSL tests, PPPoE reads/writes and customer synchronization require a verified RouterOS network adapter and staging device acceptance.'},501);
+if(/^\/api\/routers\/[^/]+\/(?:test|sync|pppoe(?:\/.*)?|customers\/[^/]+\/pppoe)$/.test(path))return json({error:'Live RouterOS operations are not enabled in this hosted Worker yet',code:'ROUTER_LIVE_ADAPTER_UNAVAILABLE',message:'Router inventory and encrypted credential storage are available. Live API-SSL tests, PPPoE reads/writes and customer synchronization require a verified RouterOS network adapter and staging device acceptance.'},501);
 if(path==='/api/network/devices'&&m==='GET')return await listNetworkDevices(env,url,orgId);
 if(path==='/api/network/devices'&&m==='POST')return await createNetworkDevice(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='GET')return await getNetworkDevice(env,path,orgId);
