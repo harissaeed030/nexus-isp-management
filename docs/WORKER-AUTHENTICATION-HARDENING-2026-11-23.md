@@ -191,3 +191,12 @@ This CI result validates the smoke script syntax and contract tests; it is **not
 A review of the expanded staging smoke assertions found that the Worker did not yet attach `Cache-Control: no-store` to ordinary API responses (the CSV export path already had its own no-store header). The shared API security-header set now applies `Cache-Control: no-store` to all responses passed through the common CORS/security wrapper, including the read-only health response. This prevents browsers and intermediaries from caching authenticated API payloads and health responses.
 
 Source commit: `2a8c4dc4d1cd39e2bdcbb2e8f475ee7781259338`. All five reported checks completed successfully: Worker syntax/contract, three backend verification/check workflows, and Cloudflare Pages preview. This is source/CI verification only; the staging Worker has not yet been redeployed with this additional header and the manual live smoke workflow has not been run. Production Worker version 31 remains active; candidate version 32 remains unpromoted. No D1 data/schema writes or production traffic changes were made.
+
+
+## Latest staging cache-policy candidate — 2026-11-23
+
+The latest CI-verified Worker source commit `2a8c4dc4d1cd39e2bdcbb2e8f475ee7781259338` adds the shared `Cache-Control: no-store` security header to ordinary API responses. Static checks against the source confirmed that the fail-closed PBKDF2 verifier remains present, the read-only health route is still handled before startup migrations, complaint-priority normalization remains present, and the NEXUS Pages preview-origin check remains present.
+
+The source was uploaded as staging Worker version 35 (ID `10bd6496-704f-4d09-bcb3-a4e4e3bda17f`). Secret bindings were inherited from the existing latest staging version using Cloudflare's `inherit` binding mechanism; no secret values were read, supplied, or changed. The candidate metadata preserves the staging D1 ID `194f62e2-2766-48ab-be17-81248610c0cd`, `ENVIRONMENT=staging`, and `NETWORK_CONNECTOR_ENABLED=false`. Candidate startup validation reported 4 ms.
+
+**Version 35 is upload-only and has not been promoted.** The previously active staging deployment remains version 34 at 100% traffic until the manual read-only staging smoke workflow is run and reviewed. Production remains unchanged: active version 31 at 100% traffic, candidate version 32 uploaded but unpromoted. No D1 migrations or data writes were performed. The manual live staging smoke and live sign-in are still unverified.
