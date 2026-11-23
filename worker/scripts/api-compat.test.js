@@ -70,3 +70,16 @@ test("TR-069 online state is based on the ten-minute last-inform window", () => 
   assert.equal(tr069Status(new Date(Date.now() - 11 * 60 * 1000).toISOString()), "offline");
   assert.equal(tr069Status(null), "unknown");
 });
+
+test("builds GenieACS NBI task payloads with documented fields", () => {
+  assert.deepEqual(buildGenieAcsTask("refreshObject", { objectName: "InternetGatewayDevice.WANDevice" }), {
+    name: "refreshObject",
+    objectName: "InternetGatewayDevice.WANDevice"
+  });
+  assert.deepEqual(buildGenieAcsTask("setParameterValues", {
+    parameterValues: [["Device.WiFi.SSID.1.SSID", "Vancom", "xsd:string"]]
+  }), {
+    name: "setParameterValues",
+    parameterValues: [["Device.WiFi.SSID.1.SSID", "Vancom", "xsd:string"]]
+  });
+});
