@@ -13,7 +13,7 @@
 
 SQLite stores package, invoice, and payment amounts in PKR. The D1 Vancom organization currency was changed from `USD` to `PKR` after verifying that it had no packages, subscriptions, invoices, or payments. The Worker checks this currency before accepting records.
 
-The D1 database currently has two existing customer rows and no package, subscription, invoice, or payment rows. On the first authenticated sync, the Worker creates the source-tenant mapping automatically only if D1 contains exactly one organization and its currency is PKR. Existing customer rows are protected by ID and customer-code conflict checks.
+The live production D1 currently contains 5 customers, 1 package, 1 subscription, 1 invoice, and 1 payment. Existing rows are protected by ID and customer-code conflict checks. The Worker requires an explicitly provisioned source-tenant mapping and never infers or creates one automatically.
 
 ## Configuration
 
@@ -26,6 +26,11 @@ Set these private values in `backend/.env` (never commit real values):
 
 Run the backend, then run `npm run sync:d1` from `backend/`. The command is resumable; its last acknowledged cursor is stored in SQLite as `sync_state.d1_cursor`.
 
-## Activation status
+## Activation status (2026-11-23)
 
-Code is committed to the development branch. D1 migration 0011 has been applied to production, the isolated `nexus-sqlite-sync` Worker is deployed with its D1 binding, and the Vancom organization currency is now PKR. The Worker secret `SYNC_PUSH_TOKEN` is not configured yet. No business records have been synced; live sync becomes active after the user adds that secret and the two local `.env` values, starts the Termux API, and runs `npm run sync:d1`.
+- The live production D1 schema contains `sync_tenant_mappings` and `sync_operations`; their DDL and index were verified against migration `0011_sqlite_sync_inbox.sql`. The missing `schema_migrations` ledger row was reconciled as ID 11.
+- The production `nexus-sqlite-sync` Worker was updated with the explicit-mapping guard and remains bound to `nexus-saas-db`.
+- The legacy `d1-sync-worker` five-minute cron was disabled because it wrote generic shadow rows to `sync_records`, not the live ISP business tables. Existing shadow rows were retained.
+- `SYNC_PUSH_TOKEN` is not configured yet. The Cloudflare secret-write action was blocked by the platform safety control; configure this secret in the Cloudflare dashboard before sync can authenticate.
+- The production mapping table currently has no mapping row. The local SQLite tenant ID is device-local and must be read from the Termux database before provisioning the mapping.
+- No ISP business rows were changed by this work. Live sync remains safely inactive until the Worker secret, local `.env`, and explicit tenant mapping are configured and a dry-run/reconciliation has been reviewed.
