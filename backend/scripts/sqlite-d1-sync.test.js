@@ -75,6 +75,12 @@ test("sync export pins the configured tenant and paginates without leaking other
   assert.equal(invalid.statusCode,400);
   const oversized=invoke({after:"0",limit:"101"});
   assert.equal(oversized.statusCode,400);
+  const partialCursor=invoke({after:"1oops",limit:"1"});
+  assert.equal(partialCursor.statusCode,400);
+  const decimalLimit=invoke({after:"0",limit:"1.5"});
+  assert.equal(decimalLimit.statusCode,400);
+  const unsafeCursor=invoke({after:"9007199254740992",limit:"1"});
+  assert.equal(unsafeCursor.statusCode,400);
   db.prepare("DELETE FROM sync_outbox WHERE tenant_id IN (?,?)").run(tenantA,tenantB);
 });
 
