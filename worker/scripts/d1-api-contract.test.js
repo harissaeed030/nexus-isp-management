@@ -5,6 +5,7 @@ import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapT
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
+const portalSource = await readFile(new URL("../../assets/portal.js", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.api.toml", import.meta.url), "utf8");
 const customerMigration = await readFile(new URL("../../cloudflare/d1/migrations/0012_customer_workspace_compatibility.sql", import.meta.url), "utf8");
 const subscriptionMigration = await readFile(new URL("../../cloudflare/d1/migrations/0013_subscription_workspace_status.sql", import.meta.url), "utf8");
@@ -495,4 +496,18 @@ test("customer portal dashboard queries constrain customer and organization toge
   assert.match(portal,/WHERE i\.organization_id=\? AND i\.customer_id=\?/);
   assert.match(portal,/WHERE p\.organization_id=\? AND p\.customer_id=\?/);
   assert.match(portal,/WHERE organization_id=\? AND customer_id=\?/);
+});
+
+
+test("customer portal dashboard uses the hosted D1 portal routes and response DTOs", () => {
+  assert.match(source, /path\.startsWith\('\/api\/customer-portal\/'\)/);
+  assert.match(source, /path==='\/api\/portal\/login'\)path='\/api\/portal\/auth\/login'/);
+  assert.match(source, /path==='\/api\/portal\/complaints'\)path='\/api\/portal\/tickets'/);
+  assert.match(portalSource, /api\("\/me"\)/);
+  assert.match(portalSource, /api\("\/subscriptions"\)/);
+  assert.match(portalSource, /me\.customer/);
+  assert.match(portalSource, /x\.outstanding_amount/);
+  assert.match(portalSource, /x\.payment_method/);
+  assert.match(portalSource, /x\.paid_at/);
+  assert.doesNotMatch(portalSource, /outstanding_pkr|amount_pkr|received_at|me\.data/);
 });
