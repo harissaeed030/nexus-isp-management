@@ -101,3 +101,19 @@ test("router credentials are encrypted and never stored as plain text", async ()
   assert.notEqual(encrypted, "router-private-password");
   assert.match(encrypted, /^enc:v1:/);
 });
+
+test("keeps live RouterOS operations explicitly disabled until a connector is deployed", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/production-worker.js", import.meta.url), "utf8");
+  assert.match(source, /Hosted D1 currently supports router inventory and encrypted credential storage only\. Live RouterOS\/PPPoE operations require the separate network connector\./);
+  assert.match(source, /liveSupported:false/);
+});
+
+test("documents the required outbound-only, read-only MikroTik connector safety boundary", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const doc = await readFile(new URL("../../docs/MIKROTIK-ROUTEROS-CONNECTOR.md", import.meta.url), "utf8");
+  assert.match(doc, /outbound HTTPS/i);
+  assert.match(doc, /read-only commands only/i);
+  assert.match(doc, /Do not expose RouterOS API/i);
+  assert.match(doc, /Do not deploy an untested connector/i);
+});
