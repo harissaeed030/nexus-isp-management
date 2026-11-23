@@ -34,3 +34,35 @@ Run the backend, then run `npm run sync:d1` from `backend/`. The command is resu
 - `SYNC_PUSH_TOKEN` is not configured yet. The Cloudflare secret-write action was blocked by the platform safety control; configure this secret in the Cloudflare dashboard before sync can authenticate.
 - The production mapping table currently has no mapping row. The local SQLite tenant ID is device-local and must be read from the Termux database before provisioning the mapping.
 - No ISP business rows were changed by this work. Live sync remains safely inactive until the Worker secret, local `.env`, and explicit tenant mapping are configured and a dry-run/reconciliation has been reviewed.
+
+## Owner activation checklist
+
+1. In Termux, read the local tenant ID without printing customer data:
+
+   ```sh
+   cd ~/nexus-isp-management/backend
+   node --input-type=module -e "import { db } from './src/config/database.js'; console.log(db.prepare('SELECT id,name FROM tenants').all())"
+   ```
+
+2. In Cloudflare Dashboard, open **Workers & Pages → nexus-sqlite-sync → Settings → Variables and Secrets** and add a secret named `SYNC_PUSH_TOKEN`. Generate a strong random value (for example, `openssl rand -hex 32`) and use the same value for `D1_SYNC_WORKER_TOKEN` in the local backend `.env`.
+
+3. Add these local-only values to `backend/.env`. Use a separate random value for `SYNC_EXPORT_TOKEN`; do not reuse the Worker token.
+
+   ```dotenv
+   SYNC_TENANT_ID=<local SQLite tenant ID>
+   SYNC_EXPORT_TOKEN=<separate random secret>
+   D1_SYNC_WORKER_URL=https://nexus-sqlite-sync.harissaeed030.workers.dev/sync/push
+   D1_SYNC_WORKER_TOKEN=<same value as Cloudflare SYNC_PUSH_TOKEN>
+   ```
+
+4. In the production D1 console, provision the one-to-one mapping only after verifying the local tenant and Vancom organization:
+
+   ```sql
+   INSERT INTO sync_tenant_mappings(source_tenant_id, organization_id, active)
+   VALUES ('<local SQLite tenant ID>', '8cfff6de-5269-4f6d-8ae7-e25f7eeda1ce', 1);
+   ```
+
+5. Back up SQLite with `npm run db:backup`, start the local API, and run `npm run sync:d1:dry-run`. This reports pending outbox event counts without posting to D1 or advancing the saved cursor. It is an event-count preflight, not a full row-by-row reconciliation.
+6. Review the pending customers, packages, subscriptions, invoices and payments against the existing production D1 records. Only after that review, run `npm run sync:d1`.
+
+Never put secrets in Git, browser code, screenshots, or public messages. Do not run the live sync merely because the dry-run command succeeds.
