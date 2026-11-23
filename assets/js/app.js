@@ -3,6 +3,23 @@ const $=(s,r=document)=>r.querySelector(s),esc=v=>String(v??"").replace(/[&<>"']
 let api=(()=>{const local=["localhost","127.0.0.1"].includes(location.hostname),saved=(localStorage.getItem("nexus_api")||sessionStorage.getItem("nexus_api"));if(saved&&(local||!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/i.test(saved)))return saved;if(saved&&!local)sessionStorage.removeItem("nexus_api");return location.port==="4000"?location.origin:(local?"http://127.0.0.1:4000":"https://nexus-saas-api.harissaeed030.workers.dev")})(),token=(localStorage.getItem("nexus_token")||sessionStorage.getItem("nexus_token"))||"",view="dashboard";
 const shell=$(".app-shell"),content=$(".content"),toast=$("#toast");
 const menuButton=$("#menuBtn"),sidebar=$("#sidebar");
+const logoutButton=$("#nxLogout");
+if(logoutButton){
+  logoutButton.addEventListener("click",()=>{
+    const activeToken=token;
+    try{fetch(api.replace(/\/$/,"")+"/api/v1/auth/logout",{method:"POST",headers:activeToken?{Authorization:"Bearer "+activeToken}:{} ,keepalive:true}).catch(()=>{});}catch(_){}
+    localStorage.removeItem("nexus_token");
+    sessionStorage.removeItem("nexus_token");
+    localStorage.removeItem("nexus_api");
+    sessionStorage.removeItem("nexus_api");
+    token="";
+    document.querySelector(".nx-ai-launch")?.remove();
+    document.querySelector(".nx-ai-panel")?.remove();
+    closeMenu();
+    auth(false);
+    msg("You have been signed out.");
+  });
+}
 let menuBackdrop=null;
 function closeMenu(){
   if(!sidebar)return;
