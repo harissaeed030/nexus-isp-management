@@ -1,8 +1,8 @@
 # Cloudflare D1 schema and migrations
 
-## New source migration — 0022 payment promises (not applied)
+## New source migrations — 0022 payment promises and 0023 router credentials (not applied)
 
-The repository now contains additive migration `0022_payment_promises.sql` plus a canonical schema snapshot update. It creates the tenant-scoped payment-promises table, indexes and customer/actor integrity triggers. The Worker source includes the matching API and an idempotent runtime bootstrap for this table.
+The repository now contains additive migrations `0022_payment_promises.sql` and `0023_router_credentials_ciphertext.sql` plus a canonical schema snapshot update. They add tenant-scoped payment promises with integrity guards and an authenticated-ciphertext column for RouterOS API passwords. Worker source contains the matching APIs and runtime bootstrap.
 
 **This migration has not been applied to production or staging.** The 2026-11-19 live audit found divergent migration ledgers (production includes 10, 12, 13, 100 and 101; staging includes 1–21 and 100). Before any deployment, take fresh exports, confirm whether the table/indexes/triggers already exist in each database, rehearse the SQL against disposable copies, and reconcile the existing ledgers. Do not assume the migration number is a linear upgrade state or run it blindly.
 
