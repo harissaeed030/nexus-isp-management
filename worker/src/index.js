@@ -84,7 +84,9 @@ function permissionForRoute(path,method){
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
  if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
- if(match('/api/reports'))return v==='GET'?'reports.read':null;
+ if(match('/api/reports')||path==='/api/financial/aging')return v==='GET'?'reports.read':null;
+ if(path==='/api/operations/payment-promises')return v==='GET'?'reports.read':v==='POST'?'billing.read':null;
+ if(match('/api/operations/payment-promises'))return v==='PATCH'?'billing.read':null;
  if(path.startsWith('/api/exports/')){if(v!=='GET')return null;const resource=path.slice('/api/exports/'.length);return ({'customers.csv':'customers.read','packages.csv':'packages.read','subscriptions.csv':'subscriptions.read','invoices.csv':'billing.read','payments.csv':'billing.read','tickets.csv':'tickets.read','routers.csv':'routers.read','olt.csv':'routers.read','acs.csv':'routers.read','pppoe.csv':'pppoe.read','onus.csv':'onus.read'})[resource]||null}
  if(path==='/api/audit-logs')return v==='GET'?'audit.read':null;
  if(match('/api/notifications'))return ['GET','PUT'].includes(v)?'notifications.read':null;
@@ -185,6 +187,11 @@ async function runMigrations(env){
  ['refunds.idempotency_key','ALTER TABLE refunds ADD COLUMN idempotency_key TEXT'],
  ['refunds.idempotency_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_refunds_org_idempotency ON refunds(organization_id,idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key<>''"],
  ['refunds.payment_index','CREATE INDEX IF NOT EXISTS idx_refunds_payment_status ON refunds(organization_id,payment_id,status)'],
+ ['payment_promises',"CREATE TABLE IF NOT EXISTS payment_promises(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL CHECK(amount_pkr>0),promise_date TEXT NOT NULL,notes TEXT,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','kept','broken','cancelled')),created_by TEXT NOT NULL,updated_by TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id),FOREIGN KEY(updated_by) REFERENCES users(id))"],
+ ['payment_promises.index','CREATE INDEX IF NOT EXISTS idx_payment_promises_org_status_date ON payment_promises(organization_id,status,promise_date)'],
+ ['payment_promises.customer_index','CREATE INDEX IF NOT EXISTS idx_payment_promises_org_customer ON payment_promises(organization_id,customer_id)'],
+ ['payment_promises.tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_payment_promise_org_i BEFORE INSERT ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer organization mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator organization mismatch') END; END"],
+ ['payment_promises.tenant_guard_update',"CREATE TRIGGER IF NOT EXISTS trg_payment_promise_org_u BEFORE UPDATE OF organization_id,customer_id,created_by,updated_by ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer organization mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator organization mismatch') END; SELECT CASE WHEN NEW.updated_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise updater organization mismatch') END; END"],
  ['customer_portal_accounts',"CREATE TABLE IF NOT EXISTS customer_portal_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,email TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),token_version INTEGER NOT NULL DEFAULT 0,last_login TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,email),UNIQUE(organization_id,customer_id),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE)"],
  ['notif',"CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,title TEXT NOT NULL,message TEXT,type TEXT DEFAULT 'info',is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT(datetime('now')))"],
  ['settings',"CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,key))"],
@@ -313,6 +320,10 @@ if(path==='/api/billing/generate'&&m==='POST')return await generateBilling(reque
 if(path.match(/^\/api\/invoices\/[^/]+$/)&&m==='GET')return await getInv(env,path,orgId);
 if(path.match(/^\/api\/invoices\/[^/]+\/payments$/)&&m==='POST')return await recPay(request,env,path,orgId,userId,ip);
 if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
+if(path==='/api/financial/aging'&&m==='GET')return await financialAging(env,orgId);
+if(path==='/api/operations/payment-promises'&&m==='GET')return await listPaymentPromises(env,url,orgId);
+if(path==='/api/operations/payment-promises'&&m==='POST')return await createPaymentPromise(request,env,orgId,userId,ip);
+if(/^\/api\/operations\/payment-promises\/[^/]+$/.test(path)&&m==='PATCH')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
 if(path==='/api/refunds'&&m==='GET')return await listRefunds(env,url,orgId);
 if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId,userId,ip);
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
@@ -677,6 +688,50 @@ async function recPay(r,env,path,oid,uid,ip){
 }
 async function listPay(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM payments WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT p.*,c.first_name,c.last_name,i.invoice_number FROM payments p LEFT JOIN customers c ON p.customer_id=c.id AND c.organization_id=p.organization_id LEFT JOIN invoices i ON p.invoice_id=i.id AND i.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 
+
+
+async function financialAging(env,oid){
+ const rows=await env.DB.prepare("SELECT i.id,i.invoice_number,i.due_date,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_pkr,CAST(julianday(date('now'))-julianday(date(i.due_date)) AS INTEGER) AS days_overdue FROM invoices i JOIN customers c ON c.id=i.customer_id AND c.organization_id=i.organization_id WHERE i.organization_id=? AND i.status<>'cancelled' AND date(i.due_date)<date('now') AND i.total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) ORDER BY i.due_date ASC").bind(oid).all();
+ const invoices=(rows.results||[]).map(x=>({customerName:x.customer_name,invoiceNumber:x.invoice_number,dueDate:x.due_date,daysOverdue:Number(x.days_overdue||0),outstandingPkr:Number(x.outstanding_pkr||0)}));
+ const bucketsPkr={'1_30':0,'31_60':0,'61_90':0,'90_plus':0};
+ for(const row of invoices){const bucket=row.daysOverdue<=30?'1_30':row.daysOverdue<=60?'31_60':row.daysOverdue<=90?'61_90':'90_plus';bucketsPkr[bucket]+=row.outstandingPkr}
+ return json({success:true,data:{invoices,bucketsPkr}});
+}
+async function listPaymentPromises(env,url,oid){
+ const {page,pp,off}=pg(url);
+ const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM payment_promises WHERE organization_id=?').bind(oid).first();
+ const rows=await env.DB.prepare("SELECT p.*,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY CASE p.status WHEN 'open' THEN 0 ELSE 1 END,p.promise_date ASC,p.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
+ return json({success:true,data:rows.results||[],pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+}
+async function createPaymentPromise(request,env,oid,uid,ip){
+ const b=await parseBody(request),customerId=b?.customerId,amount=Number(b?.amountPkr),promiseDate=b?.promiseDate,notes=typeof b?.notes==='string'?b.notes.trim():'';
+ if(typeof customerId!=='string'||!customerId)return json({error:'Customer is required'},400);
+ if(!Number.isSafeInteger(amount)||amount<=0)return json({error:'Promised amount must be a positive whole number of rupees'},400);
+ if(typeof promiseDate!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(promiseDate)||new Date(promiseDate+'T00:00:00Z').toISOString().slice(0,10)!==promiseDate)return json({error:'A valid promise date is required'},400);
+ if(notes.length>500)return json({error:'Notes must be 500 characters or fewer'},400);
+ if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(customerId,oid).first())return json({error:'Customer not found'},404);
+ const id=uuid();
+ await env.DB.prepare("INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,notes,status,created_by) VALUES(?,?,?,?,?,?,'open',?)").bind(id,oid,customerId,amount,promiseDate,notes||null,uid).run();
+ await audit(env,oid,uid,'create_payment_promise','PaymentPromise:'+id,ip);
+ const row=await env.DB.prepare("SELECT p.*,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row},201);
+}
+async function updatePaymentPromise(request,env,path,oid,uid,ip){
+ const id=decodeURIComponent(path.split('/')[4]),b=await parseBody(request);
+ if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const existing=await env.DB.prepare('SELECT id FROM payment_promises WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!existing)return json({error:'Payment promise not found'},404);
+ const sets=[],values=[];
+ if(b.status!==undefined){if(!['open','kept','broken','cancelled'].includes(b.status))return json({error:'Invalid payment promise status'},400);sets.push('status=?');values.push(b.status)}
+ if(b.notes!==undefined){if(typeof b.notes!=='string'||b.notes.length>500)return json({error:'Notes must be text up to 500 characters'},400);sets.push('notes=?');values.push(b.notes.trim()||null)}
+ if(b.promiseDate!==undefined){if(typeof b.promiseDate!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(b.promiseDate)||new Date(b.promiseDate+'T00:00:00Z').toISOString().slice(0,10)!==b.promiseDate)return json({error:'Invalid promise date'},400);sets.push('promise_date=?');values.push(b.promiseDate)}
+ if(!sets.length)return json({error:'No supported fields to update'},400);
+ sets.push("updated_at=datetime('now')",'updated_by=?');values.push(uid,id,oid);
+ await env.DB.prepare('UPDATE payment_promises SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...values).run();
+ await audit(env,oid,uid,'update_payment_promise','PaymentPromise:'+id,ip);
+ const row=await env.DB.prepare("SELECT p.*,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row});
+}
 
 async function listRefunds(env,url,oid){
  const {page,pp,off}=pg(url);
