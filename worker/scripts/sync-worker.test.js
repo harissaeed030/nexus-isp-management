@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getTenantMapping, validateSyncBatch } from "../src/sync-worker.js";
+import { getTenantMapping, normalizeCustomerSyncFields, validateSyncBatch } from "../src/sync-worker.js";
 
 test("sync batches require a tenant and one to fifty events", () => {
   assert.match(validateSyncBatch("", [{ cursor: 1, operationId: "a" }]), /sourceTenantId/);
@@ -65,4 +65,19 @@ test("sync tenant mapping returns only an active mapping", async () => {
     }
   };
   assert.deepEqual(await getTenantMapping(database, "local-tenant-2"), { organization_id: "vancom-org-id" });
+});
+
+test("customer sync preserves account and connection status across SQLite and D1 schemas", () => {
+  assert.deepEqual(normalizeCustomerSyncFields({status:"active",connection_status:"active"}), {
+    status:"active",accountStatus:"active",connectionStatus:"active"
+  });
+  assert.deepEqual(normalizeCustomerSyncFields({status:"blocked",connection_status:"suspended"}), {
+    status:"suspended",accountStatus:"blocked",connectionStatus:"suspended"
+  });
+  assert.deepEqual(normalizeCustomerSyncFields({status:"inactive",connection_status:"disconnected"}), {
+    status:"terminated",accountStatus:"inactive",connectionStatus:"disconnected"
+  });
+  assert.deepEqual(normalizeCustomerSyncFields({status:"unexpected",connection_status:"unknown"}), {
+    status:"active",accountStatus:"active",connectionStatus:"pending"
+  });
 });
