@@ -6,6 +6,8 @@ const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
 const database = read("../src/config/database.js");
 const workerReadme = read("../../worker/README.md");
 const workerSource = read("../../worker/src/index.js");
+const d1WorkerSource = read("../../worker/src/d1-api-worker.js");
+const dashboardSource = read("../../assets/js/app.js");
 const wrangler = read("../../worker/wrangler.toml");
 const architecture = read("../../docs/ARCHITECTURE.md");
 const reconciliation = read("../../docs/DATABASE-ARCHITECTURE-RECONCILIATION.md");
@@ -32,4 +34,13 @@ test("SQLite and Cloudflare D1 remain separate runtimes", () => {
   assert.match(reconciliation, /Never run.*backend\/migrations.*against D1/i);
   assert.match(architecture, /must never be applied to D1/);
   assert.ok(packageJson.scripts.test.includes("architecture-boundaries.test.js"));
+});
+
+
+test("Hosted dashboard signup targets the D1 tenant registration route and password reset is not falsely advertised", () => {
+  assert.match(dashboardSource, /call\(setup\?"\/api\/v1\/tenants\/register":"\/api\/v1\/auth\/login"/);
+  assert.match(d1WorkerSource, /path==='\/api\/tenants\/register'\?'\/api\/auth\/register'/);
+  assert.match(d1WorkerSource, /if\(path==='\/api\/auth\/register'&&m==='POST'\)return await authReg/);
+  assert.match(dashboardSource, /Password reset is not enabled on the hosted API yet/);
+  assert.doesNotMatch(dashboardSource, /call\("\/api\/v1\/auth\/reset-password"/);
 });
