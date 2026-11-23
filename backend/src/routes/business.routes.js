@@ -30,6 +30,30 @@ export function registerBusinessRoutes(app,{db,auth,id,audit,fail}){
  app.patch("/api/v1/operations/payment-promises/:id",auth,(q,r)=>{const x=db.prepare("SELECT * FROM payment_promises WHERE id=? AND tenant_id=?").get(q.params.id,tenant(q));if(!x)return fail(r,404,"Payment promise not found.");const b=q.body||{},status=b.status??x.status;if(!allowed(status,["open","kept","broken","cancelled"]))return fail(r,400,"Invalid promise status.");db.prepare("UPDATE payment_promises SET status=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?").run(status,b.notes??x.notes,x.id,tenant(q));audit(q.user,"update","payment_promise",x.id);r.json({success:true,data:db.prepare("SELECT * FROM payment_promises WHERE id=? AND tenant_id=?").get(x.id,tenant(q))})});
  app.get("/api/v1/operations/inventory",auth,(q,r)=>r.json({success:true,data:rows("SELECT * FROM inventory_items WHERE tenant_id=? ORDER BY name",tenant(q))}));
  app.post("/api/v1/operations/inventory",auth,(q,r)=>{const b=q.body||{},name=text(b.name),category=b.category||"other",qty=Number(b.quantity??0),reorder=Number(b.reorderLevel??0);if(!name||!allowed(category,["onu","media_box","router","fiber","splitter","other"])||!Number.isSafeInteger(qty)||qty<0||!Number.isSafeInteger(reorder)||reorder<0)return fail(r,400,"Valid item name, category and non-negative quantities are required.");const i=id();try{withTransaction(db,()=>{insert("INSERT INTO inventory_items(id,tenant_id,sku,name,category,unit,quantity,reorder_level,location,serial_number) VALUES(?,?,?,?,?,?,?,?,?,?)",i,tenant(q),text(b.sku)||null,name,category,text(b.unit)||"pcs",0,reorder,text(b.location)||null,text(b.serialNumber)||null);if(qty) {insert("INSERT INTO inventory_movements(id,tenant_id,item_id,quantity,movement_type,notes,actor_user_id) VALUES(?,?,?,?,'stock_in',?,?)",id(),tenant(q),i,qty,"Opening stock",q.user.id);db.prepare("UPDATE inventory_items SET quantity=? WHERE id=? AND tenant_id=?").run(qty,i,tenant(q));}})}catch(e){if(String(e.message).includes("UNIQUE"))return fail(r,409,"Inventory SKU already exists.");throw e}audit(q.user,"create","inventory_item",i);r.status(201).json({success:true,data:db.prepare("SELECT * FROM inventory_items WHERE id=? AND tenant_id=?").get(i,tenant(q))})});
- app.post("/api/v1/operations/inventory/:id/movements",auth,(q,r)=>{const x=db.prepare("SELECT * FROM inventory_items WHERE id=? AND tenant_id=?").get(q.params.id,tenant(q));if(!x)return fail(r,404,"Inventory item not found.");const b=q.body||{},qty=Number(b.quantity),type=b.movementType;if(!Number.isSafeInteger(qty)||qty<=0||!allowed(type,["stock_in","stock_out","adjustment","assigned"]))return fail(r,400,"Positive quantity and valid movement type are required.");const delta=type==="stock_in"?qty:type==="adjustment"?Number(b.delta): -qty;if(!Number.isSafeInteger(delta)||delta===0||x.quantity+delta<0)return fail(r,400,"Movement must change stock and cannot make the quantity negative; provide a valid adjustment delta.");withTransaction(db,()=>{insert("INSERT INTO inventory_movements(id,tenant_id,item_id,quantity,movement_type,reference,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)",id(),tenant(q),x.id,delta,type,text(b.reference)||null,text(b.notes)||null,q.user.id);db.prepare("UPDATE inventory_items SET quantity=?,status=? WHERE id=? AND tenant_id=?").run(x.quantity+delta,x.quantity+delta<=x.reorder_level?"low_stock":"available",x.id,tenant(q));audit(q.user,"stock_movement","inventory_item",x.id)});r.json({success:true,data:db.prepare("SELECT * FROM inventory_items WHERE id=? AND tenant_id=?").get(x.id,tenant(q))})});
+ app.post("/api/v1/operations/inventory/:id/movements",auth,(q,r)=>{
+  const b=q.body||{},qty=Number(b.quantity),type=b.movementType;
+  if(!Number.isSafeInteger(qty)||qty<=0||!allowed(type,["stock_in","stock_out","adjustment","assigned"]))return fail(r,400,"Positive quantity and valid movement type are required.");
+  const delta=type==="stock_in"?qty:type==="adjustment"?Number(b.delta):-qty;
+  if(!Number.isSafeInteger(delta)||delta===0)return fail(r,400,"Movement must change stock; provide a valid adjustment delta.");
+  let updated;
+  try{
+   withTransaction(db,()=>{
+    // Read and validate stock only after BEGIN IMMEDIATE so concurrent issues cannot use stale quantity.
+    const current=db.prepare("SELECT * FROM inventory_items WHERE id=? AND tenant_id=?").get(q.params.id,tenant(q));
+    if(!current)throw new Error("INVENTORY_ITEM_NOT_FOUND");
+    if(current.quantity+delta<0)throw new Error("INVENTORY_STOCK_INSUFFICIENT");
+    insert("INSERT INTO inventory_movements(id,tenant_id,item_id,quantity,movement_type,reference,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)",id(),tenant(q),current.id,delta,type,text(b.reference)||null,text(b.notes)||null,q.user.id);
+    const result=db.prepare("UPDATE inventory_items SET quantity=?,status=? WHERE id=? AND tenant_id=? AND quantity=?").run(current.quantity+delta,current.quantity+delta<=current.reorder_level?"low_stock":"available",current.id,tenant(q),current.quantity);
+    if(result.changes!==1)throw new Error("INVENTORY_STOCK_CHANGED");
+    audit(q.user,"stock_movement","inventory_item",current.id);
+    updated=db.prepare("SELECT * FROM inventory_items WHERE id=? AND tenant_id=?").get(current.id,tenant(q));
+   });
+  }catch(e){
+   if(e.message==="INVENTORY_ITEM_NOT_FOUND")return fail(r,404,"Inventory item not found.");
+   if(e.message==="INVENTORY_STOCK_INSUFFICIENT"||e.message==="INVENTORY_STOCK_CHANGED")return fail(r,409,"Insufficient or changed stock. Refresh inventory and try again.");
+   throw e;
+  }
+  r.json({success:true,data:updated});
+ });
  app.get("/api/v1/operations/customer-ledger/:customerId",auth,(q,r)=>{if(!db.prepare("SELECT id FROM customers WHERE id=? AND tenant_id=?").get(q.params.customerId,tenant(q)))return fail(r,404,"Customer not found.");r.json({success:true,data:rows("SELECT * FROM customer_ledger_entries WHERE tenant_id=? AND customer_id=? ORDER BY created_at DESC",tenant(q),q.params.customerId)})});
 }
