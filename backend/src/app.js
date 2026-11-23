@@ -92,8 +92,38 @@ app.patch("/api/v1/tenant",auth,(req,res)=>{
   audit(req.user,"update","tenant",req.user.tenant_id);
   return res.json({success:true,data:db.prepare("SELECT id,name,slug,status,plan,customer_limit,brand_color,support_phone,address,created_at FROM tenants WHERE id=?").get(req.user.tenant_id)});
 });
+app.post("/api/v1/staff/:id/password-reset",auth,(req,res)=>{
+  if(!["owner","admin"].includes(req.user.role))return fail(res,403,"Only the owner or an admin can issue a password reset.");
+  const target=db.prepare("SELECT id,role,status FROM users WHERE id=? AND tenant_id=?").get(req.params.id,req.user.tenant_id);
+  if(!target)return fail(res,404,"Staff member not found.");
+  if(target.status!=="active")return fail(res,400,"Staff account is not active.");
+  if(target.role==="owner"&&req.user.role!=="owner")return fail(res,403,"Only the owner can reset the owner password.");
+  const token=randomBytes(32).toString("base64url"),expires=new Date(Date.now()+30*60*1000).toISOString();
+  withTransaction(db,()=>{
+    db.prepare("UPDATE password_resets SET used_at=? WHERE user_id=? AND tenant_id=? AND used_at IS NULL").run(new Date().toISOString(),target.id,req.user.tenant_id);
+    db.prepare("INSERT INTO password_resets(id,tenant_id,user_id,token_hash,expires_at,created_by) VALUES(?,?,?,?,?,?)").run(id(),req.user.tenant_id,target.id,hashToken(token),expires,req.user.id);
+    audit(req.user,"password_reset_issued","user",target.id);
+  });
+  return res.status(201).json({success:true,resetToken:token,expiresAt:expires,note:"Give this one-time token to the staff member privately. It works once and expires in 30 minutes."});
+});
+app.post("/api/v1/auth/reset-password",rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:"draft-7",legacyHeaders:false,message:{success:false,error:"Too many reset attempts. Try again in 15 minutes."}}),(req,res)=>{
+  const b=req.body||{};
+  if(typeof b.token!=="string"||b.token.length<20||b.token.length>200||typeof b.newPassword!=="string"||b.newPassword.length<10||b.newPassword.length>256)return fail(res,400,"A valid reset token and a new password of 10–256 characters are required.");
+  const row=db.prepare("SELECT * FROM password_resets WHERE token_hash=? AND used_at IS NULL AND expires_at>?").get(hashToken(b.token),new Date().toISOString());
+  if(!row)return fail(res,400,"Reset token is invalid, used or expired.");
+  const user=db.prepare("SELECT id,tenant_id FROM users WHERE id=? AND tenant_id=? AND status='active'").get(row.user_id,row.tenant_id);
+  if(!user)return fail(res,400,"Reset token is invalid, used or expired.");
+  withTransaction(db,()=>{
+    db.prepare("UPDATE users SET password_hash=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),user.id,user.tenant_id);
+    db.prepare("UPDATE password_resets SET used_at=? WHERE id=?").run(new Date().toISOString(),row.id);
+    db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
+    audit({id:user.id,tenant_id:user.tenant_id},"password_reset_completed","user",user.id);
+  });
+  return res.json({success:true,message:"Password updated. Please sign in with the new password."});
+});
 app.post("/api/v1/auth/logout",auth,(req,res)=>{db.prepare("DELETE FROM sessions WHERE token_hash=?").run(req.user.token_hash);res.json({success:true});});
 app.get("/api/v1/dashboard",auth,(req,res)=>{const t=req.user.tenant_id,c=sql=>db.prepare(sql).get(t).n;res.json({success:true,stats:{customers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=?"),activeCustomers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=? AND status='active'"),packages:c("SELECT COUNT(*) n FROM packages WHERE tenant_id=? AND status='active'"),unpaidInvoices:c("SELECT COUNT(*) n FROM invoices WHERE tenant_id=? AND status IN ('unpaid','partial')"),openTickets:c("SELECT COUNT(*) n FROM support_tickets WHERE tenant_id=? AND status IN ('open','in_progress')"),revenuePkr:db.prepare("SELECT COALESCE((SELECT SUM(amount_pkr) FROM payments WHERE tenant_id=?),0)-COALESCE((SELECT SUM(amount_pkr) FROM payment_reversals WHERE tenant_id=?),0) n").get(t,t).n,
+connectedCustomers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=? AND connection_status='active'"),disconnectedCustomers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=? AND connection_status='disconnected'"),newRegistrations:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=? AND date(created_at)>=date('now','-30 days')"),
 suspendedCustomers:c("SELECT COUNT(*) n FROM customers WHERE tenant_id=? AND status='suspended'"),
 expiringSubscriptions:c("SELECT COUNT(*) n FROM subscriptions WHERE tenant_id=? AND status='active' AND expires_at IS NOT NULL AND date(expires_at) BETWEEN date('now') AND date('now','+7 days')"),
 dailyCollectionPkr:collected(t,"date(received_at)=date('now')","date(created_at)=date('now')"),

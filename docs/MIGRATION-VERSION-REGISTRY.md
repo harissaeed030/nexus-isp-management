@@ -16,6 +16,7 @@ The SQLite migration history for the local/backend runtime uses the complete des
 | 010 | `010_payment_promises.sql` | Customer payment commitment dates and status tracking |
 | 013 | `013_ticket_numbers_and_assignment.sql` | Complaint numbers (per tenant), staff assignment, resolved time and ticket history |
 | 014 | `014_tenant_plan_branding.sql` | SaaS plan, customer limit and workspace branding settings |
+| 015 | `015_password_resets.sql` | One-time, expiring password reset tokens stored as SHA-256 hashes |
 
 ## Conflict resolution
 

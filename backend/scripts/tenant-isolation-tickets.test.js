@@ -61,7 +61,7 @@ try {
   assert.equal(acct.status, 201);
   const techLogin = (await request("/api/v1/auth/login", "POST", { email: "tech@alpha.test", password: "Tech-Password-1234" })).data;
   const billLogin = (await request("/api/v1/auth/login", "POST", { email: "bill@alpha.test", password: "Bill-Password-1234" })).data;
-  const tt = techLogin.token, tbill = billLogin.token;
+  let tt = techLogin.token; const tbill = billLogin.token;
   assert.equal((await request("/api/v1/payments", "POST", { invoiceId: inv.id, amountPkr: 100, method: "cash" }, tt)).status, 403, "technician cannot record payments");
   assert.equal((await request("/api/v1/packages", "POST", { name: "x", speedDownMbps: 1, speedUpMbps: 1, monthlyPricePkr: 1 }, tt)).status, 403);
   assert.equal((await request("/api/v1/staff", "GET", undefined, tt)).status, 403, "technician cannot manage staff");
@@ -108,6 +108,37 @@ try {
   const unassigned = await request("/api/v1/tickets/" + t2.id, "PATCH", { assignedTo: null }, ta);
   assert.equal(unassigned.status, 200);
 
+
+  // Password reset: one-time token, tenant-safe, sessions revoked
+  const techUserId = techLogin.user.id;
+  assert.equal((await request("/api/v1/staff/" + techUserId + "/password-reset", "POST", {}, tt)).status, 403, "technician cannot issue resets");
+  assert.equal((await request("/api/v1/staff/" + techUserId + "/password-reset", "POST", {}, tb)).status, 404, "other tenant cannot reset our staff");
+  const reset = await request("/api/v1/staff/" + techUserId + "/password-reset", "POST", {}, ta);
+  assert.equal(reset.status, 201);
+  assert.ok(reset.data.resetToken && reset.data.resetToken.length >= 40);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM password_resets WHERE token_hash=?").get(reset.data.resetToken).n, 0, "token is stored only as a hash");
+  assert.equal((await request("/api/v1/auth/reset-password", "POST", { token: reset.data.resetToken, newPassword: "short" })).status, 400);
+  assert.equal((await request("/api/v1/auth/reset-password", "POST", { token: "x".repeat(43), newPassword: "Brand-New-Password-1" })).status, 400);
+  const done = await request("/api/v1/auth/reset-password", "POST", { token: reset.data.resetToken, newPassword: "Brand-New-Password-1" });
+  assert.equal(done.status, 200);
+  assert.equal((await request("/api/v1/customers", "GET", undefined, tt)).status, 401, "old sessions revoked after reset");
+  assert.equal((await request("/api/v1/auth/login", "POST", { email: "tech@alpha.test", password: "Tech-Password-1234" })).status, 401, "old password rejected");
+  const relogin = await request("/api/v1/auth/login", "POST", { email: "tech@alpha.test", password: "Brand-New-Password-1" });
+  assert.equal(relogin.status, 200);
+  tt = relogin.data.token;
+  assert.equal((await request("/api/v1/auth/reset-password", "POST", { token: reset.data.resetToken, newPassword: "Another-Password-123" })).status, 400, "token is single-use");
+  db.prepare("UPDATE password_resets SET expires_at='2000-01-01T00:00:00.000Z'").run();
+  const reset2 = await request("/api/v1/staff/" + techUserId + "/password-reset", "POST", {}, ta);
+  db.prepare("UPDATE password_resets SET expires_at='2000-01-01T00:00:00.000Z' WHERE used_at IS NULL").run();
+  assert.equal((await request("/api/v1/auth/reset-password", "POST", { token: reset2.data.resetToken, newPassword: "Another-Password-123" })).status, 400, "expired token rejected");
+  const ownerId = db.prepare("SELECT id FROM users WHERE email=?").get("owner@alpha.test").id;
+  const admin = await request("/api/v1/staff", "POST", { fullName: "Admin One", email: "admin@alpha.test", password: "Admin-Password-1234", role: "admin" }, ta);
+  const adminTok = (await request("/api/v1/auth/login", "POST", { email: "admin@alpha.test", password: "Admin-Password-1234" })).data.token;
+  assert.equal((await request("/api/v1/staff/" + ownerId + "/password-reset", "POST", {}, adminTok)).status, 403, "admin cannot reset the owner");
+  const dash2 = (await request("/api/v1/dashboard", "GET", undefined, ta)).data.stats;
+  assert.equal(typeof dash2.connectedCustomers, "number");
+  assert.equal(typeof dash2.disconnectedCustomers, "number");
+  assert.ok(dash2.newRegistrations >= 1);
   // Direct DB guard: assignee tenant mismatch is rejected by trigger
   assert.throws(() => db.prepare("UPDATE support_tickets SET assigned_to=? WHERE id=?").run(b.data.user.id, t2.id), /assignee tenant mismatch/);
 

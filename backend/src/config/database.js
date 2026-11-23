@@ -232,6 +232,20 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(bra
   }
 }
 
+const resetMigrationVersion = "015_password_resets";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(resetMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/015_password_resets.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(resetMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${resetMigrationVersion} failed: ${error.message}`);
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
 
 // Shared async repository contract; existing synchronous db access remains supported during migration.
