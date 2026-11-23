@@ -64,10 +64,15 @@ test("ACS credentials are encrypted at rest and decrypt only with the Worker sec
   const encrypted = await encryptAcsSecret("genieacs-private-password", env);
   assert.notEqual(encrypted, "genieacs-private-password");
   assert.match(encrypted, /^enc:v1:/);
-  assert.equal(await decryptRouterSecret(encrypted, { JWT_SECRET: "test-only-worker-secret-for-router-encryption" }), "router-private-password");
-  await assert.rejects(() => decryptRouterSecret(encrypted, { JWT_SECRET: "different-router-secret" }));
   assert.equal(await decryptAcsSecret(encrypted, env), "genieacs-private-password");
   await assert.rejects(() => decryptAcsSecret(encrypted, { JWT_SECRET: "different-secret" }));
+
+  const routerEnv = { JWT_SECRET: "test-only-worker-secret-for-router-encryption" };
+  const routerEncrypted = await encryptRouterSecret("router-private-password", routerEnv);
+  assert.notEqual(routerEncrypted, "router-private-password");
+  assert.match(routerEncrypted, /^enc:v1:/);
+  assert.equal(await decryptRouterSecret(routerEncrypted, routerEnv), "router-private-password");
+  await assert.rejects(() => decryptRouterSecret(routerEncrypted, { JWT_SECRET: "different-router-secret" }));
 });
 
 test("TR-069 online state is based on the ten-minute last-inform window", () => {
