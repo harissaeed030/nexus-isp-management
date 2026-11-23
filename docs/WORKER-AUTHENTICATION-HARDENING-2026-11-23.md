@@ -119,3 +119,8 @@ The Pages project has separate environment variables configured: preview `API_UR
 The repository now includes a Pages Function at `functions/api/[[path]].js` that forwards same-origin `/api/*` requests to the environment's `API_URL`, preserving method, headers, body, and query string. Root `_routes.json` limits Function invocation to `/api/*`, so static pages and assets do not invoke the proxy. The dashboard now defaults to the same-origin proxy on Pages hosts and clears a stale direct API override there. This lets preview use the configured staging Worker and production use the configured production Worker.
 
 The Pages routing change passed the three GitHub verification workflows on commit `f186889c31b2da7a66fe74215c87063073b16b60`. The Pages preview build and a live end-to-end sign-in through the proxy still need verification after Cloudflare finishes its deployment.
+
+
+### Preview deployment result
+
+Cloudflare Pages completed the preview deployment for branch `build/nexus-isp-core`, commit `758065eae992dd49859bb9206206d3c4d6037b4f`, at `https://67f51788.nexus-isp-management.pages.dev`. All four GitHub verification workflows also passed for that commit. The deployment status confirms the Pages build and deploy stages succeeded; it does not by itself prove a real customer login, billing workflow, or live Worker authentication round trip.
