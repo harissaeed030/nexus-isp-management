@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS network_devices (
         status TEXT NOT NULL DEFAULT 'inactive' CHECK(status IN ('active','inactive','maintenance')),
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')), model TEXT, management_protocol TEXT, pon_ports INTEGER,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')), model TEXT, management_protocol TEXT, pon_ports INTEGER, credentials_ciphertext TEXT,
         FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
       );
 
@@ -500,4 +500,5 @@ INSERT OR IGNORE INTO schema_migrations(id,name,applied_at) VALUES
 (7,'0007_customer_portal_tenant_guards','2026-11-15 01:18:15'),
 (8,'0008_user_email_index_parity','2026-11-15 15:35:00'),
 (9,'0009_repair_global_user_email_index','2026-11-15 15:45:24'),
-(22,'0022_payment_promises','2026-11-23 06:00:00');
+(22,'0022_payment_promises','2026-11-23 06:00:00'),
+(23,'0023_router_credentials_ciphertext','2026-11-23 06:15:00');
