@@ -174,21 +174,29 @@ export function registerFinancialRoutes(app, { db, auth, id, audit, fail }) {
     res.status(201).json({success:true,data:db.prepare("SELECT * FROM unallocated_payments WHERE id=? AND tenant_id=?").get(paymentId,tenant)});
   });
   app.post("/api/v1/unallocated-payments/:id/allocate", auth, (req,res) => {
-    const tenant=req.user.tenant_id,unallocated=db.prepare("SELECT * FROM unallocated_payments WHERE id=? AND tenant_id=?").get(req.params.id,tenant),invoiceId=text(req.body?.invoiceId);
-    if(!unallocated)return fail(res,404,"Unallocated payment not found.");
-    if(unallocated.status!=="unallocated")return fail(res,409,"Payment has already been allocated.");
-    const invoice=db.prepare("SELECT * FROM invoices WHERE id=? AND tenant_id=? AND customer_id=?").get(invoiceId,tenant,unallocated.customer_id);
-    if(!invoice)return fail(res,404,"Invoice not found for this customer.");
-    if(Number(unallocated.amount_pkr)>invoiceTotals(db,tenant,invoice).outstanding)return fail(res,409,"Payment exceeds the remaining invoice balance.");
-    const paymentId=id();
+    const tenant=req.user.tenant_id,unallocatedId=req.params.id,invoiceId=text(req.body?.invoiceId),paymentId=id();
     try{
       withTransaction(db,()=>{
+        // Re-read mutable state after BEGIN IMMEDIATE; never trust the pre-transaction status.
+        const unallocated=db.prepare("SELECT * FROM unallocated_payments WHERE id=? AND tenant_id=?").get(unallocatedId,tenant);
+        if(!unallocated)throw new Error("UNALLOCATED_PAYMENT_NOT_FOUND");
+        if(unallocated.status!=="unallocated")throw new Error("UNALLOCATED_PAYMENT_ALREADY_ALLOCATED");
+        const invoice=db.prepare("SELECT * FROM invoices WHERE id=? AND tenant_id=? AND customer_id=?").get(invoiceId,tenant,unallocated.customer_id);
+        if(!invoice)throw new Error("ALLOCATION_INVOICE_NOT_FOUND");
+        if(Number(unallocated.amount_pkr)>invoiceTotals(db,tenant,invoice).outstanding)throw new Error("ALLOCATION_EXCEEDS_BALANCE");
+        const changed=db.prepare("UPDATE unallocated_payments SET status='allocated',allocated_invoice_id=? WHERE id=? AND tenant_id=? AND status='unallocated'").run(invoice.id,unallocated.id,tenant);
+        if(changed.changes!==1)throw new Error("UNALLOCATED_PAYMENT_ALREADY_ALLOCATED");
         db.prepare("INSERT INTO payments(id,tenant_id,invoice_id,amount_pkr,method,reference) VALUES(?,?,?,?,?,?)").run(paymentId,tenant,invoice.id,unallocated.amount_pkr,unallocated.method,unallocated.reference);
-        db.prepare("UPDATE unallocated_payments SET status='allocated',allocated_invoice_id=? WHERE id=? AND tenant_id=? AND status='unallocated'").run(invoice.id,unallocated.id,tenant);
         refreshInvoiceStatus(db,tenant,invoice);
         audit(req.user,"allocate","unallocated_payment",unallocated.id);
       });
-    }catch(e){if(String(e.message).includes("payment exceeds"))return fail(res,409,"Payment exceeds the adjusted invoice balance.");throw e;}
+    }catch(e){
+      if(e.message==="UNALLOCATED_PAYMENT_NOT_FOUND")return fail(res,404,"Unallocated payment not found.");
+      if(e.message==="UNALLOCATED_PAYMENT_ALREADY_ALLOCATED")return fail(res,409,"Payment has already been allocated.");
+      if(e.message==="ALLOCATION_INVOICE_NOT_FOUND")return fail(res,404,"Invoice not found for this customer.");
+      if(e.message==="ALLOCATION_EXCEEDS_BALANCE"||String(e.message).includes("payment exceeds"))return fail(res,409,"Payment exceeds the remaining invoice balance.");
+      throw e;
+    }
     res.status(201).json({success:true,data:db.prepare("SELECT * FROM payments WHERE id=? AND tenant_id=?").get(paymentId,tenant)});
   });
   app.get("/api/v1/financial/reconciliation", auth, (req,res) => {
