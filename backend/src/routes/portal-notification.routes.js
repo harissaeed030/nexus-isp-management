@@ -35,7 +35,7 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   const b=req.body||{},identity=String(b.identity||"").trim(),password=b.password;
   if(!identity||typeof password!=="string")return fail(res,400,"Account number or email and password are required.");
   const parts=identity.split("/"),tenantSlug=parts.length===2?parts[0]:null,key=parts.length===2?parts[1]:identity;
-  const matches=db.prepare("SELECT a.*,c.tenant_id customer_tenant,c.email,c.account_number,c.customer_code FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id JOIN tenants t ON t.id=c.tenant_id WHERE (((c.account_number=? OR c.customer_code=?) AND (? IS NULL OR t.slug=?)) OR c.email=? COLLATE NOCASE) AND a.status='active' AND c.status='active' ORDER BY a.created_at LIMIT 2").all(key,key,tenantSlug,tenantSlug,identity);
+  const matches=db.prepare("SELECT a.*,c.tenant_id customer_tenant,c.email,c.account_number,c.customer_code FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id JOIN tenants t ON t.id=c.tenant_id WHERE ((c.account_number=? OR c.customer_code=? OR c.email=? COLLATE NOCASE) AND (? IS NULL OR t.slug=?)) AND a.status='active' AND c.status='active' ORDER BY a.created_at LIMIT 2").all(key,key,identity,tenantSlug,tenantSlug);
   if(matches.length>1)return fail(res,409,"This account number exists in more than one ISP. Sign in with tenant-slug/account-number or use your unique customer email.");
   const account=matches[0];
   if(!account||!verifyPassword(password,account.password_hash))return fail(res,401,"Invalid customer login details.");
@@ -94,7 +94,7 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   if(typeof password!=="string"||password.length<10||password.length>200)return fail(res,400,"Portal password must be 10-200 characters.");
   const account=db.prepare("SELECT id FROM customer_portal_accounts WHERE tenant_id=? AND customer_id=?").get(req.user.tenant_id,customer.id);
   if(!account)return fail(res,404,"Customer portal account not found.");
-  withTransaction(db,()=>{db.prepare("UPDATE customer_portal_accounts SET password_hash=? WHERE id=?").run(passwordHash(password),account.id);db.prepare("DELETE FROM customer_portal_sessions WHERE account_id=?").run(account.id);});
+  withTransaction(db,()=>{db.prepare("UPDATE customer_portal_accounts SET password_hash=? WHERE id=?").run(passwordHash(password),account.id);db.prepare("DELETE FROM customer_portal_sessions WHERE account_id=?").run(account.id);audit(req.user,"reset_password","customer_portal_account",account.id);});
   res.json({success:true,message:"Password reset. Existing customer sessions were revoked."});
  });
  app.get("/api/v1/notifications/templates",auth,(req,res)=>{
