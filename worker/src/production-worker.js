@@ -209,7 +209,7 @@ async function runMigrations(env){
 
 export function normalizeApiPath(input){
  const path=String(input||'/');
- const base=path.replace(/^\\/api\\/v1\\//,'/api/');
+ const base=path.replace(/^\/api\/v1\//,'/api/');
  const exact=new Map([
   ['/api/setup','/api/auth/register'],
   ['/api/dashboard','/api/dashboard/stats'],
@@ -223,7 +223,7 @@ export function normalizeApiPath(input){
 }
 export function normalizeApiMethod(path,method){
  const verb=String(method||'GET').toUpperCase();
- if(verb==='PATCH'&&(/^\\/api\\/customers\\/[^/]+$/.test(path)||/^\\/api\\/complaints\\/[^/]+$/.test(path)))return 'PUT';
+ if(verb==='PATCH'&&(/^\/api\/customers\/[^/]+$/.test(path)||/^\/api\/complaints\/[^/]+$/.test(path)))return 'PUT';
  return verb;
 }
 let _migrated=false;
