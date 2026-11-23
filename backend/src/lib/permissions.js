@@ -84,7 +84,7 @@ export function permissionFor(path,method) {
   if(path==="/api/v1/reports/financial")return verb==="GET"?"reports.read":null;
   if(matches("/api/v1/credit-notes"))return verb==="GET"?"billing.read":verb==="POST"?"billing.adjust":null;
   if(matches("/api/v1/payment-reversals"))return verb==="GET"?"billing.read":verb==="POST"?"refunds.manage":null;
-  if(matches("/api/v1/unallocated-payments"))return verb==="GET"?"billing.read":verb==="POST"?"billing.adjust":null;
+  if(matches("/api/v1/unallocated-payments")){if(verb==="GET")return "billing.read";if(verb==="POST")return path.endsWith("/allocate")?"billing.reconcile":path==="/api/v1/unallocated-payments"?"billing.adjust":null;return null;}
   if(path==="/api/v1/billing/generate")return verb==="POST"?"billing.generate":null;
   if(path==="/api/v1/billing/runs")return verb==="GET"?"billing.read":null;
   if(matches("/api/v1/tickets"))return verb==="GET"?"tickets.read":["POST","PATCH"].includes(verb)?"tickets.manage":null;
