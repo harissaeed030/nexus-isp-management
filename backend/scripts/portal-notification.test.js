@@ -47,3 +47,18 @@ test("tenant slug scopes customer portal email login when emails repeat across I
  assert.equal(ambiguous.length,2);
  db.close();
 });
+
+
+test("customer portal login tenant predicate scopes account number, customer code, and email together",()=>{
+ const source=readFileSync(new URL("../src/routes/portal-notification.routes.js",import.meta.url),"utf8");
+ const login=source.slice(source.indexOf('app.post("/api/v1/customer-portal/login"'),source.indexOf('app.post("/api/v1/customer-portal/logout"'));
+ assert.match(login,/\(\(c\.account_number=\? OR c\.customer_code=\? OR c\.email=\? COLLATE NOCASE\) AND \(\? IS NULL OR t\.slug=\?\)\)/);
+ assert.doesNotMatch(login,/OR c\.email=\? COLLATE NOCASE\) AND a\.status/);
+});
+
+test("customer portal password reset revokes sessions and writes an audit event",()=>{
+ const source=readFileSync(new URL("../src/routes/portal-notification.routes.js",import.meta.url),"utf8");
+ const reset=source.slice(source.indexOf('app.post("/api/v1/customer-portal/password"'),source.indexOf('app.get("/api/v1/notifications/templates"'));
+ assert.match(reset,/DELETE FROM customer_portal_sessions WHERE account_id=\?/);
+ assert.match(reset,/audit\(req\.user,"reset_password","customer_portal_account",account\.id\)/);
+});
