@@ -22,8 +22,8 @@ Status: source review only; no Worker deployment or D1 writes.
 
 | Frontend request | Closest Worker route | Required work |
 |---|---|---|
-| `/api/v1/dashboard` | `/api/dashboard/stats` | Confirm and adapt response envelope/field names |
-| `/api/v1/reports/summary` | `/api/reports/revenue`, `customers`, `subscriptions` | Define summary response and aggregate existing reports |
+| `/api/v1/dashboard` | `/api/dashboard` | Added compatibility envelope `{stats}` backed by tenant-scoped dashboard stats |
+| `/api/v1/reports/summary` | `/api/reports/summary` | Added `{data:{monthlyRevenue,outstandingPkr}}` adapter backed by tenant-scoped dashboard queries |
 | `/api/v1/financial/aging` | None | Implement tenant-scoped invoice aging query and response contract |
 | `/api/v1/operations/payment-promises` | None | Add schema, migration, tenant-scoped CRUD, audit and validation |
 | `/api/v1/routers` | `/api/network/devices` | Map router UI fields to network-device model; do not alias without shape checks |
@@ -34,7 +34,7 @@ Status: source review only; no Worker deployment or D1 writes.
 
 ## Release blockers
 
-1. The hosted D1 Worker and the frontend currently expose different contracts for dashboard, tickets, routers, financial aging, payment promises and TR-069/ACS.
+1. The hosted D1 Worker and the frontend currently expose different contracts for tickets, routers, financial aging, payment promises and TR-069/ACS. Dashboard and summary compatibility adapters have now been added to the Worker source.
 2. Do not merge or deploy the frontend as a complete hosted-D1 application until each path has an explicit response schema and tenant-isolation tests.
 3. Do not store ACS usernames/passwords as plaintext. Use encrypted secrets or a dedicated secret binding, with redaction in every API response and audit log.
 4. Payment promises and invoice aging must be computed using organization-scoped queries; never trust a client-supplied organization ID.
