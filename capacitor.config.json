@@ -2,6 +2,10 @@
   "appId": "com.vancom.nexus",
   "appName": "NEXUS ISP Management",
   "webDir": "www",
+  "server": {
+    "url": "https://nexus-isp-management.pages.dev",
+    "cleartext": false
+  },
   "android": {
     "allowMixedContent": false,
     "backgroundColor": "#edf5f9"
