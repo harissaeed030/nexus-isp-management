@@ -451,7 +451,7 @@ test("D1 Worker AI defaults to the same Gemini model as the local backend", () =
 
 test("D1 password hashes use versioned PBKDF2-SHA256 at 600,000 iterations and reject plaintext fallback", async () => {
   const credentials = await hashPw("Nexus-Strong-Password-2026!");
-  assert.match(credentials.salt, /^v2\\$600000\\$[0-9a-f]{32}$/);
+  assert.match(credentials.salt, /^v2\$600000\$[0-9a-f]{32}$/);
   assert.equal(needsPasswordUpgrade(credentials.salt), false);
   assert.equal(await verifyPw("Nexus-Strong-Password-2026!", credentials.hash, credentials.salt), true);
   assert.equal(await verifyPw("wrong-password", credentials.hash, credentials.salt), false);
