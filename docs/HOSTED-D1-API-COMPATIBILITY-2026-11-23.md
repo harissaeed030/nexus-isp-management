@@ -8,7 +8,9 @@ The browser dashboard calls the versioned `/api/v1/*` contract used by the local
 
 - `POST /api/v1/setup` → `POST /api/auth/register` (the D1 registration handler already accepts `companyName` and `fullName`).
 - `GET /api/v1/dashboard` → `GET /api/dashboard/stats`; response now includes the nested `stats` object expected by the shared dashboard while retaining the existing top-level fields.
-- `GET /api/v1/reports/summary` → a new D1-backed summary response with monthly revenue and outstanding receivables.
+- `GET /api/v1/reports/summary` → a D1-backed summary response with monthly revenue, total revenue, outstanding receivables and invoice status counts.
+- `/api/v1/operations/payment-promises` → D1 payment-promise list/create/update handlers, with billing-role permissions and tenant-scoped customer validation.
+- `GET /api/v1/financial/aging` → D1-backed overdue invoice details and PKR aging buckets.
 - `/api/v1/tickets/*` → `/api/complaints/*`.
 - `/api/v1/routers/*` → `/api/network/devices/*`.
 - PATCH updates for individual customer and complaint resources are normalized to the Worker’s existing PUT handlers. CORS preflight now advertises PATCH.
@@ -21,8 +23,6 @@ The following local SQLite routes do not yet have equivalent hosted D1 contracts
 
 - `/api/v1/acs/connections`
 - `/api/v1/tr069/devices` and `/api/v1/tr069/audit-logs`
-- `/api/v1/financial/aging`
-- `/api/v1/operations/payment-promises`
 - `/api/v1/customers/:id/profile` (the D1 customer detail response has a different shape)
 - Local SQLite tenant plan limits, tenant branding settings and local-only migrations.
 
