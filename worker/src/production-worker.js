@@ -21,7 +21,7 @@ async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT IN
 function vEmail(e){return/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e||'')}
 function vReq(o,f){return f.filter(x=>!o[x]&&o[x]!==0)}
 function s(v){return typeof v==='string'?v.trim():v}
-function pg(url,d=20){const page=Math.max(1,parseInt(url.searchParams.get('page')||'1'));const pp=Math.min(100,Math.max(1,parseInt(url.searchParams.get('per_page')||String(d))));return{page,pp,off:(page-1)*pp}}
+function pg(url,d=20){const page=Math.max(1,parseInt(url.searchParams.get('page')||'1'));const pp=Math.min(100,Math.max(1,parseInt(url.searchParams.get('per_page')||url.searchParams.get('pageSize')||String(d))));return{page,pp,pageSize:pp,off:(page-1)*pp}}
 
 
 function corsHeaders(request,env){
@@ -560,7 +560,17 @@ async function authMe(env,auth){const u=await env.DB.prepare('SELECT id,email,na
 
 async function dashStats(env,oid){const c=await env.DB.prepare('SELECT COUNT(*)v FROM customers WHERE organization_id=?').bind(oid).first();const ac=await env.DB.prepare("SELECT COUNT(*)v FROM customers WHERE organization_id=? AND status='active'").bind(oid).first();const pk=await env.DB.prepare('SELECT COUNT(*)v FROM packages WHERE organization_id=?').bind(oid).first();const sc=await env.DB.prepare('SELECT COUNT(*)v FROM subscriptions WHERE organization_id=?').bind(oid).first();const pi=await env.DB.prepare("SELECT COUNT(*)v,COALESCE(SUM(total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)),0)amt FROM invoices WHERE organization_id=? AND status IN ('pending','overdue') AND total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)").bind(oid).first();const rev=await env.DB.prepare("SELECT COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)v FROM payments WHERE organization_id=? AND status='completed'").bind(oid).first();const oc=await env.DB.prepare("SELECT COUNT(*)v FROM support_tickets WHERE organization_id=? AND status='open'").bind(oid).first();const st=await env.DB.prepare('SELECT COUNT(*)v FROM users WHERE organization_id=?').bind(oid).first();const mr=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now','-6 months')GROUP BY m ORDER BY m").bind(oid).all();return json({stats:{customers:c.v,activeCustomers:ac.v,revenuePkr:rev.v,openTickets:oc.v,staff:st.v},customers:c.v,activeCustomers:ac.v,packages:pk.v,subscriptions:sc.v,pendingInvoices:pi.v,pendingAmount:pi.amt,totalRevenue:rev.v,openComplaints:oc.v,staff:st.v,monthlyRevenue:mr.results||[]})}
 
-async function listCust(env,url,oid){const{page,pp,off}=pg(url);const q=url.searchParams.get('search')||'';const st=url.searchParams.get('status')||'';let w='WHERE organization_id=?';const p=[oid];if(q){w+=' AND(first_name LIKE? OR last_name LIKE? OR email LIKE? OR phone LIKE?)';const s='%'+q+'%';p.push(s,s,s,s)}if(st){w+=' AND status=?';p.push(st)}const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM customers '+w).bind(...p).first();const rows=await env.DB.prepare('SELECT * FROM customers '+w+' ORDER BY created_at DESC LIMIT? OFFSET?').bind(...p,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listCust(env,url,oid){
+ const{page,pp,off}=pg(url),q=url.searchParams.get('q')||url.searchParams.get('search')||'',status=url.searchParams.get('status')||'',connection=url.searchParams.get('connectionStatus')||'',area=url.searchParams.get('coverageArea')||'';
+ let where='WHERE organization_id=?',params=[oid];
+ if(q){where+=' AND(first_name LIKE? OR last_name LIKE? OR email LIKE? OR phone LIKE? OR customer_code LIKE? OR account_number LIKE? OR address LIKE? OR service_address LIKE?)';const value='%'+q+'%';params.push(value,value,value,value,value,value,value,value)}
+ if(status){const mapped={inactive:'terminated',blocked:'suspended'}[status]||status;where+=' AND status=?';params.push(mapped)}
+ if(connection){where+=' AND connection_status=?';params.push(connection)}
+ if(area){where+=' AND coverage_area=?';params.push(area)}
+ const cnt=await env.DB.prepare('SELECT COUNT(*) AS total FROM customers '+where).bind(...params).first();
+ const rows=await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name,COALESCE(account_number,customer_code) AS account_number FROM customers "+where+" ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(...params,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,pp,pageSize:pp,total:Number(cnt?.total||0),totalPages:Math.ceil(Number(cnt?.total||0)/pp)}});
+}
 async function createCust(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const fullName=s(b.full_name??b.fullName??b.first_name??''),parts=fullName.split(/\s+/),first=s(b.first_name??parts.shift()??''),last=s(b.last_name??parts.join(' '));
@@ -593,7 +603,7 @@ async function getCust(env,path,oid){const id=path.split('/')[3];const cu=await 
 async function updateCust(r,env,path,oid,uid,ip){
  const id=path.split('/')[3],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
- const statusMap={active:'active',suspended:'suspended',blocked:'suspended',inactive:'terminated',terminated:'terminated'};
+ const statusMap={active:'active',suspended:'suspended',blocked:'suspended',inactive:'suspended',terminated:'terminated'};
  const nextStatus=b.status===undefined?ex.status:(statusMap[b.status]||'');
  if(!nextStatus)return json({error:'Invalid customer status'},400);
  const connection=b.connectionStatus??b.connection_status;
