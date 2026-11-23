@@ -55,3 +55,18 @@ test("redacts credentials from TR-069 parameter snapshots", () => {
   assert.equal("KeyPassphrase" in tree.Device.WiFi, false);
   assert.equal("Password" in tree.Device.ManagementServer, false);
 });
+
+test("ACS credentials are encrypted at rest and decrypt only with the Worker secret", async () => {
+  const env = { JWT_SECRET: "test-only-worker-secret-for-acs-encryption" };
+  const encrypted = await encryptAcsSecret("genieacs-private-password", env);
+  assert.notEqual(encrypted, "genieacs-private-password");
+  assert.match(encrypted, /^enc:v1:/);
+  assert.equal(await decryptAcsSecret(encrypted, env), "genieacs-private-password");
+  await assert.rejects(() => decryptAcsSecret(encrypted, { JWT_SECRET: "different-secret" }));
+});
+
+test("TR-069 online state is based on the ten-minute last-inform window", () => {
+  assert.equal(tr069Status(new Date().toISOString()), "online");
+  assert.equal(tr069Status(new Date(Date.now() - 11 * 60 * 1000).toISOString()), "offline");
+  assert.equal(tr069Status(null), "unknown");
+});
