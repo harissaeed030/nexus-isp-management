@@ -515,9 +515,9 @@ test("customer portal dashboard uses the hosted D1 portal routes and response DT
 
 
 test("customer portal complaint priority is validated and persisted", () => {
-  assert.match(source, /const requestedPriority=b\.priority\|\|'medium'/);
-  assert.match(source, /\['normal','low','medium','high','urgent'\]\.includes\(requestedPriority\)/);
-  assert.match(source, /requestedPriority==='normal'\?'medium':requestedPriority/);
+  assert.match(source, /const priority=normalizePortalTicketPriority\(b\.priority\)/);
+  assert.match(source, /if\(!priority\)return json\(\{error:'Invalid complaint priority'\},400\)/);
+  assert.match(source, /function normalizePortalTicketPriority\(priority\)/);
   assert.match(source, /VALUES\(\?,\?,\?,\?,\?,\?, 'open'\)/);
   assert.match(source, /description\|\|null,priority\)\.run\(\)/);
 });
