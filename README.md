@@ -145,7 +145,7 @@ Still required before production:
 8. Obtain official HSGQ-G04R firmware-specific management documentation before enabling OLT telemetry, optical levels, alarms or ONU provisioning. Hosted TR-069/GenieACS integration also remains a separate implementation.
 9. Only after the above gates pass, approve a production release and deploy through a reviewed release workflow.
 
-**Release status: NO-GO.** This repository is an active development build, not a production-ready SaaS release. No live customer service, payment collection or network control should rely on it as the sole system of record until the release gates are closed.
+**Release status: NO-GO.** See the [2026-11-23 existing-code audit](docs/EXISTING-CODE-AUDIT-2026-11-23.md) for confirmed findings and the required completion order. This repository is an active development build, not a production-ready SaaS release. No live customer service, payment collection or network control should rely on it as the sole system of record until the release gates are closed.
 ## HSGQ-G04R hardware integration
 See [docs/HSGQ-G04R-INTEGRATION.md](docs/HSGQ-G04R-INTEGRATION.md) for verified management methods, adapter limitations, credential encryption and the vendor documentation required before enabling live telemetry.
 
