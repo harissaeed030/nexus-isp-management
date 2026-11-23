@@ -152,8 +152,8 @@ async function pppoeCryptoKey(env,usages){
 }
 
 async function routerCredentialKey(env,usages){
- if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
- const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']);
+ if(typeof env.ROUTER_CREDENTIALS_KEY!=='string'||env.ROUTER_CREDENTIALS_KEY.length<32)throw new Error('ROUTER_CREDENTIALS_KEY must be configured with at least 32 characters');
+ const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.ROUTER_CREDENTIALS_KEY),'HKDF',false,['deriveKey']);
  return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-ROUTER-SALT-V1'),info:new TextEncoder().encode('NEXUS-ROUTER-CREDENTIAL-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,usages);
 }
 async function encryptRouterPassword(password,env){
@@ -952,6 +952,7 @@ async function createRouter(request,env,oid,uid,ip){
  if(!name||name.length>120||!host||host.length>253||!username||username.length>128||password.length<8||password.length>256)return json({error:'Router name, host, username and an 8-256 character password are required'},400);
  if(!Number.isInteger(port)||port<1||port>65535)return json({error:'apiPort must be between 1 and 65535'},400);
  if(location.length>300)return json({error:'Location must be 300 characters or fewer'},400);
+ if(typeof env.ROUTER_CREDENTIALS_KEY!=='string'||env.ROUTER_CREDENTIALS_KEY.length<32)return json({error:'Router credential encryption is not configured on this Worker'},503);
  const id=uuid(),ciphertext=await encryptRouterPassword(password,env);
  await env.DB.batch([
   env.DB.prepare("INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol) VALUES(?,?,?,'mikrotik',?,?,?,'inactive',?,'RouterOS 7','routeros-api-ssl')").bind(id,oid,name,host,port,username,location||null),
@@ -984,6 +985,7 @@ async function updateRouter(request,env,path,oid,uid,ip){
  }
  if(b.password!==undefined){
   if(typeof b.password!=='string'||b.password.length<8||b.password.length>256)return json({error:'Password must be 8-256 characters'},400);
+  if(typeof env.ROUTER_CREDENTIALS_KEY!=='string'||env.ROUTER_CREDENTIALS_KEY.length<32)return json({error:'Router credential encryption is not configured on this Worker'},503);
   const ciphertext=await encryptRouterPassword(b.password,env);credentialStatement=env.DB.prepare("INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES(?,?,?,?,?,?) ON CONFLICT(network_device_id) DO UPDATE SET ciphertext=excluded.ciphertext,updated_by=excluded.updated_by,updated_at=datetime('now')").bind(uuid(),oid,id,ciphertext,uid,uid);
  }
  if(!sets.length&&!credentialStatement)return json({error:'No supported fields to update'},400);
