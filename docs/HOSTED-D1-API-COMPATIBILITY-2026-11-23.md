@@ -1,38 +1,40 @@
-# Hosted D1 integration update — 2026-11-23
+# Hosted D1 API compatibility — 2026-11-23
 
-## Implemented in this branch
+## Purpose
 
-### Shared frontend compatibility
-- Versioned frontend paths are normalized at the hosted Worker boundary.
-- Dashboard response includes the nested `stats` shape.
-- Reports summary returns total revenue, six-month revenue series, outstanding receivables and invoice status counts.
-- Tickets and network-device inventory paths have explicit aliases.
-- Customer create/update accepts the shared frontend camelCase fields while preserving the D1 schema's canonical status values.
+The browser dashboard calls the versioned `/api/v1/*` contract used by the local Express/SQLite runtime. The hosted Cloudflare Worker keeps its established `/api/*` route names. This branch adds a small, explicit compatibility layer at the production Worker boundary; it does not make the local SQLite file and D1 a live replica.
 
-### Customer profile
-- `GET /api/v1/customers/:id/profile` now returns customer, subscriptions, invoices, payments, complaints, connection history and subscription history.
-- Every record lookup and relationship join is scoped to the authenticated organization.
-- The response maps D1 column names to the current browser UI contract (full name, speed, monthly price, received date and PKR amount).
+## Compatibility implemented
 
-### TR-069 / GenieACS
-- Added hosted D1 API handlers for ACS connection create/list, test, device sync, device list, audit log list and parameter reads.
-- Reboot, diagnostics and Wi-Fi configuration actions are submitted as explicit GenieACS NBI tasks only after an authenticated staff action.
-- ACS username/password/bearer token values are encrypted with AES-GCM using a key derived from the Worker JWT secret. Ciphertext is stored in D1; secrets are never returned to the browser.
-- ACS base URLs must be HTTPS and public-hostname shaped; local/private HTTP endpoints are rejected.
-- Device parameter snapshots and responses redact password, passphrase, secret, token, PSK and network-key values.
-- Device online status is derived from the last inform timestamp (10-minute window); a configured ACS URL is not proof of reachability until Test succeeds.
-- Added restart-safe table/index creation for ACS, TR-069 and customer-history schema.
+- `POST /api/v1/setup` → `POST /api/auth/register` (the D1 registration handler already accepts `companyName` and `fullName`).
+- `GET /api/v1/dashboard` → `GET /api/dashboard/stats`; response now includes the nested `stats` object expected by the shared dashboard while retaining the existing top-level fields.
+- `GET /api/v1/reports/summary` → a D1-backed summary response with monthly revenue, total revenue, outstanding receivables and invoice status counts.
+- `/api/v1/operations/payment-promises` → D1 payment-promise list/create/update handlers, with billing-role permissions and tenant-scoped customer validation.
+- `GET /api/v1/financial/aging` → D1-backed overdue invoice details and PKR aging buckets.
+- `/api/v1/tickets/*` → `/api/complaints/*`.
+- `/api/v1/routers/*` → `/api/network/devices/*`.
+- PATCH updates for individual customer and complaint resources are normalized to the Worker’s existing PUT handlers. CORS preflight now advertises PATCH.
 
-## Deliberate operational boundaries
+All mappings are path-only and preserve query strings on the original URL. Authorization and tenant scoping still run in the existing Worker handlers after normalization.
 
-- TR-069 requires a reachable, public HTTPS GenieACS NBI endpoint and valid NBI credentials. No live customer device has been rebooted or reconfigured by this code change.
-- Wi-Fi task parameter paths must be supplied from the actual device's discovered parameter list. Firmware-specific parameter names are not guessed.
-- RouterOS live provisioning, PPP secret changes and customer profile synchronization are not claimed as supported by the hosted D1 Worker merely because a router inventory row exists.
-- The existing production Worker and production D1 records are unchanged by this branch. No production deployment or secret update was performed.
-- SQLite-to-D1 data transfer remains separate from hosted API compatibility. No local SQLite backup was available in this work session, so no SQLite rows were imported.
+## Deliberately not mapped
+
+The following local SQLite routes do not yet have equivalent hosted D1 contracts and must not be pointed at unrelated tables as a shortcut:
+
+- `/api/v1/acs/connections`
+- `/api/v1/tr069/devices` and `/api/v1/tr069/audit-logs`
+- `/api/v1/customers/:id/profile` (the D1 customer detail response has a different shape)
+- Local SQLite tenant plan limits, tenant branding settings and local-only migrations.
+
+These need dedicated D1 schema/API implementations plus contract and tenant-isolation tests.
+
+## Database safety
+
+- Hosted production D1 remains the source of truth for the hosted SaaS.
+- Local SQLite remains an isolated development/offline runtime; this patch does not sync or import local records.
+- No D1 data, migration ledger, secret, Cloudflare Worker deployment or Pages deployment is modified by this branch.
+- No full schema snapshot is to be applied to the existing production D1 database.
 
 ## Validation
 
-- Focused API path, HTTPS ACS URL and secret-redaction tests run in GitHub Actions.
-- D1 SQL statements used by customer profile and TR-069 insert/audit paths were checked with read-only `EXPLAIN` against the production schema.
-- Existing backend syntax, database hardening, production/staging endpoint and tenant-isolation/customer-portal E2E workflows passed on the current implementation commit.
+The new `worker/scripts/api-compat.test.js` tests path and method normalization. The GitHub Actions verification workflow runs it and performs Worker syntax, schema validation, backend checks and existing live-safe smoke checks. Merge or production deployment must wait for a green latest-head CI run and a separate review of the unsupported API routes.
