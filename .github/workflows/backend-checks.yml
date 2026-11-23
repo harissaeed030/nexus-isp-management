@@ -27,3 +27,5 @@ jobs:
         working-directory: backend
       - run: node --check ../assets/js/app.js
         working-directory: backend
+      - run: node --check ../worker/src/index.js
+        working-directory: backend
