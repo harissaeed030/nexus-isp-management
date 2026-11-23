@@ -4,8 +4,9 @@ import { env } from "../src/config/env.js";
 const exportUrl = `http://127.0.0.1:${env.port}/api/v1/sync/export`;
 const workerUrl = env.syncWorkerUrl;
 const workerToken = env.syncWorkerToken;
+const dryRun = process.argv.includes("--dry-run");
 if (!env.syncExportToken) throw new Error("Set SYNC_EXPORT_TOKEN in backend/.env first.");
-if (!workerUrl || !workerToken) throw new Error("Set D1_SYNC_WORKER_URL and D1_SYNC_WORKER_TOKEN in backend/.env first.");
+if (!dryRun && (!workerUrl || !workerToken)) throw new Error("Set D1_SYNC_WORKER_URL and D1_SYNC_WORKER_TOKEN in backend/.env first.");
 
 const state = db.prepare("SELECT state_value FROM sync_state WHERE state_key='d1_cursor'").get();
 let cursor = Number(state?.state_value || 0);
@@ -17,6 +18,22 @@ while (batches < 100) {
   const source = await sourceResponse.json().catch(() => null);
   if (!sourceResponse.ok || !source?.success) throw new Error(source?.error || `SQLite export failed: HTTP ${sourceResponse.status}`);
   if (!Array.isArray(source.events) || source.events.length === 0) break;
+  if (!Number.isSafeInteger(Number(source.nextCursor)) || Number(source.nextCursor) < cursor) {
+    throw new Error("SQLite export returned an invalid nextCursor.");
+  }
+  if (dryRun) {
+    const counts = {};
+    const operations = {};
+    for (const event of source.events) {
+      counts[event.entityType] = (counts[event.entityType] || 0) + 1;
+      operations[event.operation] = (operations[event.operation] || 0) + 1;
+    }
+    process.stdout.write(JSON.stringify({ dryRun: true, tenantId: source.tenantId, after: cursor, nextCursor: source.nextCursor, events: source.events.length, entities: counts, operations }) + "\\n");
+    cursor = Number(source.nextCursor);
+    batches += 1;
+    if (source.events.length < 50) break;
+    continue;
+  }
 
   const response = await fetch(workerUrl, {
     method: "POST",
