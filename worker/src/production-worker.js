@@ -349,6 +349,11 @@ if(path==='/api/onus'&&m==='POST')return await createOnu(request,env,orgId,userI
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='GET')return await getOnu(env,path,orgId);
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='PUT')return await updateOnu(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='DELETE')return await deleteOnu(env,path,orgId,userId,ip);
+if(path==='/api/acs/connections'&&['GET','POST'].includes(m))return json({error:'GenieACS connection storage is not enabled yet',code:'ACS_INTEGRATION_NOT_CONFIGURED',message:'No ACS credentials were stored and no external request was made. Configure encrypted per-tenant credential storage and a verified GenieACS NBI adapter before enabling this endpoint.'},501);
+if(/^\/api\/acs\/connections\/[^/]+\/(?:test|sync)$/.test(path)&&m==='POST')return json({error:'GenieACS NBI adapter is not enabled yet',code:'ACS_ADAPTER_UNAVAILABLE',message:'No connection test or device synchronization was attempted. Implement outbound NBI request validation, SSRF protections, credential decryption, timeouts and audit logging before enabling this operation.'},501);
+if(path==='/api/tr069/devices'&&m==='GET')return json({error:'TR-069 device inventory is not connected to an ACS yet',code:'TR069_ADAPTER_UNAVAILABLE'},501);
+if(path==='/api/tr069/audit-logs'&&m==='GET')return json({error:'TR-069 event audit storage is not configured yet',code:'TR069_AUDIT_UNAVAILABLE'},501);
+if(/^\/api\/tr069\/devices\/[^/]+\/(?:parameters|diagnostics|reboot|wifi)$/.test(path)&&['GET','POST'].includes(m))return json({error:'TR-069 device operations are not enabled until an ACS adapter is verified',code:'TR069_ADAPTER_UNAVAILABLE',message:'No ONU configuration, reboot, diagnostics or Wi-Fi task was sent.'},501);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
 if(path==='/api/reports/revenue'&&m==='GET')return await repRev(env,url,orgId);
