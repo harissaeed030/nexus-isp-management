@@ -2,6 +2,7 @@
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 export function normalizeApiMethod(method){return method==='PATCH'?'PUT':method}
+export function normalizePortalTicketPriority(priority){const value=priority||'medium';if(!['normal','low','medium','high','urgent'].includes(value))return null;return value==='normal'?'medium':value}
 export function normalizeApiPath(pathname){const path=String(pathname||'').replace(/^\/api\/v1\//,'/api/');return path==='/api/tenants/register'?'/api/auth/register':path}
 export function mapTicketRow(row){return {...row,customer_name:[row.first_name,row.last_name].filter(Boolean).join(' ')||row.customer_name||'',customer_id:row.customer_id||null,priority:row.priority||'normal'}}
 export function normalizeTicketPayload(body){return {...body,customer_id:body.customer_id??body.customerId??null,subject:body.subject,description:body.description||null}}
@@ -718,9 +719,8 @@ async function createPortalTicket(r,env,account,ip){
  const subject=b.subject.trim(),description=(b.description||'').trim();
  if(!subject||subject.length>180)return json({error:'Subject must be 1-180 characters'},400);
  if(description.length>4000)return json({error:'Description is too long'},400);
- const requestedPriority=b.priority||'medium';
- if(!['normal','low','medium','high','urgent'].includes(requestedPriority))return json({error:'Invalid complaint priority'},400);
- const priority=requestedPriority==='normal'?'medium':requestedPriority;
+ const priority=normalizePortalTicketPriority(b.priority);
+ if(!priority)return json({error:'Invalid complaint priority'},400);
  const id=uuid();
  await env.DB.prepare("INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status) VALUES(?,?,?,?,?,?, 'open')").bind(id,account.organization_id,account.customer_id,subject,description||null,priority).run();
  await notifyAdmins(env,account.organization_id,'New customer portal complaint',subject,'support');
