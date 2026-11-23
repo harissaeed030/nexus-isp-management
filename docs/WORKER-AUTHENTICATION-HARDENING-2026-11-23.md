@@ -56,3 +56,14 @@ A new architecture-boundary contract test covers both behaviors. All four GitHub
 - NEXUS backend verification
 
 This verifies source syntax and contract tests; it does not constitute a live browser sign-in test or Worker deployment.
+
+
+## Cloudflare Pages preview
+
+The connected Pages project `nexus-isp-management` is configured with `main` as its production branch. The updated `build/nexus-isp-core` branch was automatically built and deployed as a **preview**, not production:
+
+- Preview: https://212e72d2.nexus-isp-management.pages.dev
+- Source commit: `1c86cd50c3d0bbe48a6bfad0e1e6391b6db2255e`
+- Build and deploy stages: success (2026-11-23 05:40 UTC)
+
+This confirms the static dashboard preview is published. It does not prove browser sign-in, API CORS, or live D1 functionality. The production Pages branch remains `main`; no production Pages promotion or Worker deployment was performed.
