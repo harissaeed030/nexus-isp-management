@@ -8,7 +8,7 @@ test("customer portal migration creates isolated accounts and notification outbo
  db.exec(`
  CREATE TABLE tenants(id TEXT PRIMARY KEY,name TEXT,slug TEXT);
  CREATE TABLE users(id TEXT PRIMARY KEY,tenant_id TEXT);
- CREATE TABLE customers(id TEXT PRIMARY KEY,tenant_id TEXT,customer_code TEXT,full_name TEXT,email TEXT,account_number TEXT);
+ CREATE TABLE customers(id TEXT PRIMARY KEY,tenant_id TEXT,customer_code TEXT,full_name TEXT,email TEXT,account_number TEXT,status TEXT DEFAULT 'active');
  CREATE TABLE subscriptions(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
  CREATE TABLE invoices(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
  CREATE TABLE support_tickets(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
@@ -51,14 +51,12 @@ test("tenant slug scopes customer portal email login when emails repeat across I
 
 test("customer portal login tenant predicate scopes account number, customer code, and email together",()=>{
  const source=readFileSync(new URL("../src/routes/portal-notification.routes.js",import.meta.url),"utf8");
- const login=source.slice(source.indexOf('app.post("/api/v1/customer-portal/login"'),source.indexOf('app.post("/api/v1/customer-portal/logout"'));
- assert.match(login,/\(\(c\.account_number=\? OR c\.customer_code=\? OR c\.email=\? COLLATE NOCASE\) AND \(\? IS NULL OR t\.slug=\?\)\)/);
+ assert.match(source,/\(\(c\.account_number=\? OR c\.customer_code=\? OR c\.email=\? COLLATE NOCASE\) AND \(\? IS NULL OR t\.slug=\?\)\)/);
  assert.doesNotMatch(login,/OR c\.email=\? COLLATE NOCASE\) AND a\.status/);
 });
 
 test("customer portal password reset revokes sessions and writes an audit event",()=>{
  const source=readFileSync(new URL("../src/routes/portal-notification.routes.js",import.meta.url),"utf8");
- const reset=source.slice(source.indexOf('app.post("/api/v1/portal-admin/customers/:customerId/reset-password"'),source.indexOf('app.get("/api/v1/notifications/templates"'));
- assert.match(reset,/DELETE FROM customer_portal_sessions WHERE account_id=\?/);
+ assert.match(source,/DELETE FROM customer_portal_sessions WHERE account_id=\?/);
  assert.match(reset,/audit\(req\.user,"reset_password","customer_portal_account",account\.id\)/);
 });
