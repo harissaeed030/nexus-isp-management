@@ -58,6 +58,8 @@ const PERMISSIONS=[
  {key:'pppoe.manage',group:'Network',label:'Manage PPPoE accounts'},
  {key:'onus.read',group:'Network',label:'View ONU / ONT inventory'},
  {key:'onus.manage',group:'Network',label:'Manage ONU / ONT inventory'},
+ {key:'tr069.read',group:'Network',label:'View TR-069 / ACS devices'},
+ {key:'tr069.manage',group:'Network',label:'Manage ACS connections and CPE tasks'},
  {key:'connection.read',group:'Network',label:'View connection status'},
  {key:'audit.read',group:'Administration',label:'View activity log'},
  {key:'notifications.read',group:'Administration',label:'View notifications'},
@@ -68,7 +70,7 @@ const ROLE_PERMISSIONS={
  owner:['*'],admin:['*'],
  billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','payment_promises.read','payment_promises.manage','reports.read','notifications.read','refunds.read','refunds.manage'],
  support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read','notifications.read'],
- technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read'],
+ technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','tr069.read','tr069.manage','connection.read','notifications.read'],
  staff:['dashboard.read','notifications.read']
 };
 function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
@@ -80,6 +82,9 @@ function permissionForRoute(path,method){
  if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
  if(match('/api/operations/payment-promises'))return v==='GET'?'payment_promises.read':['POST','PUT'].includes(v)?'payment_promises.manage':null;
  if(path==='/api/financial/aging')return v==='GET'?'billing.read':null;
+ if(match('/api/acs/connections'))return v==='GET'?'tr069.read':'tr069.manage';
+ if(match('/api/tr069/devices'))return v==='GET'?'tr069.read':'tr069.manage';
+ if(path==='/api/tr069/audit-logs')return v==='GET'?'tr069.read':null;
  if(path==='/api/billing/generate')return v==='POST'?'billing.generate':null;
  if(path.match(/^\/api\/invoices\/[^/]+\/payments$/))return v==='POST'?'payments.create':null;
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
@@ -218,7 +223,10 @@ export function normalizeApiPath(input){
   ['/api/setup','/api/auth/register'],
   ['/api/dashboard','/api/dashboard/stats'],
   ['/api/tickets','/api/complaints'],
-  ['/api/routers','/api/network/devices']
+  ['/api/routers','/api/network/devices'],
+  ['/api/acs/connections','/api/acs/connections'],
+  ['/api/tr069/devices','/api/tr069/devices'],
+  ['/api/tr069/audit-logs','/api/tr069/audit-logs']
  ]);
  if(exact.has(base))return exact.get(base);
  if(base.startsWith('/api/tickets/'))return '/api/complaints/'+base.slice('/api/tickets/'.length);
@@ -254,6 +262,7 @@ if(path==='/api/auth/logout'&&m==='POST'){await env.DB.prepare('UPDATE users SET
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
 if(path==='/api/customers'&&m==='GET')return await listCust(env,url,orgId);
 if(path==='/api/customers'&&m==='POST')return await createCust(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/customers\/[^/]+\/profile$/)&&m==='GET')return await getCustomerProfile(env,path,orgId);
 if(path.match(/^\/api\/customers\/[^/]+$/)&&m==='GET')return await getCust(env,path,orgId);
 if(path.match(/^\/api\/customers\/[^/]+$/)&&m==='PUT')return await updateCust(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/customers\/[^/]+$/)&&m==='DELETE')return await delCust(env,path,orgId,userId,ip);
@@ -297,6 +306,16 @@ if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='GET')return await getNet
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='PUT')return await updateNetworkDevice(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='DELETE')return await delNetworkDevice(env,path,orgId,userId,ip);
 if(path==='/api/network/status'&&m==='GET')return await networkStatus(env,orgId);
+if(path==='/api/acs/connections'&&m==='GET')return await listAcsConnections(env,orgId);
+if(path==='/api/acs/connections'&&m==='POST')return await createAcsConnection(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/acs\/connections\/[^/]+\/test$/)&&m==='POST')return await testAcsConnection(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/acs\/connections\/[^/]+\/sync$/)&&m==='POST')return await syncAcsDevices(env,path,orgId,userId,ip);
+if(path==='/api/tr069/devices'&&m==='GET')return await listTr069Devices(env,url,orgId);
+if(path==='/api/tr069/audit-logs'&&m==='GET')return await listTr069Audit(env,url,orgId);
+if(path.match(/^\/api\/tr069\/devices\/[^/]+\/parameters$/)&&m==='GET')return await getTr069Parameters(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/tr069\/devices\/[^/]+\/diagnostics$/)&&m==='POST')return await queueTr069Diagnostics(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/tr069\/devices\/[^/]+\/reboot$/)&&m==='POST')return await queueTr069Reboot(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/tr069\/devices\/[^/]+\/wifi$/)&&m==='POST')return await queueTr069Wifi(request,env,path,orgId,userId,ip);
 if(path==='/api/onus'&&m==='GET')return await listOnus(env,url,orgId);
 if(path==='/api/onus'&&m==='POST')return await createOnu(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='GET')return await getOnu(env,path,orgId);
@@ -535,6 +554,20 @@ async function dashStats(env,oid){const c=await env.DB.prepare('SELECT COUNT(*)v
 
 async function listCust(env,url,oid){const{page,pp,off}=pg(url);const q=url.searchParams.get('search')||'';const st=url.searchParams.get('status')||'';let w='WHERE organization_id=?';const p=[oid];if(q){w+=' AND(first_name LIKE? OR last_name LIKE? OR email LIKE? OR phone LIKE?)';const s='%'+q+'%';p.push(s,s,s,s)}if(st){w+=' AND status=?';p.push(st)}const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM customers '+w).bind(...p).first();const rows=await env.DB.prepare('SELECT * FROM customers '+w+' ORDER BY created_at DESC LIMIT? OFFSET?').bind(...p,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 async function createCust(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['first_name']);if(ms.length)return json({error:'Missing fields',fields:ms},400);const id=uuid();const code='CUS-'+crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase();await env.DB.prepare('INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,city,status,customer_code,balance,notes,installation_address,installation_date,id_type,id_number)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,s(b.first_name),b.last_name||'',b.email||null,b.phone||null,b.address||null,b.city||null,b.status||'active',code,b.balance||0,b.notes||null,b.installation_address||null,b.installation_date||null,b.id_type||null,b.id_number||null).run();await audit(env,oid,uid,'create_customer','Customer:'+b.first_name,ip);return json(await env.DB.prepare('SELECT * FROM customers WHERE id=?').bind(id).first(),201)}
+async function getCustomerProfile(env,path,oid){
+ const id=path.split('/')[3];
+ const customer=await env.DB.prepare("SELECT c.*,c.first_name||' '||c.last_name AS full_name FROM customers c WHERE c.id=? AND c.organization_id=?").bind(id,oid).first();
+ if(!customer)return json({error:'Customer not found'},404);
+ const [subs,invoices,payments,tickets,connectionHistory,subscriptionHistory]=await Promise.all([
+  env.DB.prepare("SELECT s.*,p.name AS package_name,p.price,p.speed_mbps FROM subscriptions s LEFT JOIN packages p ON p.id=s.package_id AND p.organization_id=s.organization_id WHERE s.customer_id=? AND s.organization_id=? ORDER BY s.created_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT * FROM invoices WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT p.*,i.invoice_number FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id AND i.organization_id=p.organization_id WHERE p.customer_id=? AND p.organization_id=? ORDER BY p.paid_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT * FROM support_tickets WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT * FROM customer_connection_history WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT * FROM subscription_history WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC").bind(id,oid).all()
+ ]);
+ return json({success:true,data:{customer,subscriptions:subs.results||[],invoices:invoices.results||[],payments:payments.results||[],complaints:tickets.results||[],connectionHistory:connectionHistory.results||[],subscriptionHistory:subscriptionHistory.results||[]}});
+}
 async function getCust(env,path,oid){const id=path.split('/')[3];const cu=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!cu)return json({error:'Not found'},404);const subs=await env.DB.prepare('SELECT s.*,p.name package_name,p.price,p.speed_mbps FROM subscriptions s LEFT JOIN packages p ON s.package_id=p.id WHERE s.customer_id=? AND s.organization_id=?').bind(id,oid).all();const inv=await env.DB.prepare('SELECT * FROM invoices WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const pay=await env.DB.prepare('SELECT * FROM payments WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const comp=await env.DB.prepare('SELECT * FROM support_tickets WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();return json({...cu,subscriptions:subs.results,invoices:inv.results,payments:pay.results,complaints:comp.results})}
 async function updateCust(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);const f=['first_name','last_name','email','phone','address','city','status','notes','installation_address','installation_date','id_type','id_number','balance'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE customers SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();await audit(env,oid,uid,'update_customer','Updated:'+ex.first_name,ip);return json(await env.DB.prepare('SELECT * FROM customers WHERE id=?').bind(id).first())}
 async function delCust(env,path,oid,uid,ip){const id=path.split('/')[3];const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM customers WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_customer','Deleted:'+ex.first_name,ip);return json({success:true})}
@@ -806,6 +839,128 @@ async function delPppoe(env,path,oid,uid,ip){
  const id=path.split('/')[3],r=await env.DB.prepare('DELETE FROM pppoe_accounts WHERE id=? AND organization_id=?').bind(id,oid).run();
  if(!r.meta?.changes)return json({error:'Not found'},404);
  await audit(env,oid,uid,'delete_pppoe','PPPoE:'+id,ip);return json({success:true})
+}
+function acsCryptoKey(env,usages){
+ if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
+ return crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']).then(material=>crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-ACS-SALT-V1'),info:new TextEncoder().encode('NEXUS-ACS-CREDENTIAL-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,usages));
+}
+async function encryptAcsSecret(value,env){
+ if(!value)return null;
+ const key=await acsCryptoKey(env,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12));
+ const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(value));
+ return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(cipher));
+}
+async function decryptAcsSecret(value,env){
+ if(!value)return '';
+ const p=String(value).split(':');if(p.length!==4||p[0]!=='enc'||p[1]!=='v1')throw new Error('ACS credential ciphertext is invalid');
+ const key=await acsCryptoKey(env,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
+ return new TextDecoder().decode(plain);
+}
+function validateAcsUrl(value){
+ let u;try{u=new URL(String(value||''))}catch{return null}
+ const h=u.hostname.toLowerCase();
+ if(u.protocol!=='https:'||u.username||u.password||u.hash||!h.includes('.')||h==='localhost'||h.endsWith('.local')||h.endsWith('.internal')||h.endsWith('.localhost')||/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.startsWith('['))return null;
+ if(u.port&&(!/^\d+$/.test(u.port)||Number(u.port)<1||Number(u.port)>65535))return null;
+ u.search='';u.hash='';u.pathname=u.pathname.replace(/\/+$/,'')+'/';return u;
+}
+function acsView(row){return{id:row.id,name:row.name,baseUrl:row.base_url,timeoutMs:row.timeout_ms,enabled:Number(row.enabled)===1,lastTestAt:row.last_test_at,lastTestOk:row.last_test_ok===null?null:Number(row.last_test_ok)===1,lastError:row.last_error,createdAt:row.created_at,updatedAt:row.updated_at}}
+async function listAcsConnections(env,oid){
+ const rows=await env.DB.prepare('SELECT id,name,base_url,timeout_ms,enabled,last_test_at,last_test_ok,last_error,created_at,updated_at FROM acs_connections WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();
+ return json({data:(rows.results||[]).map(acsView)});
+}
+async function createAcsConnection(request,env,oid,uid,ip){
+ const b=await parseBody(request);if(!b||typeof b.name!=='string'||!b.name.trim()||b.name.trim().length>100)return json({error:'Connection name is required'},400);
+ const base=validateAcsUrl(b.baseUrl);if(!base)return json({error:'ACS NBI URL must be a public HTTPS URL; local/private HTTP endpoints are not accepted'},400);
+ const username=String(b.username||''),password=String(b.password||''),token=String(b.token||'');
+ if((username&&!password)||(!username&&password)||(token&&(username||password)))return json({error:'Use either a complete username/password pair or a bearer token, not both'},400);
+ if(username.length>200||password.length>1000||token.length>2000)return json({error:'ACS credential is too long'},400);
+ const timeout=Number(b.timeoutMs||8000);if(!Number.isInteger(timeout)||timeout<1000||timeout>30000)return json({error:'Timeout must be between 1000 and 30000 ms'},400);
+ const id=uuid(),uc=await encryptAcsSecret(username,env),pc=await encryptAcsSecret(password,env),tc=await encryptAcsSecret(token,env);
+ await env.DB.prepare('INSERT INTO acs_connections(id,organization_id,name,base_url,username_cipher,password_cipher,token_cipher,timeout_ms,enabled) VALUES(?,?,?,?,?,?,?,?,1)').bind(id,oid,b.name.trim(),base.toString(),uc,pc,tc,timeout).run();
+ await audit(env,oid,uid,'create_acs_connection','ACS:'+id,ip);
+ return json({success:true,data:acsView(await env.DB.prepare('SELECT * FROM acs_connections WHERE id=? AND organization_id=?').bind(id,oid).first())},201);
+}
+async function getAcsConnection(env,id,oid){return await env.DB.prepare('SELECT * FROM acs_connections WHERE id=? AND organization_id=? AND enabled=1').bind(id,oid).first()}
+async function acsRequest(connection,env,pathname,query='',body=null){
+ const base=validateAcsUrl(connection.base_url);if(!base)throw new Error('ACS URL is invalid or no longer allowed');
+ const url=new URL(pathname.replace(/^\/+/,''),base);if(query)url.search=query;
+ const token=await decryptAcsSecret(connection.token_cipher,env),username=await decryptAcsSecret(connection.username_cipher,env),password=await decryptAcsSecret(connection.password_cipher,env);
+ const headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;else if(username)headers.Authorization='Basic '+btoa(username+':'+password);
+ if(body!==null)headers['Content-Type']='application/json';
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),Math.min(30000,Math.max(1000,Number(connection.timeout_ms)||8000)));
+ try{const response=await fetch(url.toString(),{method:body===null?'GET':'POST',headers,body:body===null?undefined:JSON.stringify(body),signal:controller.signal,redirect:'error'});const raw=await response.text();if(!response.ok)throw new Error('ACS returned HTTP '+response.status);let data;try{data=raw?JSON.parse(raw):{}}catch{throw new Error('ACS returned invalid JSON')}return data}finally{clearTimeout(timer)}
+}
+function tr069IdFromPath(path){return decodeURIComponent(path.split('/')[4]||'')}
+function tr069Status(lastInform){if(!lastInform)return'unknown';const age=Date.now()-Date.parse(lastInform);if(!Number.isFinite(age))return'unknown';return age<=600000?'online':'offline'}
+function redactTr069Tree(value,key=''){
+ if(/password|secret|token|privatekey|pre.?shared|psk/i.test(key))return undefined;
+ if(Array.isArray(value))return value.slice(0,100).map(x=>redactTr069Tree(x,key)).filter(x=>x!==undefined);
+ if(value&&typeof value==='object'){const out={};for(const[k,v]of Object.entries(value)){const safe=redactTr069Tree(v,k);if(safe!==undefined)out[k]=safe}return out}
+ if(typeof value==='string')return value.slice(0,1000);return value;
+}
+async function listTr069Devices(env,url,oid){
+ const{page,pp,off}=pg(url,50),q=url.searchParams.get('search')||'',status=url.searchParams.get('status')||'';
+ let where='WHERE d.organization_id=?',params=[oid];if(q){where+=' AND (d.device_id LIKE ? OR d.serial_number LIKE ? OR d.model LIKE ? OR d.manufacturer LIKE ?)';const v='%'+q+'%';params.push(v,v,v,v)}if(status){where+=' AND d.inform_status=?';params.push(status)}
+ const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM tr069_devices d '+where).bind(...params).first();
+ const rows=await env.DB.prepare('SELECT d.*,a.name AS connection_name FROM tr069_devices d LEFT JOIN acs_connections a ON a.id=d.acs_connection_id AND a.organization_id=d.organization_id '+where+' ORDER BY d.last_inform_at DESC LIMIT ? OFFSET ?').bind(...params,pp,off).all();
+ return json({data:(rows.results||[]).map(x=>({id:x.id,deviceId:x.device_id,manufacturer:x.manufacturer,oui:x.oui,productClass:x.product_class,model:x.model,serialNumber:x.serial_number,lastInformAt:x.last_inform_at,lastBootAt:x.last_boot_at,status:tr069Status(x.last_inform_at),lastSyncedAt:x.last_synced_at,connectionName:x.connection_name})),pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+}
+async function listTr069Audit(env,url,oid){
+ const{page,pp,off}=pg(url,50),rows=await env.DB.prepare('SELECT id,actor_user_id,device_id,acs_connection_id,action,parameter_name,old_value,new_value,result,details,created_at FROM tr069_audit_logs WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp}});
+}
+async function acsDeviceByLocalId(env,path,oid){
+ const id=tr069IdFromPath(path);
+ return await env.DB.prepare('SELECT d.*,a.base_url,a.username_cipher,a.password_cipher,a.token_cipher,a.timeout_ms,a.enabled FROM tr069_devices d JOIN acs_connections a ON a.id=d.acs_connection_id AND a.organization_id=d.organization_id WHERE d.id=? AND d.organization_id=? AND a.enabled=1').bind(id,oid).first();
+}
+async function auditTr069(env,oid,uid,deviceId,connectionId,action,param,oldValue,newValue,result,details,ip){
+ await env.DB.prepare('INSERT INTO tr069_audit_logs(id,organization_id,actor_user_id,device_id,acs_connection_id,action,parameter_name,old_value,new_value,result,details) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(uuid(),oid,uid,deviceId,connectionId,action,param,oldValue===null?null:String(oldValue).slice(0,300),newValue===null?null:String(newValue).slice(0,300),result,details?String(details).slice(0,500):null).run();
+ await audit(env,oid,uid,'tr069_'+action,'Device:'+deviceId,ip);
+}
+async function syncAcsDevices(env,path,oid,uid,ip){
+ const id=path.split('/')[4],connection=await getAcsConnection(env,id,oid);if(!connection)return json({error:'ACS connection not found or disabled'},404);
+ let devices;try{devices=await acsRequest(connection,env,'devices','query='+encodeURIComponent('{}')+'&projection='+encodeURIComponent('_id,_lastInform,_lastBoot,DeviceID,InternetGatewayDevice.DeviceInfo,Device.DeviceInfo'))}catch(e){await env.DB.prepare("UPDATE acs_connections SET last_test_at=datetime('now'),last_test_ok=0,last_error=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(String(e.message).slice(0,200),id,oid).run();await auditTr069(env,oid,uid,null,id,'sync_devices',null,null,null,'failed',e.message,ip);return json({error:'ACS sync failed: '+e.message},502)}
+ if(!Array.isArray(devices))return json({error:'ACS device list response is invalid'},502);
+ const statements=[];for(const d of devices.slice(0,5000)){const deviceId=String(d._id||'');if(!deviceId)continue;const tree=d.InternetGatewayDevice?.DeviceInfo||d.Device?.DeviceInfo||{},val=x=>x&&typeof x==='object'&&'_value'in x?x._value:x??null,serial=val(tree.SerialNumber)||null,manufacturer=val(tree.Manufacturer)||null,model=val(tree.ModelName)||val(tree.ProductClass)||null,lastInform=d._lastInform||null,lastBoot=d._lastBoot||null;
+ statements.push(env.DB.prepare("INSERT INTO tr069_devices(id,organization_id,acs_connection_id,device_id,manufacturer,oui,product_class,model,serial_number,last_inform_at,last_boot_at,inform_status,parameter_snapshot,last_synced_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'{}',datetime('now')) ON CONFLICT(organization_id,acs_connection_id,device_id) DO UPDATE SET manufacturer=excluded.manufacturer,oui=excluded.oui,product_class=excluded.product_class,model=excluded.model,serial_number=excluded.serial_number,last_inform_at=excluded.last_inform_at,last_boot_at=excluded.last_boot_at,inform_status=excluded.inform_status,last_synced_at=datetime('now'),updated_at=datetime('now')").bind(uuid(),oid,id,deviceId,manufacturer,val(tree.OUI),val(tree.ProductClass),model,serial,lastInform,lastBoot,tr069Status(lastInform)));
+ }
+ for(let i=0;i<statements.length;i+=50)await env.DB.batch(statements.slice(i,i+50));
+ await env.DB.prepare("UPDATE acs_connections SET last_test_at=datetime('now'),last_test_ok=1,last_error=NULL,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid).run();
+ const synced=statements.length;await auditTr069(env,oid,uid,null,id,'sync_devices',null,null,String(synced),'success',null,ip);
+ return json({success:true,data:{synced}});
+}
+async function testAcsConnection(env,path,oid,uid,ip){
+ const id=path.split('/')[4],connection=await getAcsConnection(env,id,oid);if(!connection)return json({error:'ACS connection not found or disabled'},404);
+ try{const devices=await acsRequest(connection,env,'devices','query='+encodeURIComponent('{}')+'&projection='+encodeURIComponent('_id'));if(!Array.isArray(devices))throw new Error('Unexpected ACS response');await env.DB.prepare("UPDATE acs_connections SET last_test_at=datetime('now'),last_test_ok=1,last_error=NULL,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid).run();await auditTr069(env,oid,uid,null,id,'test_connection',null,null,String(devices.length),'success',null,ip);return json({success:true,data:{deviceCount:devices.length}})}catch(e){await env.DB.prepare("UPDATE acs_connections SET last_test_at=datetime('now'),last_test_ok=0,last_error=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(String(e.message).slice(0,200),id,oid).run();await auditTr069(env,oid,uid,null,id,'test_connection',null,null,null,'failed',e.message,ip);return json({error:'ACS connection test failed: '+e.message},502)}
+}
+async function getTr069Parameters(env,path,oid,uid,ip){
+ const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
+ const query='query='+encodeURIComponent(JSON.stringify({_id:row.device_id}))+'&projection='+encodeURIComponent('_id,InternetGatewayDevice,Device');
+ const found=await acsRequest(row,env,'devices',query),device=Array.isArray(found)?found[0]:null;if(!device)return json({error:'Device is no longer present in ACS'},404);
+ const tree=redactTr069Tree(device),params={};
+ function walk(value,prefix=''){if(!value||typeof value!=='object'||Array.isArray(value))return;for(const[k,v]of Object.entries(value)){if(k==='_value')continue;if(v&&typeof v==='object'){if('_value'in v)params[prefix?prefix+'.'+k:k]={value:v._value,type:v._type||null};else walk(v,prefix?prefix+'.'+k:k)}}}
+ walk(tree.InternetGatewayDevice||tree.Device||{});
+ await auditTr069(env,oid,uid,row.id,row.acs_connection_id,'read_parameters',null,null,null,'success',null,ip);return json({data:params});
+}
+async function queueTr069Task(env,path,oid,uid,ip,taskName,parameters=[]){
+ const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
+ const body={name:taskName};if(parameters.length)body.parameterValues=parameters;
+ const url='devices/'+encodeURIComponent(row.device_id)+'/tasks';await acsRequest(row,env,url,'connection_request',body);
+ await auditTr069(env,oid,uid,row.id,row.acs_connection_id,'queue_'+taskName,null,null,null,'queued',null,ip);return json({success:true,data:{queued:true,task:taskName}});
+}
+async function queueTr069Diagnostics(env,path,oid,uid,ip){
+ const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
+ const root='InternetGatewayDevice';return await queueTr069Task(env,path,oid,uid,ip,'refreshObject',[[root+'.WANDevice','']]);
+}
+async function queueTr069Reboot(env,path,oid,uid,ip){const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);await queueTr069Task(env,path,oid,uid,ip,'reboot');return json({success:true,data:{queued:true,deviceId:row.device_id}})}
+async function queueTr069Wifi(request,env,path,oid,uid,ip){
+ const b=await parseBody(request);if(!b)return json({error:'Invalid body'},400);
+ const validParam=v=>typeof v==='string'&&v.length<=240&&/^(InternetGatewayDevice|Device)\.(?:[A-Za-z0-9_\-]+\.){1,18}[A-Za-z0-9_\-]+$/.test(v);
+ if(!validParam(b.ssidParameter)||!validParam(b.passwordParameter)||typeof b.ssid!=='string'||b.ssid.length<1||b.ssid.length>32||typeof b.password!=='string'||b.password.length<8||b.password.length>63)return json({error:'Valid discovered SSID/password parameter paths and values are required'},400);
+ const values=[[b.ssidParameter,b.ssid,'xsd:string'],[b.passwordParameter,b.password,'xsd:string']];
+ if(b.enableParameter){if(!validParam(b.enableParameter))return json({error:'Invalid Wi-Fi enable parameter path'},400);values.push([b.enableParameter,String(b.enabled!=='false'),'xsd:boolean'])}
+ const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
+ return await queueTr069Task(env,path,oid,uid,ip,'setParameterValues',values);
 }
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
