@@ -34,7 +34,7 @@ try{
  assert.equal(allocation.data.data.amount_pkr,1000);
  const repeated=await request("/api/v1/unallocated-payments/"+unallocated.data.data.id+"/allocate","POST",{invoiceId:invoice.data.data.id},token);
  assert.equal(repeated.status,409);
- const payments=db.prepare("SELECT COUNT(*) n FROM payments WHERE tenant_id=? AND invoice_id=?").get(setup.data.user.tenant_id,invoice.data.data.id);
+ const payments=db.prepare("SELECT COUNT(*) n FROM payments WHERE tenant_id=? AND invoice_id=?").get(unallocated.data.data.tenant_id,invoice.data.data.id);
  assert.equal(payments.n,1);
  const stored=db.prepare("SELECT status,allocated_invoice_id FROM unallocated_payments WHERE id=?").get(unallocated.data.data.id);
  assert.equal(stored.status,"allocated");
