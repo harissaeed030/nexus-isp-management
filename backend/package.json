@@ -16,7 +16,8 @@
     "verify": "npm run check && npm test",
     "db:backup": "node scripts/db-backup.js",
     "db:restore": "node scripts/db-restore.js",
-    "sync:d1": "node scripts/sync-to-d1.js"
+    "sync:d1": "node scripts/sync-to-d1.js",
+    "sync:d1:dry-run": "node scripts/sync-to-d1.js --dry-run"
   },
   "dependencies": {
     "cors": "^2.8.5",
