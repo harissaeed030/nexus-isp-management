@@ -469,3 +469,23 @@ test("CORS accepts the NEXUS Pages production host and HTTPS preview deployments
   const insecure = "http://071fff80.nexus-isp-management.pages.dev";
   assert.equal(corsHeaders(new Request("https://api.example.com", {headers:{Origin:insecure}}), {}).get("Access-Control-Allow-Origin"), null);
 });
+
+
+test("customer portal authentication is tenant-scoped and token-version revocation is enforced",()=>{
+  assert.match(source,/if\(path==='\/api\/portal\/auth\/login'&&m==='POST'\)return await portalLogin/);
+  assert.match(source,/a\.organization_id=\? AND a\.status='active'/);
+  assert.match(source,/c\.organization_id=a\.organization_id/);
+  assert.match(source,/tokenVersion:Number\(account\.token_version\|\|0\)/);
+  assert.match(source,/Number\(account\.token_version\|\|0\)!==Number\(auth\.tokenVersion\|\|0\)/);
+  assert.match(source,/UPDATE customer_portal_accounts SET token_version=COALESCE\(token_version,0\)\+1/);
+  assert.match(source,/async function changePortalPassword/);
+});
+
+test("customer portal dashboard queries constrain customer and organization together",()=>{
+  const start=source.indexOf("async function handlePortalApi");
+  const end=source.indexOf("async function authReg",start);
+  const portal=source.slice(start,end);
+  assert.match(portal,/WHERE i\.organization_id=\? AND i\.customer_id=\?/);
+  assert.match(portal,/WHERE p\.organization_id=\? AND p\.customer_id=\?/);
+  assert.match(portal,/WHERE organization_id=\? AND customer_id=\?/);
+});
