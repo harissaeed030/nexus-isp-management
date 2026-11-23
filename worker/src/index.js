@@ -170,6 +170,7 @@ async function runMigrations(env){
  ['org.phone','ALTER TABLE organizations ADD COLUMN phone TEXT'],
  ['org.address','ALTER TABLE organizations ADD COLUMN address TEXT'],
  ['org.currency',"ALTER TABLE organizations ADD COLUMN currency TEXT DEFAULT 'USD'"],
+ ['org.brand_color',"ALTER TABLE organizations ADD COLUMN brand_color TEXT NOT NULL DEFAULT '#16a34a'"],
  ['cust.balance','ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0'],
  ['cust.notes','ALTER TABLE customers ADD COLUMN notes TEXT'],
  ['cust.inst_addr','ALTER TABLE customers ADD COLUMN installation_address TEXT'],
@@ -259,6 +260,28 @@ if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.sp
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='POST')return await savePortalAccount(request,env,path,orgId,userId,role,ip);
 if(path==='/api/auth/me'&&m==='GET')return await authMe(env,auth);
 if(path==='/api/auth/logout'&&m==='POST'){await env.DB.prepare('UPDATE users SET token_version=COALESCE(token_version,0)+1,updated_at=datetime(\'now\') WHERE id=? AND organization_id=?').bind(userId,orgId).run();return json({success:true})}
+if(path==='/api/tenant'&&['GET','PATCH'].includes(m)){
+ if(role!=='owner')return json({error:'Only the workspace owner can manage workspace settings'},403);
+ if(m==='GET'){
+  const tenant=await env.DB.prepare("SELECT id,name,slug,plan,brand_color,phone AS support_phone,address,created_at FROM organizations WHERE id=?").bind(orgId).first();
+  return tenant?json({success:true,data:{...tenant,customer_limit:null}}):json({error:'Workspace not found'},404);
+ }
+ const b=await parseBody(request);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const current=await env.DB.prepare('SELECT id,name,brand_color,phone,address FROM organizations WHERE id=?').bind(orgId).first();
+ if(!current)return json({error:'Workspace not found'},404);
+ const name=b.name===undefined?current.name:s(b.name);
+ const color=b.brandColor===undefined?current.brand_color:b.brandColor;
+ const phone=b.supportPhone===undefined?current.phone:(b.supportPhone===null?null:String(b.supportPhone).trim());
+ const address=b.address===undefined?current.address:(b.address===null?null:String(b.address).trim());
+ if(typeof name!=='string'||name.length<2||name.length>120)return json({error:'Workspace name must be 2–120 characters'},400);
+ if(typeof color!=='string'||!/^#[0-9a-fA-F]{6}$/.test(color))return json({error:'Brand colour must look like #16a34a'},400);
+ if(phone!==null&&(typeof phone!=='string'||phone.length>30||!/^[0-9+()\\-\\s]*$/.test(phone)))return json({error:'Support phone is not valid'},400);
+ if(address!==null&&(typeof address!=='string'||address.length>300))return json({error:'Address is too long'},400);
+ await env.DB.prepare('UPDATE organizations SET name=?,brand_color=?,phone=?,address=? WHERE id=?').bind(name,color,phone||null,address||null,orgId).run();
+ await audit(env,orgId,userId,'update_tenant_settings','Workspace settings updated',ip);
+ const tenant=await env.DB.prepare("SELECT id,name,slug,plan,brand_color,phone AS support_phone,address,created_at FROM organizations WHERE id=?").bind(orgId).first();
+ return json({success:true,data:{...tenant,customer_limit:null}});
+}
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
 if(path==='/api/customers'&&m==='GET')return await listCust(env,url,orgId);
 if(path==='/api/customers'&&m==='POST')return await createCust(request,env,orgId,userId,ip);
