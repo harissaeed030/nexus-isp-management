@@ -85,3 +85,20 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 - The staging customer-portal E2E functional flow completed, but its cleanup step failed because the currently deployed staging Worker returned 404 for the staging-only `DELETE /api/e2e/tenant` cleanup endpoint. This indicates live staging Worker/source drift; do not hide the failure or deploy automatically. Synthetic staging test tenants may remain until the staging cleanup route is restored and verified.
 - Android debug APK workflow was still running at the last status check.
 - No Cloudflare Worker deployment, live D1 migration/write, secrets change, Pages deployment, or live router/OLT action was performed.
+
+
+## Router inventory compatibility tranche
+
+- Added tenant-scoped `GET/POST /api/routers` and `PATCH/DELETE /api/routers/:id` compatibility routes mapped to MikroTik `network_devices` inventory.
+- Router API passwords are encrypted with AES-GCM using a key derived from the Worker secret and stored separately in the tenant-guarded `router_credentials` table. The API never returns plaintext passwords or ciphertext; create and rotation write audit events.
+- Added explicit `ROUTER_LIVE_ADAPTER_UNAVAILABLE` 501 responses for RouterOS live tests, PPPoE secret/profile/session actions and customer synchronization. No fake “connected” state is returned; a verified API-SSL adapter and physical staging router are still required.
+- Added D1 source migration `0023_router_credentials_ciphertext.sql`, canonical schema table/index/triggers and cross-tenant credential validation. Migration 0023 remains unapplied to live D1.
+- Production Worker bundle was synchronized with the same router API while continuing to exclude the staging-only cleanup route.
+
+### Latest CI update
+
+- Latest checked head: `a97179d30cfca6ca7043e4ccb3db731ca230a574`.
+- Backend Node 22/26, D1 migration/schema validation (0022/0023), database hardening, SQLite-D1 sync, SQLite migration reconciliation, live smoke and staging tenant/customer-portal E2E all passed.
+- Android debug APK workflow was still building at the last check.
+- An earlier intermediate head had a staging cleanup 404; the latest E2E run passed, so that intermediate failure is not the current head status.
+- No Worker deployment, live D1 migration/write, secrets change, Pages deployment or physical router operation was performed.
