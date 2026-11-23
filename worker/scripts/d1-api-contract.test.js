@@ -470,6 +470,7 @@ test("CORS accepts the NEXUS Pages production host and HTTPS preview deployments
   const allowed = "https://071fff80.nexus-isp-management.pages.dev";
   const preview = corsHeaders(new Request("https://api.example.com", {headers:{Origin:allowed}}), {});
   assert.equal(preview.get("Access-Control-Allow-Origin"), allowed);
+  assert.match(preview.get("Access-Control-Allow-Methods"), /PATCH/);
   const production = "https://nexus-isp-management.pages.dev";
   assert.equal(corsHeaders(new Request("https://api.example.com", {headers:{Origin:production}}), {}).get("Access-Control-Allow-Origin"), production);
   const lookalike = "https://nexus-isp-management.pages.dev.evil.example";
