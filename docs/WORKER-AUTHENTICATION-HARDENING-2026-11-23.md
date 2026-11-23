@@ -133,3 +133,14 @@ The Pages routing change passed the three GitHub verification workflows on commi
 ### Preview deployment result
 
 Cloudflare Pages completed the preview deployment for branch `build/nexus-isp-core`, commit `758065eae992dd49859bb9206206d3c4d6037b4f`, at `https://67f51788.nexus-isp-management.pages.dev`. All four GitHub verification workflows also passed for that commit. The deployment status confirms the Pages build and deploy stages succeeded; it does not by itself prove a real customer login, billing workflow, or live Worker authentication round trip.
+
+
+## Latest follow-up — 2026-11-23
+
+The portal complaint-priority normalization is now a directly exported helper, and the contract suite tests its actual behavior for the default, all supported values, invalid strings, and non-string input. The Worker route uses this helper before writing the D1 row. This supplements the existing SQL binding and route-contract assertions.
+
+Source changes are on branch `build/nexus-isp-core` at commit `809b12f51afb4c45f7855ffcf74b3efb7fcf003d`. All four GitHub workflows passed for that commit: Cloudflare D1 API Worker, Nexus backend checks, Nexus backend verification, and NEXUS backend verification. The Worker workflow ran JavaScript syntax validation and the D1 API contract tests; backend checks ran `npm run verify` successfully.
+
+Cloudflare was re-audited after those source changes. The active staging Worker remains version 31 (100% traffic) on the staging D1 database; the active production Worker remains version 29 (100% traffic) on the production D1 database. The current source commit has **not** been uploaded as a Worker version and no deployment or traffic shift was performed. Production version 29 still requires the reviewed password-verifier hardening before it can be considered secure; staging version 31 has the hardened verifier but does not yet include the newest complaint-priority helper.
+
+Direct HTTP checks of the `workers.dev` health endpoints could not be completed from the available browser path. Treat live sign-in, portal ticket creation, and end-to-end Pages-to-Worker requests as unverified until exercised from a browser or a supported live test harness. No D1 migrations, production data writes, or production Worker deployments were performed during this follow-up.
