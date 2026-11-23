@@ -1008,7 +1008,7 @@ export async function encryptRouterSecret(value,env){
  const iv=crypto.getRandomValues(new Uint8Array(12)),cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(value));
  return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(cipher));
 }
-function validateAcsUrl(value){
+export function validateAcsUrl(value){
  let u;try{u=new URL(String(value||''))}catch{return null}
  const h=u.hostname.toLowerCase();
  if(u.protocol!=='https:'||u.username||u.password||u.hash||!h.includes('.')||h==='localhost'||h.endsWith('.local')||h.endsWith('.internal')||h.endsWith('.localhost')||/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.startsWith('['))return null;
