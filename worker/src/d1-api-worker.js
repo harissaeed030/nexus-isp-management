@@ -46,7 +46,7 @@ function corsHeaders(request,env){
  const origin=request.headers.get('Origin'),allowed=(env.ALLOWED_ORIGINS||'').split(',').map(v=>v.trim()).filter(Boolean),h=new Headers(CORS);
  h.set('Access-Control-Max-Age','86400');
  let trustedPagesOrigin=false;
- try{const u=new URL(origin||'');trustedPagesOrigin=u.protocol==='https:'&&u.hostname==='nexus-isp-management.pages.dev'}catch{}
+ try{const u=new URL(origin||'');trustedPagesOrigin=u.protocol==='https:'&&(u.hostname==='nexus-isp-management.pages.dev'||u.hostname.endsWith('.nexus-isp-management.pages.dev'))}catch{}
  if(origin&&(allowed.includes(origin)||trustedPagesOrigin)){h.set('Access-Control-Allow-Origin',origin);h.set('Vary','Origin')}
  return h
 }
