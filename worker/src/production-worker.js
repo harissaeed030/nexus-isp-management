@@ -568,7 +568,7 @@ async function listCust(env,url,oid){
  if(connection){where+=' AND connection_status=?';params.push(connection)}
  if(area){where+=' AND coverage_area=?';params.push(area)}
  const cnt=await env.DB.prepare('SELECT COUNT(*) AS total FROM customers '+where).bind(...params).first();
- const rows=await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name,COALESCE(account_number,customer_code) AS account_number FROM customers "+where+" ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(...params,pp,off).all();
+ const rows=await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers "+where+" ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(...params,pp,off).all();
  return json({data:rows.results||[],pagination:{page,pp,pageSize:pp,total:Number(cnt?.total||0),totalPages:Math.ceil(Number(cnt?.total||0)/pp)}});
 }
 async function createCust(r,env,oid,uid,ip){
