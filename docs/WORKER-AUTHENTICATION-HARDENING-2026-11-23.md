@@ -77,3 +77,12 @@ The role contract change is included in commit `5b2d770a5d60a2ba39698d64d8e738f2
 https://071fff80.nexus-isp-management.pages.dev
 
 The preview is not the production Pages site and does not switch the production API.
+
+
+## Preview-origin CORS follow-up
+
+The static Pages preview is hosted on a deployment-specific subdomain such as `071fff80.nexus-isp-management.pages.dev`. The D1 Worker's previous CORS check trusted only the root Pages hostname, which could block browser API requests from preview deployments unless each preview URL was manually added to the secret allowlist.
+
+The Worker now accepts HTTPS origins on the exact NEXUS Pages project hostname and its subdomains, while rejecting lookalike domains and HTTP origins. The CORS header builder is exported for direct contract testing. The Cloudflare D1 API Worker workflow passed for commit `992064bab4948a69189f091a62efe8ede948ec73`.
+
+This is a source and test change only. The currently deployed production and staging Worker versions have not been replaced; the CORS fix becomes effective only after a reviewed Worker deployment.
