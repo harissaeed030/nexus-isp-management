@@ -1016,7 +1016,7 @@ export async function decryptRouterSecret(value,env){
  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(parts[2])},key,b64uDec(parts[3]));
  return new TextDecoder().decode(plain);
 }
-function validateAcsUrl(value){
+export function validateAcsUrl(value){
  let u;try{u=new URL(String(value||''))}catch{return null}
  const h=u.hostname.toLowerCase();
  if(u.protocol!=='https:'||u.username||u.password||u.hash||!h.includes('.')||h==='localhost'||h.endsWith('.local')||h.endsWith('.internal')||h.endsWith('.localhost')||/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.startsWith('['))return null;
