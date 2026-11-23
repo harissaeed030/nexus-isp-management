@@ -207,8 +207,27 @@ async function runMigrations(env){
  return results
 }
 
+export function normalizeApiPath(input){
+ const path=String(input||'/');
+ const base=path.replace(/^\\/api\\/v1\\//,'/api/');
+ const exact=new Map([
+  ['/api/setup','/api/auth/register'],
+  ['/api/dashboard','/api/dashboard/stats'],
+  ['/api/tickets','/api/complaints'],
+  ['/api/routers','/api/network/devices']
+ ]);
+ if(exact.has(base))return exact.get(base);
+ if(base.startsWith('/api/tickets/'))return '/api/complaints/'+base.slice('/api/tickets/'.length);
+ if(base.startsWith('/api/routers/'))return '/api/network/devices/'+base.slice('/api/routers/'.length);
+ return base;
+}
+export function normalizeApiMethod(path,method){
+ const verb=String(method||'GET').toUpperCase();
+ if(verb==='PATCH'&&(/^\\/api\\/customers\\/[^/]+$/.test(path)||/^\\/api\\/complaints\\/[^/]+$/.test(path)))return 'PUT';
+ return verb;
+}
 let _migrated=false;
-export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
+export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=normalizeApiPath(url.pathname);const m=normalizeApiMethod(path,request.method);
 if(m==='OPTIONS')return withCors(new Response(null,{status:204}),request,env);
 if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
@@ -277,6 +296,7 @@ if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='PUT')return await updateOnu(request,
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='DELETE')return await deleteOnu(env,path,orgId,userId,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
+if(path==='/api/reports/summary'&&m==='GET')return await reportSummary(env,url,orgId);
 if(path==='/api/reports/revenue'&&m==='GET')return await repRev(env,url,orgId);
 if(path==='/api/reports/customers'&&m==='GET')return await repCust(env,orgId);
 if(path==='/api/reports/subscriptions'&&m==='GET')return await repSubs(env,orgId);
@@ -503,7 +523,7 @@ return json({success:true,token:tk,user:{id:u.id,email:u.email,name:u.name||u.em
 
 async function authMe(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status,organization_id FROM users WHERE id=?').bind(auth.userId).first();if(!u)return json({error:'Not found'},404);const org=await env.DB.prepare('SELECT id,name,slug,email,phone,address,currency FROM organizations WHERE id=?').bind(auth.orgId).first();return json({user:u,tenant:org})}
 
-async function dashStats(env,oid){const c=await env.DB.prepare('SELECT COUNT(*)v FROM customers WHERE organization_id=?').bind(oid).first();const ac=await env.DB.prepare("SELECT COUNT(*)v FROM customers WHERE organization_id=? AND status='active'").bind(oid).first();const pk=await env.DB.prepare('SELECT COUNT(*)v FROM packages WHERE organization_id=?').bind(oid).first();const sc=await env.DB.prepare('SELECT COUNT(*)v FROM subscriptions WHERE organization_id=?').bind(oid).first();const pi=await env.DB.prepare("SELECT COUNT(*)v,COALESCE(SUM(total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)),0)amt FROM invoices WHERE organization_id=? AND status IN ('pending','overdue') AND total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)").bind(oid).first();const rev=await env.DB.prepare("SELECT COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)v FROM payments WHERE organization_id=? AND status='completed'").bind(oid).first();const oc=await env.DB.prepare("SELECT COUNT(*)v FROM support_tickets WHERE organization_id=? AND status='open'").bind(oid).first();const st=await env.DB.prepare('SELECT COUNT(*)v FROM users WHERE organization_id=?').bind(oid).first();const mr=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now','-6 months')GROUP BY m ORDER BY m").bind(oid).all();return json({customers:c.v,activeCustomers:ac.v,packages:pk.v,subscriptions:sc.v,pendingInvoices:pi.v,pendingAmount:pi.amt,totalRevenue:rev.v,openComplaints:oc.v,staff:st.v,monthlyRevenue:mr.results||[]})}
+async function dashStats(env,oid){const c=await env.DB.prepare('SELECT COUNT(*)v FROM customers WHERE organization_id=?').bind(oid).first();const ac=await env.DB.prepare("SELECT COUNT(*)v FROM customers WHERE organization_id=? AND status='active'").bind(oid).first();const pk=await env.DB.prepare('SELECT COUNT(*)v FROM packages WHERE organization_id=?').bind(oid).first();const sc=await env.DB.prepare('SELECT COUNT(*)v FROM subscriptions WHERE organization_id=?').bind(oid).first();const pi=await env.DB.prepare("SELECT COUNT(*)v,COALESCE(SUM(total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)),0)amt FROM invoices WHERE organization_id=? AND status IN ('pending','overdue') AND total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)").bind(oid).first();const rev=await env.DB.prepare("SELECT COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)v FROM payments WHERE organization_id=? AND status='completed'").bind(oid).first();const oc=await env.DB.prepare("SELECT COUNT(*)v FROM support_tickets WHERE organization_id=? AND status='open'").bind(oid).first();const st=await env.DB.prepare('SELECT COUNT(*)v FROM users WHERE organization_id=?').bind(oid).first();const mr=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now','-6 months')GROUP BY m ORDER BY m").bind(oid).all();return json({stats:{customers:c.v,activeCustomers:ac.v,revenuePkr:rev.v,openTickets:oc.v,staff:st.v},customers:c.v,activeCustomers:ac.v,packages:pk.v,subscriptions:sc.v,pendingInvoices:pi.v,pendingAmount:pi.amt,totalRevenue:rev.v,openComplaints:oc.v,staff:st.v,monthlyRevenue:mr.results||[]})}
 
 async function listCust(env,url,oid){const{page,pp,off}=pg(url);const q=url.searchParams.get('search')||'';const st=url.searchParams.get('status')||'';let w='WHERE organization_id=?';const p=[oid];if(q){w+=' AND(first_name LIKE? OR last_name LIKE? OR email LIKE? OR phone LIKE?)';const s='%'+q+'%';p.push(s,s,s,s)}if(st){w+=' AND status=?';p.push(st)}const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM customers '+w).bind(...p).first();const rows=await env.DB.prepare('SELECT * FROM customers '+w+' ORDER BY created_at DESC LIMIT? OFFSET?').bind(...p,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 async function createCust(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['first_name']);if(ms.length)return json({error:'Missing fields',fields:ms},400);const id=uuid();const code='CUS-'+crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase();await env.DB.prepare('INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,city,status,customer_code,balance,notes,installation_address,installation_date,id_type,id_number)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,s(b.first_name),b.last_name||'',b.email||null,b.phone||null,b.address||null,b.city||null,b.status||'active',code,b.balance||0,b.notes||null,b.installation_address||null,b.installation_date||null,b.id_type||null,b.id_number||null).run();await audit(env,oid,uid,'create_customer','Customer:'+b.first_name,ip);return json(await env.DB.prepare('SELECT * FROM customers WHERE id=?').bind(id).first(),201)}
@@ -877,6 +897,14 @@ async function networkStatus(env,oid){
  return json({configured:Object.values(counts).reduce((a,b)=>a+b,0)>0,devices:counts,connection_tested:false,note:'Device inventory is configured; live router/OLT connectivity requires reachable management endpoints and credentials.'})
 }
 
+async function reportSummary(env,url,oid){
+ const [dashboard,revenue]=await Promise.all([
+  dashStats(env,oid),
+  env.DB.prepare("SELECT strftime('%Y-%m',paid_at) AS month,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0) AS revenue FROM payments WHERE organization_id=? AND status='completed' AND paid_at>=datetime('now','-6 months') GROUP BY strftime('%Y-%m',paid_at) ORDER BY month").bind(oid).all()
+ ]);
+ const stats=await dashboard.json();
+ return json({data:{monthlyRevenue:(revenue.results||[]).map(x=>({month:x.month,revenue:x.revenue})),outstandingPkr:Number(stats.pendingAmount||0)}});
+}
 async function repRev(env,url,oid){const months=parseInt(url.searchParams.get('months')||'6');const rows=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COUNT(*)c,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now',?)GROUP BY m ORDER BY m").bind(oid,'-'+months+' months').all();return json({data:rows.results||[]})}
 async function repCust(env,oid){const bs=await env.DB.prepare('SELECT status,COUNT(*)c FROM customers WHERE organization_id=? GROUP BY status').bind(oid).all();return json({byStatus:bs.results||[]})}
 async function repSubs(env,oid){const bs=await env.DB.prepare('SELECT status,COUNT(*)c FROM subscriptions WHERE organization_id=? GROUP BY status').bind(oid).all();const bp=await env.DB.prepare('SELECT p.name package_name,COUNT(s.id)c FROM packages p LEFT JOIN subscriptions s ON p.id=s.package_id AND s.organization_id=? WHERE p.organization_id=? GROUP BY p.id').bind(oid,oid).all();return json({byStatus:bs.results||[],byPackage:bp.results||[]})}
