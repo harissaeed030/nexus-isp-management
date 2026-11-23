@@ -303,7 +303,6 @@ $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object
  form.addEventListener("submit",async event=>{event.preventDefault();const message=input.value.trim();if(!message)return;addMessage(message,"user");input.value="";send.disabled=true;send.textContent="…";const pending=addMessage("Jawab tayyar ho raha hai…","assistant");const nextHistory=aiHistory.slice(-10).concat({role:"user",content:message});try{const result=await call("/api/v1/ai/chat",{method:"POST",body:JSON.stringify({messages:nextHistory})});const answer=result?.answer||result?.data?.message||"AI ne koi text response nahi diya.";pending.textContent=answer;aiHistory.push({role:"user",content:message},{role:"model",content:answer});if(aiHistory.length>12)aiHistory.splice(0,aiHistory.length-12)}catch(error){pending.textContent=error.message;pending.style.color="#a33f38"}finally{send.disabled=false;send.textContent="Send";messages.scrollTop=messages.scrollHeight;input.focus()}});
  input.addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();form.requestSubmit()}});
  }
- }
  initAiAssistant();
 
 document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit","tr069"].includes(v)){e.preventDefault();load(v);$("#sidebar")?.classList.remove("open")}}));
