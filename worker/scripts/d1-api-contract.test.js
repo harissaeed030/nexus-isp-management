@@ -512,3 +512,12 @@ test("customer portal dashboard uses the hosted D1 portal routes and response DT
   assert.match(portalSource, /x\.paid_at/);
   assert.doesNotMatch(portalSource, /outstanding_pkr|amount_pkr|received_at|me\.data/);
 });
+
+
+test("customer portal complaint priority is validated and persisted", () => {
+  assert.match(source, /const requestedPriority=b\.priority\|\|'medium'/);
+  assert.match(source, /\['normal','low','medium','high','urgent'\]\.includes\(requestedPriority\)/);
+  assert.match(source, /requestedPriority==='normal'\?'medium':requestedPriority/);
+  assert.match(source, /VALUES\(\?,\?,\?,\?,\?,\?, 'open'\)/);
+  assert.match(source, /description\|\|null,priority\)\.run\(\)/);
+});
