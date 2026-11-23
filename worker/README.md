@@ -26,8 +26,17 @@ The RouterOS and HSGQ adapters must be treated according to their documented cap
 
 - Production D1 binding: `DB` -> `nexus-saas-db`
 - Staging D1 binding: `DB` -> `nexus-saas-staging-db`
-- Secret bindings: `JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY`
+- Secret bindings: `JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY`, `OPENAI_API_KEY` (server-side only)
 - Never put secret values in source files, Wrangler vars, frontend code or GitHub commits.
+
+
+## NEXUS AI assistant
+
+- Authenticated endpoint: `POST /api/ai/chat`.
+- Uses the OpenAI Responses API with `gpt-6-luna`; the API key is read only from the Worker secret `OPENAI_API_KEY`.
+- Chat history is limited to 12 alternating messages and 10,000 total characters; per-user requests are rate-limited.
+- The browser never receives the OpenAI API key. The assistant does not access or mutate customer, billing, router or ONU records.
+- Never add API key values to Git, Wrangler configuration, logs, or frontend code.
 
 ## Schema
 
