@@ -998,7 +998,7 @@ async function updateRouter(request,env,path,oid,uid,ip){
  if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
  const existing=await env.DB.prepare("SELECT id FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(id,oid).first();
  if(!existing)return json({error:'Router not found'},404);
- const sets=[],values=[];let credentialChanged=false;
+ const sets=[],values=[];let credentialStatement=null;
  const fields={name:'name',host:'host',apiPort:'port',location:'notes',username:'username'};
  for(const [input,column] of Object.entries(fields)){
   if(b[input]===undefined)continue;
@@ -1016,11 +1016,13 @@ async function updateRouter(request,env,path,oid,uid,ip){
  }
  if(b.password!==undefined){
   if(typeof b.password!=='string'||b.password.length<8||b.password.length>256)return json({error:'Password must be 8-256 characters'},400);
-  const ciphertext=await encryptRouterPassword(b.password,env);await env.DB.prepare("INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES(?,?,?,?,?,?) ON CONFLICT(network_device_id) DO UPDATE SET ciphertext=excluded.ciphertext,updated_by=excluded.updated_by,updated_at=datetime('now')") .bind(uuid(),oid,id,ciphertext,uid,uid).run();credentialChanged=true;
+  const ciphertext=await encryptRouterPassword(b.password,env);credentialStatement=env.DB.prepare("INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES(?,?,?,?,?,?) ON CONFLICT(network_device_id) DO UPDATE SET ciphertext=excluded.ciphertext,updated_by=excluded.updated_by,updated_at=datetime('now')").bind(uuid(),oid,id,ciphertext,uid,uid);
  }
- if(!sets.length&&!credentialChanged)return json({error:'No supported fields to update'},400);
- if(sets.length){sets.push("updated_at=datetime('now')");values.push(id,oid);
- await env.DB.prepare("UPDATE network_devices SET "+sets.join(', ')+" WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(...values).run();}
+ if(!sets.length&&!credentialStatement)return json({error:'No supported fields to update'},400);
+ const statements=[];
+ if(sets.length){sets.push("updated_at=datetime('now')");values.push(id,oid);statements.push(env.DB.prepare("UPDATE network_devices SET "+sets.join(', ')+" WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(...values));}
+ if(credentialStatement)statements.push(credentialStatement);
+ await env.DB.batch(statements);
  await audit(env,oid,uid,'update_router','Router:'+id,ip);
  const row=await env.DB.prepare("SELECT id,name,host,port,username,status,notes,model,management_protocol,EXISTS(SELECT 1 FROM router_credentials rc WHERE rc.network_device_id=network_devices.id AND rc.organization_id=network_devices.organization_id) AS credentials_configured,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?").bind(id,oid).first();
  return json({success:true,data:{...row,apiPort:row.port,location:row.notes||null,credentialsConfigured:Number(row.credentials_configured)===1}});
