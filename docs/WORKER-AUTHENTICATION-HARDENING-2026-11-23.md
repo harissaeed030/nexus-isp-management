@@ -110,3 +110,12 @@ A source-to-source audit found that the static customer portal still expected an
 The portal complaint form already offered priority selection, but the D1 Worker previously inserted every customer-submitted ticket as `medium`. The Worker now validates the submitted priority (`normal`, `low`, `medium`, `high`, or `urgent`), maps `normal` to `medium`, and persists the resulting value using a bound SQL parameter. Contract tests cover this behavior.
 
 The CI run for commit `f736f35d812ebd250425b4f89c989b94d4720a6d` passed all four checks (backend verification, backend checks, Cloudflare D1 API Worker, and NEXUS backend verification). This confirms source syntax and automated tests; live customer sign-in and live Worker deployment remain unverified.
+
+
+## Cloudflare Pages environment routing
+
+The Pages project has separate environment variables configured: preview `API_URL` points to `nexus-saas-api-staging`, while production `API_URL` points to `nexus-saas-api`. The static dashboard previously hard-coded the production Worker as its default API target, which could make preview testing touch production data; the customer portal used relative API paths without a Pages-to-Worker proxy.
+
+The repository now includes a Pages Function at `functions/api/[[path]].js` that forwards same-origin `/api/*` requests to the environment's `API_URL`, preserving method, headers, body, and query string. Root `_routes.json` limits Function invocation to `/api/*`, so static pages and assets do not invoke the proxy. The dashboard now defaults to the same-origin proxy on Pages hosts and clears a stale direct API override there. This lets preview use the configured staging Worker and production use the configured production Worker.
+
+The Pages routing change passed the three GitHub verification workflows on commit `f186889c31b2da7a66fe74215c87063073b16b60`. The Pages preview build and a live end-to-end sign-in through the proxy still need verification after Cloudflare finishes its deployment.
