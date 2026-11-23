@@ -71,7 +71,7 @@ const ROLE_PERMISSIONS={
 function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
 function permissionForRoute(path,method){
  const v=String(method||'GET').toUpperCase(),match=base=>path===base||path.startsWith(base+'/');
- if(path==='/api/dashboard/stats')return v==='GET'?'dashboard.read':null;
+ if(path==='/api/dashboard'||path==='/api/dashboard/stats')return v==='GET'?'dashboard.read':null;
  if(match('/api/customers'))return ({GET:'customers.read',POST:'customers.create',PUT:'customers.update',DELETE:'customers.delete'})[v]||null;
  if(match('/api/packages'))return v==='GET'?'packages.read':['POST','PUT','DELETE'].includes(v)?'packages.manage':null;
  if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
@@ -281,6 +281,15 @@ if(path==='/api/tenant'&&['GET','PATCH'].includes(m)){
  await audit(env,orgId,userId,'update_tenant_settings','Workspace settings updated',ip);
  const tenant=await env.DB.prepare("SELECT id,name,slug,plan,brand_color,phone AS support_phone,address,created_at FROM organizations WHERE id=?").bind(orgId).first();
  return json({success:true,data:{...tenant,customer_limit:null}});
+}
+if(path==='/api/dashboard'&&m==='GET'){
+ const response=await dashStats(env,orgId);
+ return json({stats:await response.json()});
+}
+if(path==='/api/reports/summary'&&m==='GET'){
+ const response=await dashStats(env,orgId),stats=await response.json();
+ const monthlyRevenue=(stats.monthlyRevenue||[]).map(row=>({month:row.m,revenue:Number(row.t||0)}));
+ return json({data:{monthlyRevenue,outstandingPkr:Number(stats.pendingAmount||0)}});
 }
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
 if(path==='/api/customers'&&m==='GET')return await listCust(env,url,orgId);
