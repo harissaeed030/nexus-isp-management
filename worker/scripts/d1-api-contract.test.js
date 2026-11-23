@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload } from "../src/d1-api-worker.js";
+import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload, corsHeaders } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
@@ -455,4 +455,17 @@ test("Worker password verification rejects plaintext or malformed legacy credent
   assert.match(source, /!\/\^\[a-f0-9\]\{32\}\$\/i\.test\(salt\)/);
   assert.match(source, /for\(let i=0;i<64;i\+\+\)diff\|=hash\.charCodeAt\(i\)\^expected\.charCodeAt\(i\)/);
   assert.doesNotMatch(source, /if\(!salt\)return pw===h/);
+});
+
+
+test("CORS accepts the NEXUS Pages production host and HTTPS preview deployments only", () => {
+  const allowed = "https://071fff80.nexus-isp-management.pages.dev";
+  const preview = corsHeaders(new Request("https://api.example.com", {headers:{Origin:allowed}}), {});
+  assert.equal(preview.get("Access-Control-Allow-Origin"), allowed);
+  const production = "https://nexus-isp-management.pages.dev";
+  assert.equal(corsHeaders(new Request("https://api.example.com", {headers:{Origin:production}}), {}).get("Access-Control-Allow-Origin"), production);
+  const lookalike = "https://nexus-isp-management.pages.dev.evil.example";
+  assert.equal(corsHeaders(new Request("https://api.example.com", {headers:{Origin:lookalike}}), {}).get("Access-Control-Allow-Origin"), null);
+  const insecure = "http://071fff80.nexus-isp-management.pages.dev";
+  assert.equal(corsHeaders(new Request("https://api.example.com", {headers:{Origin:insecure}}), {}).get("Access-Control-Allow-Origin"), null);
 });
