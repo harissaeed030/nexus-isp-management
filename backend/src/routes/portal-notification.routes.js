@@ -54,8 +54,12 @@ export function registerPortalRoutes(app,{db,auth,id:auditId,audit,fail,env}){
   res.json({success:true,data:{customer:safeCustomer(c),activePackage:active}});
  });
  app.get("/api/v1/customer-portal/invoices",portalAuth,(req,res)=>{
-  const rows=db.prepare("SELECT i.*,COALESCE((SELECT SUM(p.amount_pkr) FROM payments p WHERE p.invoice_id=i.id AND p.tenant_id=i.tenant_id),0) paid_pkr FROM invoices i WHERE i.tenant_id=? AND i.customer_id=? ORDER BY i.created_at DESC").all(req.portal.tenantId,req.portal.customer.id);
-  res.json({success:true,data:rows.map(x=>({...x,outstanding_pkr:Math.max(0,x.amount_pkr-x.paid_pkr)}))});
+  const rows=db.prepare(`SELECT i.*,
+    COALESCE((SELECT SUM(p.amount_pkr) FROM payments p WHERE p.invoice_id=i.id AND p.tenant_id=i.tenant_id),0) paid_pkr,
+    COALESCE((SELECT SUM(r.amount_pkr) FROM payment_reversals r JOIN payments p ON p.id=r.payment_id AND p.tenant_id=r.tenant_id WHERE p.invoice_id=i.id AND r.tenant_id=i.tenant_id),0) reversed_pkr,
+    COALESCE((SELECT SUM(n.amount_pkr) FROM credit_notes n WHERE n.invoice_id=i.id AND n.tenant_id=i.tenant_id),0) credit_notes_pkr
+    FROM invoices i WHERE i.tenant_id=? AND i.customer_id=? ORDER BY i.created_at DESC`).all(req.portal.tenantId,req.portal.customer.id);
+  res.json({success:true,data:rows.map(x=>({...x,net_paid_pkr:Number(x.paid_pkr)-Number(x.reversed_pkr),outstanding_pkr:Math.max(0,Number(x.amount_pkr)-Number(x.credit_notes_pkr)-Number(x.paid_pkr)+Number(x.reversed_pkr))}))});
  });
  app.get("/api/v1/customer-portal/payments",portalAuth,(req,res)=>{
   res.json({success:true,data:db.prepare("SELECT p.id,p.amount_pkr,p.method,p.reference,p.received_at,i.invoice_number FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE p.tenant_id=? AND i.customer_id=? ORDER BY p.received_at DESC").all(req.portal.tenantId,req.portal.customer.id)});
