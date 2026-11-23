@@ -1,12 +1,10 @@
-name = "nexus-api"
+# Development-only health-check Worker.
+# This configuration is deliberately isolated from the hosted NEXUS API and D1 databases.
+# Use worker/wrangler.api.toml for the dedicated staging API only after reviewing its bindings.
+# Production deployments must use the separately reviewed production release configuration.
+name = "nexus-healthcheck-dev"
 main = "src/index.js"
 compatibility_date = "2026-11-02"
 
 [vars]
-ENVIRONMENT = "production"
-# Set ALLOWED_ORIGINS in Worker Variables after the frontend URL is known.
-
-[[d1_databases]]
-binding = "DB"
-database_name = "nexus-db"
-database_id = "9f108166-244d-442e-9b0a-5a0efa4d1823"
+ENVIRONMENT = "development"
