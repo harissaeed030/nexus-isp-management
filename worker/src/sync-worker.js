@@ -7,7 +7,7 @@ async function equalSecret(a,b){if(!a||!b)return false;const [x,y]=await Promise
 function clean(v){return typeof v==="string"?v.trim():v;}
 function statusCustomer(v){return v==="active"?"active":"suspended";}
 function statusSubscription(v){return ["active","suspended","cancelled","expired"].includes(v)?v:"active";}
-function statusInvoice(v){return v==="paid"?"paid":v==="overdue"?"overdue":v==="cancelled"?"cancelled":"pending";}
+function statusInvoice(v){return v==="paid"?"paid":v==="overdue"?"overdue":v==="cancelled"||v==="void"?"cancelled":"pending";}
 function paymentMethod(v){return v==="cash"?"cash":v==="bank"?"bank_transfer":v==="jazzcash"||v==="easypaisa"?"mobile_money":v==="bank_transfer"?"bank_transfer":v==="mobile_money"?"mobile_money":"other";}
 function changedAt(e){return e.changedAt||new Date().toISOString();}
 
