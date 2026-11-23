@@ -88,7 +88,7 @@ function permissionForRoute(path,method){
  if(path==='/api/billing/generate')return v==='POST'?'billing.generate':null;
  if(path.match(/^\/api\/invoices\/[^/]+\/payments$/))return v==='POST'?'payments.create':null;
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
- if(path==='/api/payments')return v==='GET'?'billing.read':null;
+ if(path==='/api/payments')return v==='GET'?'billing.read':v==='POST'?'payments.create':null;
  if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
  if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
@@ -134,7 +134,7 @@ function roleAllowed(role,path,method){
  if(path==='/api/profile'&&(method==='GET'||method==='PUT'))return true;
  if(path==='/api/profile/password'&&method==='PUT')return true;
  const grants={
-  billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/operations/payment-promises','/api/financial/aging','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions','/api/reports/summary'],POST:['/api/invoices','/api/billing/generate','/api/operations/payment-promises'],PUT:['/api/invoices','/api/operations/payment-promises']},
+  billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/operations/payment-promises','/api/financial/aging','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions','/api/reports/summary'],POST:['/api/invoices','/api/payments','/api/billing/generate','/api/operations/payment-promises'],PUT:['/api/invoices','/api/operations/payment-promises']},
   support:{GET:['/api/dashboard/stats','/api/customers','/api/complaints','/api/onus'],POST:['/api/complaints'],PUT:['/api/complaints']},
   technician:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/complaints','/api/pppoe','/api/network/devices','/api/network/status','/api/onus'],POST:['/api/complaints','/api/pppoe','/api/network/devices','/api/onus'],PUT:['/api/complaints','/api/pppoe','/api/network/devices','/api/onus'],DELETE:['/api/pppoe','/api/network/devices','/api/onus']},
   staff:{GET:['/api/dashboard/stats','/api/customers','/api/complaints'],POST:['/api/complaints']}
@@ -291,6 +291,7 @@ if(path==='/api/billing/generate'&&m==='POST')return await generateBilling(reque
 if(path.match(/^\/api\/invoices\/[^/]+$/)&&m==='GET')return await getInv(env,path,orgId);
 if(path.match(/^\/api\/invoices\/[^/]+\/payments$/)&&m==='POST')return await recPay(request,env,path,orgId,userId,ip);
 if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
+if(path==='/api/payments'&&m==='POST')return await createPay(request,env,orgId,userId,ip);
 if(path==='/api/operations/payment-promises'&&m==='GET')return await listPaymentPromises(env,url,orgId);
 if(path==='/api/operations/payment-promises'&&m==='POST')return await createPaymentPromise(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/operations\/payment-promises\/[^/]+$/)&&m==='PUT')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
@@ -701,21 +702,22 @@ async function renewSub(r,env,path,oid,uid,ip){
 }
 async function delSub(env,path,oid,uid,ip){const id=path.split('/')[3];if(!await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).first())return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).run();return json({success:true})}
 
-async function listInv(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM invoices WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT i.*,c.first_name,c.last_name,COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) AS paid_amount,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_amount,CASE WHEN COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)>0 AND COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)<i.total THEN 'partial' ELSE i.status END AS display_status FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id AND c.organization_id=i.organization_id WHERE i.organization_id=? ORDER BY i.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listInv(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM invoices WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT i.*,c.first_name,c.last_name,COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) AS paid_amount,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_amount,CASE WHEN COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)>0 AND COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)<i.total THEN 'partial' ELSE i.status END AS display_status FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id AND c.organization_id=i.organization_id WHERE i.organization_id=? ORDER BY i.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();return json({data:(rows.results||[]).map(x=>({...x,customer_name:[x.first_name,x.last_name].filter(Boolean).join(' ').trim(),amount_pkr:Number(x.total||0),status:x.display_status||x.status})),pagination:{page,pp,pageSize:pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 async function createInv(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
- const ms=vReq(b,['customer_id','amount']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
- if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);
- if(b.subscription_id&&!await env.DB.prepare('SELECT id FROM subscriptions WHERE id=? AND customer_id=? AND organization_id=?').bind(b.subscription_id,b.customer_id,oid).first())return json({error:'Subscription not found for this customer'},404);
- const amt=Number(b.amount),tax=Number(b.tax??0);
+ const customerId=b.customer_id??b.customerId,amountValue=b.amount??b.amountPkr,subscriptionId=b.subscription_id??b.subscriptionId,issueDate=b.issue_date??b.issueDate,dueDate=b.due_date??b.dueDate;
+ if(!customerId||amountValue===undefined)return json({error:'Customer and amount are required'},400);
+ if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(customerId,oid).first())return json({error:'Customer not found'},404);
+ if(subscriptionId&&!await env.DB.prepare('SELECT id FROM subscriptions WHERE id=? AND customer_id=? AND organization_id=?').bind(subscriptionId,customerId,oid).first())return json({error:'Subscription not found for this customer'},404);
+ const amt=Number(amountValue),tax=Number(b.tax??0);
  if(!Number.isSafeInteger(amt)||amt<=0)return json({error:'Invoice amount must be a positive whole number of rupees'},400);
  if(!Number.isSafeInteger(tax)||tax<0||!Number.isSafeInteger(amt+tax))return json({error:'Tax must be a non-negative whole number of rupees'},400);
- const idate=b.issue_date||new Date().toISOString().slice(0,10),isDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
+ const idate=issueDate||new Date().toISOString().slice(0,10),isDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
  if(!isDate(idate))return json({error:'Invalid invoice issue date'},400);
- let ddate=b.due_date;if(!ddate){const dt=new Date(idate+'T00:00:00Z');dt.setUTCDate(dt.getUTCDate()+30);ddate=dt.toISOString().slice(0,10)}
+ let ddate=dueDate;if(!ddate){const dt=new Date(idate+'T00:00:00Z');dt.setUTCDate(dt.getUTCDate()+30);ddate=dt.toISOString().slice(0,10)}
  if(!isDate(ddate)||ddate<idate)return json({error:'Due date must be a valid date on or after issue date'},400);
  const id=uuid(),num='INV-'+idate.replace(/-/g,'')+'-'+uuid().slice(0,8).toUpperCase(),total=amt+tax;
- try{await env.DB.prepare('INSERT INTO invoices(id,organization_id,customer_id,subscription_id,invoice_number,amount,tax,total,status,issue_date,due_date,notes)VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id,b.subscription_id||null,num,amt,tax,total,'pending',idate,ddate,s(b.notes||'').slice(0,1000)||null).run()}
+ try{await env.DB.prepare('INSERT INTO invoices(id,organization_id,customer_id,subscription_id,invoice_number,amount,tax,total,status,issue_date,due_date,notes)VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,customerId,subscriptionId||null,num,amt,tax,total,'pending',idate,ddate,s(b.notes||'').slice(0,1000)||null).run()}
  catch(e){if(String(e.message).toLowerCase().includes('unique'))return json({error:'Invoice number conflict; please retry'},409);throw e}
  await audit(env,oid,uid,'create_invoice','Invoice:'+num,ip);
  return json(await env.DB.prepare('SELECT * FROM invoices WHERE id=? AND organization_id=?').bind(id,oid).first(),201)
@@ -789,9 +791,30 @@ async function recPay(r,env,path,oid,uid,ip){
  await notifyAdmins(env,oid,'Payment recorded',inv.invoice_number+' · '+amount+' PKR','billing');
  return json(await env.DB.prepare('SELECT * FROM payments WHERE id=? AND organization_id=?').bind(pid,oid).first(),201)
 }
-async function listPay(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM payments WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT p.*,c.first_name,c.last_name,i.invoice_number FROM payments p LEFT JOIN customers c ON p.customer_id=c.id AND c.organization_id=p.organization_id LEFT JOIN invoices i ON p.invoice_id=i.id AND i.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listPay(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM payments WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT p.*,c.first_name,c.last_name,i.invoice_number FROM payments p LEFT JOIN customers c ON p.customer_id=c.id AND c.organization_id=p.organization_id LEFT JOIN invoices i ON p.invoice_id=i.id AND i.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();return json({data:(rows.results||[]).map(x=>({...x,customer_name:[x.first_name,x.last_name].filter(Boolean).join(' ').trim(),amount_pkr:Number(x.amount||0),received_at:x.paid_at,method:x.payment_method==='bank_transfer'?'bank':x.payment_method==='mobile_money'?(String(x.notes||'').includes('jazzcash')?'jazzcash':String(x.notes||'').includes('easypaisa')?'easypaisa':'mobile_money'):x.payment_method})),pagination:{page,pp,pageSize:pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 
 
+async function createPay(request,env,oid,uid,ip){
+ const b=await parseBody(request);if(!b)return json({error:'Invalid body'},400);
+ const invoiceId=b.invoice_id??b.invoiceId,amount=Number(b.amount??b.amountPkr),method=String(b.method||b.payment_method||'cash').toLowerCase();
+ if(!invoiceId||!Number.isSafeInteger(amount)||amount<=0)return json({error:'Invoice and positive whole-rupee amount are required'},400);
+ const paymentMethod=method==='bank'?'bank_transfer':['jazzcash','easypaisa','mobile_money'].includes(method)?'mobile_money':method;
+ if(!['cash','bank_transfer','card','mobile_money','other'].includes(paymentMethod))return json({error:'Unsupported payment method'},400);
+ const invoice=await env.DB.prepare("SELECT i.*,COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) AS paid_amount FROM invoices i WHERE i.id=? AND i.organization_id=?").bind(invoiceId,oid).first();
+ if(!invoice)return json({error:'Invoice not found'},404);
+ const outstanding=Math.max(0,Number(invoice.total)-Number(invoice.paid_amount||0));
+ if(amount>outstanding)return json({error:'Payment exceeds the outstanding invoice balance',outstandingPkr:outstanding},400);
+ if(outstanding<=0)return json({error:'Invoice is already fully paid'},409);
+ const id=uuid(),extra=method==='jazzcash'||method==='easypaisa'?'Payment channel: '+method:null,notes=[s(b.notes||''),extra].filter(Boolean).join(' · ')||null,transactionRef=s(b.transactionRef??b.transaction_ref??'')||null;
+ const statements=[
+  env.DB.prepare("INSERT INTO payments(id,organization_id,invoice_id,customer_id,amount,payment_method,transaction_ref,status,notes) VALUES(?,?,?,?,?,?,?,'completed',?)").bind(id,oid,invoiceId,invoice.customer_id,amount,paymentMethod,transactionRef,notes),
+  env.DB.prepare("UPDATE invoices SET status=CASE WHEN ? >= ? THEN 'paid' ELSE status END,paid_at=CASE WHEN ? >= ? THEN datetime('now') ELSE paid_at END,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(Number(invoice.paid_amount||0)+amount,Number(invoice.total),Number(invoice.paid_amount||0)+amount,Number(invoice.total),invoiceId,oid)
+ ];
+ await env.DB.batch(statements);
+ await audit(env,oid,uid,'record_payment','Payment:'+id+':'+amount+' PKR',ip);
+ const row=await env.DB.prepare("SELECT p.*,p.amount AS amount_pkr,p.paid_at AS received_at,p.payment_method AS method,c.first_name||' '||c.last_name AS customer_name,i.invoice_number FROM payments p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id JOIN invoices i ON i.id=p.invoice_id AND i.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row},201)
+}
 async function listRefunds(env,url,oid){
  const {page,pp,off}=pg(url);
  const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM refunds WHERE organization_id=?').bind(oid).first();
