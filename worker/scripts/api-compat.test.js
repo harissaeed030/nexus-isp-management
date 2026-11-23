@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask } from "../src/production-worker.js";
+import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask, encryptRouterSecret } from "../src/production-worker.js";
 
 test("normalizes versioned API paths to D1 routes", () => {
   assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
@@ -85,4 +85,12 @@ test("builds GenieACS NBI task payloads with documented fields", () => {
     name: "setParameterValues",
     parameterValues: [["Device.WiFi.SSID.1.SSID", "Vancom", "xsd:string"]]
   });
+});
+
+test("router credentials are encrypted and never stored as plain text", async () => {
+  const encrypted = await encryptRouterSecret("router-private-password", {
+    JWT_SECRET: "test-only-worker-secret-for-router-encryption"
+  });
+  assert.notEqual(encrypted, "router-private-password");
+  assert.match(encrypted, /^enc:v1:/);
 });
