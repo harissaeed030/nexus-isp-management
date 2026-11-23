@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getTenantMapping, normalizeCustomerSyncFields, validateSyncBatch } from "../src/sync-worker.js";
+import { assertSyncRecordOwnership, getTenantMapping, normalizeCustomerSyncFields, validateSyncBatch } from "../src/sync-worker.js";
 
 test("sync batches require a tenant and one to fifty events", () => {
   assert.match(validateSyncBatch("", [{ cursor: 1, operationId: "a" }]), /sourceTenantId/);
@@ -80,4 +80,30 @@ test("customer sync preserves account and connection status across SQLite and D1
   assert.deepEqual(normalizeCustomerSyncFields({status:"unexpected",connection_status:"unknown"}), {
     status:"active",accountStatus:"active",connectionStatus:"pending"
   });
+});
+
+test("sync rejects a record primary key owned by another organization", async () => {
+  let sqlSeen = "";
+  const database = {
+    prepare(sql) {
+      sqlSeen = sql;
+      return {
+        bind(id) {
+          assert.equal(id, "shared-record-id");
+          return { async first() { return { organization_id: "other-org" }; } };
+        }
+      };
+    }
+  };
+  await assert.rejects(
+    assertSyncRecordOwnership(database, "customers", "target-org", "shared-record-id"),
+    /belongs to another organization/
+  );
+  assert.match(sqlSeen, /FROM customers WHERE id=\?/);
+});
+
+test("sync ownership check accepts absent IDs and rejects unsupported tables", async () => {
+  const database = { prepare() { return { bind() { return { async first() { return null; } }; } }; } };
+  assert.equal(await assertSyncRecordOwnership(database, "invoices", "target-org", "new-id"), false);
+  await assert.rejects(assertSyncRecordOwnership(database, "users", "target-org", "id"), /Unsupported sync entity/);
 });
