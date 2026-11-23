@@ -7,6 +7,8 @@ test("normalizes versioned API paths to D1 routes", () => {
   assert.equal(normalizeApiPath("/api/v1/setup"), "/api/auth/register");
   assert.equal(normalizeApiPath("/api/v1/dashboard"), "/api/dashboard/stats");
   assert.equal(normalizeApiPath("/api/v1/reports/summary"), "/api/reports/summary");
+  assert.equal(normalizeApiPath("/api/v1/operations/payment-promises"), "/api/operations/payment-promises");
+  assert.equal(normalizeApiPath("/api/v1/financial/aging"), "/api/financial/aging");
 });
 
 test("maps frontend tickets and router collections to D1 resources", () => {
@@ -19,6 +21,7 @@ test("maps frontend tickets and router collections to D1 resources", () => {
 test("normalizes supported PATCH updates to the D1 worker PUT contract", () => {
   assert.equal(normalizeApiMethod("/api/customers/customer-1", "PATCH"), "PUT");
   assert.equal(normalizeApiMethod("/api/complaints/ticket-1", "PATCH"), "PUT");
+  assert.equal(normalizeApiMethod("/api/operations/payment-promises/promise-1", "PATCH"), "PUT");
   assert.equal(normalizeApiMethod("/api/customers", "PATCH"), "PATCH");
   assert.equal(normalizeApiMethod("/api/customers/customer-1", "GET"), "GET");
 });
