@@ -38,6 +38,10 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 - Expanded `.github/workflows/backend-checks.yml` to verify on Node 22 and 26.
 - Confirmed the hosted D1 Worker on `main` does not expose `/api/v1/tenant`; updated the Settings screen to explain this hosted API gap instead of incorrectly telling every user they lack owner access. This small frontend fallback change was committed after the successful CI run and has not yet had a fresh CI result attached.
 
+## Additional authentication smoke coverage
+- Extended `.github/workflows/live-smoke.yml` to call `GET /api/tenant` without credentials against both production and staging and require HTTP 401. This verifies the new endpoint is protected without changing either environment.
+- The previous Android debug APK workflow completed successfully and produced artifact `nexus-android-debug-apk` (3,732,713 bytes; run `45117819388`; expires 2026-12-23). A new APK build was triggered for the subsequent smoke-test commit and is still running at the time of this report update.
+
 ## Hosted D1 tenant-settings parity tranche
 - Added `GET/PATCH /api/v1/tenant` to the Worker source on this branch, matching the local SQLite Settings screen contract.
 - Both operations are owner-only and scoped to the authenticated `organization_id`; updates validate company name, hex brand colour, support phone and address, and write an audit event.
