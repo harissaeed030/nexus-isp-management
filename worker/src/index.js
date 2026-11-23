@@ -212,7 +212,10 @@ async function runMigrations(env){
  ['pppoe',"CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT 'active',created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,username))"],
  ['network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT'],
  ['network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT'],
- ['network_devices.credentials_ciphertext','ALTER TABLE network_devices ADD COLUMN credentials_ciphertext TEXT'],
+ ['router_credentials',"CREATE TABLE IF NOT EXISTS router_credentials(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,network_device_id TEXT NOT NULL UNIQUE,ciphertext TEXT NOT NULL,created_by TEXT NOT NULL,updated_by TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(network_device_id) REFERENCES network_devices(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id),FOREIGN KEY(updated_by) REFERENCES users(id))"],
+ ['router_credentials.index','CREATE INDEX IF NOT EXISTS idx_router_credentials_org_device ON router_credentials(organization_id,network_device_id)'],
+ ['router_credentials.tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_router_credentials_org_i BEFORE INSERT ON router_credentials BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.network_device_id AND organization_id=NEW.organization_id AND device_type='mikrotik') THEN RAISE(ABORT,'router credential device organization mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential creator organization mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential updater organization mismatch') END; END"],
+ ['router_credentials.tenant_guard_update',"CREATE TRIGGER IF NOT EXISTS trg_router_credentials_org_u BEFORE UPDATE OF organization_id,network_device_id,created_by,updated_by ON router_credentials BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.network_device_id AND organization_id=NEW.organization_id AND device_type='mikrotik') THEN RAISE(ABORT,'router credential device organization mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential creator organization mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential updater organization mismatch') END; END"],
  ['network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER'],
  ['onu_devices',"CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT 'unknown',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,serial_number))"],
  ['user_permissions',"CREATE TABLE IF NOT EXISTS user_permissions(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,permission TEXT NOT NULL,allowed INTEGER NOT NULL CHECK(allowed IN(0,1)),updated_by TEXT,updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,user_id,permission))"],
@@ -963,7 +966,7 @@ async function delPppoe(env,path,oid,uid,ip){
 async function listRouters(env,url,oid){
  const {page,pp,off}=pg(url);
  const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM network_devices WHERE organization_id=? AND device_type='mikrotik'").bind(oid).first();
- const rows=await env.DB.prepare("SELECT id,name,host,port,notes,username,status,model,management_protocol,CASE WHEN credentials_ciphertext IS NOT NULL AND credentials_ciphertext<>'' THEN 1 ELSE 0 END AS credentials_configured,created_at,updated_at FROM network_devices WHERE organization_id=? AND device_type='mikrotik' ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
+ const rows=await env.DB.prepare("SELECT id,name,host,port,notes,username,status,model,management_protocol,EXISTS(SELECT 1 FROM router_credentials rc WHERE rc.network_device_id=network_devices.id AND rc.organization_id=network_devices.organization_id) AS credentials_configured,created_at,updated_at FROM network_devices WHERE organization_id=? AND device_type='mikrotik' ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
  return json({success:true,data:(rows.results||[]).map(x=>({...x,apiPort:x.port,location:x.notes||null,credentialsConfigured:Number(x.credentials_configured)===1})),pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
 }
 async function createRouter(request,env,oid,uid,ip){
@@ -975,9 +978,10 @@ async function createRouter(request,env,oid,uid,ip){
  if(!Number.isInteger(port)||port<1||port>65535)return json({error:'apiPort must be between 1 and 65535'},400);
  if(location.length>300)return json({error:'Location must be 300 characters or fewer'},400);
  const id=uuid(),ciphertext=await encryptRouterPassword(password,env);
- await env.DB.prepare("INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,credentials_ciphertext) VALUES(?,?,?,'mikrotik',?,?,?,'inactive',?,'RouterOS 7','routeros-api-ssl',?)").bind(id,oid,name,host,port,username,location||null,ciphertext).run();
+ await env.DB.prepare("INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol) VALUES(?,?,?,'mikrotik',?,?,?,'inactive',?,'RouterOS 7','routeros-api-ssl')") .bind(id,oid,name,host,port,username,location||null).run();
+ await env.DB.prepare('INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES(?,?,?,?,?,?)').bind(uuid(),oid,id,ciphertext,uid,uid).run();
  await audit(env,oid,uid,'create_router','Router:'+id,ip);
- const row=await env.DB.prepare("SELECT id,name,host,port,username,status,notes,model,management_protocol,CASE WHEN credentials_ciphertext IS NOT NULL AND credentials_ciphertext<>'' THEN 1 ELSE 0 END AS credentials_configured,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?").bind(id,oid).first();
+ const row=await env.DB.prepare("SELECT id,name,host,port,username,status,notes,model,management_protocol,EXISTS(SELECT 1 FROM router_credentials rc WHERE rc.network_device_id=network_devices.id AND rc.organization_id=network_devices.organization_id) AS credentials_configured,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?").bind(id,oid).first();
  return json({success:true,data:{...row,apiPort:row.port,location:row.notes||null,credentialsConfigured:Number(row.credentials_configured)===1}},201);
 }
 async function updateRouter(request,env,path,oid,uid,ip){
@@ -1003,7 +1007,7 @@ async function updateRouter(request,env,path,oid,uid,ip){
  }
  if(b.password!==undefined){
   if(typeof b.password!=='string'||b.password.length<8||b.password.length>256)return json({error:'Password must be 8-256 characters'},400);
-  sets.push('credentials_ciphertext=?');values.push(await encryptRouterPassword(b.password,env));
+  const ciphertext=await encryptRouterPassword(b.password,env);await env.DB.prepare("INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES(?,?,?,?,?,?) ON CONFLICT(network_device_id) DO UPDATE SET ciphertext=excluded.ciphertext,updated_by=excluded.updated_by,updated_at=datetime('now')").bind(uuid(),oid,id,ciphertext,uid,uid).run();
  }
  if(!sets.length)return json({error:'No supported fields to update'},400);
  sets.push("updated_at=datetime('now')");values.push(id,oid);
