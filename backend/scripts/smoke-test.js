@@ -54,6 +54,16 @@ try{
  assert.throws(() => db.prepare("INSERT INTO invoices(id,tenant_id,customer_id,invoice_number,amount_pkr) VALUES(?,?,?,?,?)").run("cross-tenant-invoice",setup.data.user.tenantId,"other-customer","CROSS-1",100), /invoice customer tenant mismatch/);
  const customer=await request("/api/v1/customers","POST",{fullName:"Test Subscriber"},token);
  assert.equal(customer.status,201);
+ // Tenant isolation: another ISP must not read, inspect or modify this customer's record.
+ assert.equal((await request("/api/v1/customers/"+customer.data.data.id,"GET",undefined,scopedLogin.data.token)).status,404);
+ assert.equal((await request("/api/v1/customers/"+customer.data.data.id+"/profile","GET",undefined,scopedLogin.data.token)).status,404);
+ assert.equal((await request("/api/v1/customers/"+customer.data.data.id,"PATCH",{fullName:"Cross Tenant Attack"},scopedLogin.data.token)).status,404);
+ // Invalid customer updates must be rejected without changing persisted data.
+ const invalidCustomerEmail=await request("/api/v1/customers/"+customer.data.data.id,"PATCH",{email:"not-an-email"},token);
+ assert.equal(invalidCustomerEmail.status,400);
+ assert.equal((await request("/api/v1/customers/"+customer.data.data.id,"GET",undefined,token)).data.data.full_name,"Test Subscriber");
+ const invalidConnection=await request("/api/v1/customers/"+customer.data.data.id,"PATCH",{connectionStatus:"online"},token);
+ assert.equal(invalidConnection.status,400);
  const pack=await request("/api/v1/packages","POST",{name:"Test 10M",speedDownMbps:10,speedUpMbps:10,monthlyPricePkr:1500},token);
  assert.equal(pack.status,201);
  const sub=await request("/api/v1/subscriptions","POST",{customerId:customer.data.data.id,packageId:pack.data.data.id,status:"active"},token);
