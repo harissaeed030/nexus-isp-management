@@ -20,6 +20,15 @@ export async function getTenantMapping(database, sourceTenantId) {
   return database.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind(sourceTenantId).first();
 }
 
+export async function assertSyncRecordOwnership(database, entityType, organizationId, entityId) {
+  if (!ORDER.includes(entityType)) throw new Error("Unsupported sync entity type.");
+  const owner = await database.prepare(`SELECT organization_id FROM ${entityType} WHERE id=?`).bind(entityId).first();
+  if (owner && owner.organization_id !== organizationId) {
+    throw new Error("Record ID already belongs to another organization.");
+  }
+  return Boolean(owner);
+}
+
 export function validateSyncBatch(sourceTenantId, events) {
   if (!sourceTenantId || sourceTenantId.length > 128 || !Array.isArray(events) || events.length < 1 || events.length > 50) {
     return "sourceTenantId and 1-50 events are required";
@@ -44,9 +53,10 @@ async function applyEvent(env,orgId,sourceTenantId,event,repository){
   const hash=await sha256(JSON.stringify(event));
   const prior=await env.DB.prepare("SELECT payload_hash FROM sync_operations WHERE operation_id=?").bind(opId).first();
   if(prior){if(prior.payload_hash!==hash)throw new Error("Idempotency key reused with a different payload.");return {applied:0,duplicate:1};}
-  const table=type;
-  const existing=await repository.get(type,orgId,id);
-  if(existing&&existing.organization_id!==orgId)throw new Error("Record ID already belongs to another organization.");
+  // Check globally by primary key before tenant-scoped reads: a scoped miss must
+  // not be mistaken for a new ID already owned by a different organization.
+  const recordExists = await assertSyncRecordOwnership(env.DB,type,orgId,id);
+  const existing=recordExists?await repository.get(type,orgId,id):null;
   let statement;
   if(event.operation==="delete"){
     if(type==="payments")throw new Error("Payment ledger entries cannot be deleted by sync.");
