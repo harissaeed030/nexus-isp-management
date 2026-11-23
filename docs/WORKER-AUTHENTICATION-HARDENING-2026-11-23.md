@@ -200,3 +200,14 @@ The latest CI-verified Worker source commit `2a8c4dc4d1cd39e2bdcbb2e8f475ee77812
 The source was uploaded as staging Worker version 35 (ID `10bd6496-704f-4d09-bcb3-a4e4e3bda17f`). Secret bindings were inherited from the existing latest staging version using Cloudflare's `inherit` binding mechanism; no secret values were read, supplied, or changed. The candidate metadata preserves the staging D1 ID `194f62e2-2766-48ab-be17-81248610c0cd`, `ENVIRONMENT=staging`, and `NETWORK_CONNECTOR_ENABLED=false`. Candidate startup validation reported 4 ms.
 
 **Version 35 is upload-only and has not been promoted.** The previously active staging deployment remains version 34 at 100% traffic until the manual read-only staging smoke workflow is run and reviewed. Production remains unchanged: active version 31 at 100% traffic, candidate version 32 uploaded but unpromoted. No D1 migrations or data writes were performed. The manual live staging smoke and live sign-in are still unverified.
+
+
+## Deployment follow-up — 2026-11-23 07:38 UTC
+
+Staging Worker version 35 was promoted successfully in deployment `16e2a5b7-1988-4c74-83a4-1fece8136e31`; Cloudflare confirms version `10bd6496-704f-4d09-bcb3-a4e4e3bda17f` receives 100% of staging traffic. This supersedes the earlier upload-only status above. Staging D1 remains `194f62e2-2766-48ab-be17-81248610c0cd`; staging environment and disabled network-connector flag remain unchanged.
+
+The latest Pages production deployment is `db95cc89-17aa-41f8-8851-3f7d20aa5577`, built successfully from `main` commit `96168a415537c1a5dd7f7cf5d948d44dec578912` (sign-out token mutability fix). Production Pages environment points to the production Worker URL, not staging. Latest preview deployment `cab926e7` also completed successfully, but it was triggered from branch `fix/d1-hosted-api-compat-v2-2026-11-23`; it is not the production site.
+
+Production Worker status has also advanced since the earlier audit: version 33 (`ed46dad1-3775-4678-ab75-fff91ed3fada`) is now active at 100% traffic and includes the OpenAI Responses API chat handler and production D1 binding `ce88098b-bff4-4d06-a0df-7bf29622a085`. Version 32 remains an older unpromoted candidate and must not be promoted over version 33. No production Worker deployment or production D1 change was made in this follow-up.
+
+Live HTTP checks from the available execution environment were blocked by outbound request restrictions (403), so browser-level health, login, logout, and cache-header behavior are not claimed as verified. The manual read-only staging smoke workflow is still pending. Do not treat the deployment success status as proof of complete application-level end-to-end testing.
