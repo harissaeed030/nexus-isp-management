@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask, encryptRouterSecret } from "../src/production-worker.js";
+import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask, encryptRouterSecret, decryptRouterSecret } from "../src/production-worker.js";
 
 test("normalizes versioned API paths to D1 routes", () => {
   assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
@@ -64,6 +64,8 @@ test("ACS credentials are encrypted at rest and decrypt only with the Worker sec
   const encrypted = await encryptAcsSecret("genieacs-private-password", env);
   assert.notEqual(encrypted, "genieacs-private-password");
   assert.match(encrypted, /^enc:v1:/);
+  assert.equal(await decryptRouterSecret(encrypted, { JWT_SECRET: "test-only-worker-secret-for-router-encryption" }), "router-private-password");
+  await assert.rejects(() => decryptRouterSecret(encrypted, { JWT_SECRET: "different-router-secret" }));
   assert.equal(await decryptAcsSecret(encrypted, env), "genieacs-private-password");
   await assert.rejects(() => decryptAcsSecret(encrypted, { JWT_SECRET: "different-secret" }));
 });
