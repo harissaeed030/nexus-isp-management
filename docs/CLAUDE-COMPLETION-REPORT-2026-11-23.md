@@ -66,3 +66,22 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 - Dashboard KPI cards now display daily/monthly collections, outstanding receivables, suspended customers and subscriptions expiring within seven days. The dashboard JavaScript change is included in commit `eba7e012c4f6d2ae7767fdeca6b885a6bca847f8`.
 - Router, OLT and payment-gateway behaviour is not tested on real devices.
 - `build/nexus-isp-core` and `main` have diverged and were not merged.
+
+
+## Latest continuation — support, finance and production-bundle parity
+
+- Added the hosted D1 ticket compatibility API: tenant-scoped list/create/update, frontend camelCase payload mapping, priority enum normalization, customer/staff display names, assignment validation, audit records, and legacy pagination fields.
+- Added ticket conversation GET/POST endpoints at `/api/tickets/:id/messages`. Ticket existence is checked within the authenticated organization; messages are length-validated, attributed to the signed-in staff member, and audited. Assignment history and customer-facing conversation UI remain pending.
+- Added tenant-scoped financial aging at `GET /api/financial/aging`. Outstanding balances account for completed payments net of completed refunds and return the frontend's 1–30, 31–60, 61–90 and 90+ day buckets.
+- Added payment promise list/create/status-update APIs with amount/date/status validation, audit events, a billing-role permission, and customer/actor tenant-integrity guards.
+- Added incremental D1 source migration `0022_payment_promises.sql` and synchronized the canonical `worker/schema.sql`. Updated the schema validator to apply migration 0022 twice and test cross-tenant customer/creator/updater rejection. This is source/rehearsal work only: migration 0022 has NOT been applied to production or staging. The 2026-11-19 D1 audit documented divergent live migration ledgers, so a fresh export and disposable rehearsal are mandatory before any live application.
+- Synchronized `worker/src/production-worker.js` with the current Worker API source while explicitly removing the staging-only destructive tenant-cleanup route. The production-bundle verifier passed.
+- Updated the frontend/hosted-D1 parity audit and D1/Worker documentation.
+
+### Latest CI evidence and remaining issue
+
+- Latest checked commit: `7b4fb6dc139093dcd5e8506998cb7713ea0a1562`.
+- Backend Node 22/26 checks, database hardening, SQLite-D1 sync contract, SQLite migration reconciliation, production/staging endpoint smoke, production Worker source verification, and D1 schema migration 0022 validation all passed.
+- The staging customer-portal E2E functional flow completed, but its cleanup step failed because the currently deployed staging Worker returned 404 for the staging-only `DELETE /api/e2e/tenant` cleanup endpoint. This indicates live staging Worker/source drift; do not hide the failure or deploy automatically. Synthetic staging test tenants may remain until the staging cleanup route is restored and verified.
+- Android debug APK workflow was still running at the last status check.
+- No Cloudflare Worker deployment, live D1 migration/write, secrets change, Pages deployment, or live router/OLT action was performed.
