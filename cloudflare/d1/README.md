@@ -1,5 +1,12 @@
 # Cloudflare D1 schema and migrations
 
+## New source migrations — 0022 payment promises and 0023 router credentials (not applied)
+
+The repository now contains additive migrations `0022_payment_promises.sql` and `0023_router_credentials_ciphertext.sql` plus a canonical schema snapshot update. They add tenant-scoped payment promises with integrity guards and a tenant-guarded `router_credentials` table for authenticated-ciphertext RouterOS API passwords. Worker source contains the matching APIs and runtime bootstrap. Router password create/rotation additionally requires the dedicated `ROUTER_CREDENTIALS_KEY` secret (minimum 32 characters) configured separately in each Worker environment; it is not committed or set by this PR.
+
+**Neither migration has been applied to production or staging.** The 2026-11-19 live audit found divergent migration ledgers (production includes 10, 12, 13, 100 and 101; staging includes 1–21 and 100). Before any deployment, take fresh exports, confirm whether the table/indexes/triggers already exist in each database, rehearse the SQL against disposable copies, and reconcile the existing ledgers. Do not assume the migration number is a linear upgrade state or run it blindly.
+
+
 ## Live state recheck — 2026-11-19
 
 This section supersedes any statement above that both live databases currently have identical migration ledgers or that the global email index is present in both environments. The earlier sections describe the historical 2026-11-15 release and backup record; they are not a current parity certificate.
@@ -69,7 +76,7 @@ migrations/0008_user_email_index_parity.sql is additive and idempotent. It creat
 ## Schema artifacts
 
 - `worker/schema-production-v6.sql`: schema-only production baseline before migration 0007.
-- worker/schema.sql: canonical full schema snapshot at migration 0009.
+- worker/schema.sql: canonical full schema snapshot including additive source migration 0022; it is for empty databases only.
 - worker/scripts/validate-d1-schema.py: validates the checked-in production-v6 snapshot through migration 0009, tenant guards and user email uniqueness. It is not a live database schema diff; consult the live audit report for actual production/staging comparison.
 
 Use schema snapshots only for empty databases. Existing databases must be upgraded with incremental migrations.

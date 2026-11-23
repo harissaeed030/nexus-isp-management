@@ -78,6 +78,12 @@ jobs:
             });
             assert.equal(protectedResponse.status, 401, environment + " unauthenticated API guard");
 
+            const tenantGuard = await fetch(base + "/api/tenant", {
+              headers: { Accept: "application/json" },
+              signal: AbortSignal.timeout(15000),
+            });
+            assert.equal(tenantGuard.status, 401, environment + " unauthenticated tenant-settings guard");
+
             for (const header of [
               "x-content-type-options",
               "x-frame-options",

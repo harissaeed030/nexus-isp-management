@@ -86,6 +86,21 @@ CREATE TABLE IF NOT EXISTS network_devices (
         FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS router_credentials (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  network_device_id TEXT NOT NULL UNIQUE,
+  ciphertext TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (network_device_id) REFERENCES network_devices(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id),
+  FOREIGN KEY (updated_by) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
       id              TEXT PRIMARY KEY,
       organization_id TEXT NOT NULL,
@@ -168,6 +183,24 @@ CREATE TABLE IF NOT EXISTS pppoe_accounts (
     );
 
 CREATE TABLE IF NOT EXISTS refunds(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,payment_id TEXT NOT NULL,invoice_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),method TEXT NOT NULL DEFAULT 'cash',reference TEXT,reason TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','completed','failed')),created_by TEXT NOT NULL,completed_by TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),completed_at TEXT, idempotency_key TEXT,FOREIGN KEY(payment_id) REFERENCES payments(id) ON DELETE CASCADE,FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE);
+
+CREATE TABLE IF NOT EXISTS payment_promises (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  amount_pkr INTEGER NOT NULL CHECK(amount_pkr > 0),
+  promise_date TEXT NOT NULL,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','kept','broken','cancelled')),
+  created_by TEXT NOT NULL,
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id),
+  FOREIGN KEY (updated_by) REFERENCES users(id)
+);
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id         INTEGER PRIMARY KEY,
@@ -320,6 +353,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_refunds_org_reference ON refunds(organizat
 
 CREATE INDEX IF NOT EXISTS idx_refunds_payment_status ON refunds(organization_id,payment_id,status);
 
+CREATE INDEX IF NOT EXISTS idx_router_credentials_org_device ON router_credentials(organization_id,network_device_id);
+
+CREATE INDEX IF NOT EXISTS idx_payment_promises_org_status_date ON payment_promises(organization_id,status,promise_date);
+CREATE INDEX IF NOT EXISTS idx_payment_promises_org_customer ON payment_promises(organization_id,customer_id);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
@@ -426,6 +464,29 @@ CREATE TRIGGER IF NOT EXISTS trg_d1_pppoe_org_u BEFORE UPDATE OF organization_id
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'PPPoE customer organization mismatch') END;
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_payment_promise_org_i BEFORE INSERT ON payment_promises BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator organization mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_payment_promise_org_u BEFORE UPDATE OF organization_id,customer_id,created_by,updated_by ON payment_promises BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator organization mismatch') END;
+ SELECT CASE WHEN NEW.updated_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise updater organization mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_router_credentials_org_i BEFORE INSERT ON router_credentials BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.network_device_id AND organization_id=NEW.organization_id AND device_type='mikrotik') THEN RAISE(ABORT,'router credential device organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential creator organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential updater organization mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_router_credentials_org_u BEFORE UPDATE OF organization_id,network_device_id,created_by,updated_by ON router_credentials BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM network_devices WHERE id=NEW.network_device_id AND organization_id=NEW.organization_id AND device_type='mikrotik') THEN RAISE(ABORT,'router credential device organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential creator organization mismatch') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'router credential updater organization mismatch') END;
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_d1_refund_org_i BEFORE INSERT ON refunds BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM payments p JOIN invoices i ON i.id=NEW.invoice_id JOIN customers c ON c.id=NEW.customer_id WHERE p.id=NEW.payment_id AND p.organization_id=NEW.organization_id AND i.organization_id=NEW.organization_id AND c.organization_id=NEW.organization_id AND p.invoice_id=NEW.invoice_id AND p.customer_id=NEW.customer_id AND i.customer_id=NEW.customer_id) THEN RAISE(ABORT,'refund payment/invoice/customer organization mismatch') END;
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'refund creator organization mismatch') END;
@@ -467,4 +528,6 @@ INSERT OR IGNORE INTO schema_migrations(id,name,applied_at) VALUES
 (6,'0006_d1_tenant_integrity_guards','2026-11-15 01:17:52'),
 (7,'0007_customer_portal_tenant_guards','2026-11-15 01:18:15'),
 (8,'0008_user_email_index_parity','2026-11-15 15:35:00'),
-(9,'0009_repair_global_user_email_index','2026-11-15 15:45:24');
+(9,'0009_repair_global_user_email_index','2026-11-15 15:45:24'),
+(22,'0022_payment_promises','2026-11-23 06:00:00'),
+(23,'0023_router_credentials_ciphertext','2026-11-23 06:15:00');
