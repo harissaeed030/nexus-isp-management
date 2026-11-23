@@ -31,7 +31,7 @@
     const el = document.getElementById("offlineStatus");
     if (!el) return;
     const online = navigator.onLine;
-    el.textContent = online ? "ONLINE · Sync available" : "OFFLINE · Saved data only";
+    el.textContent = online ? "ONLINE · Live API available" : "OFFLINE · Saved data only · Read-only";
     el.style.color = online ? "#087b57" : "#a45b12";
     el.setAttribute("aria-label", el.textContent);
   }
