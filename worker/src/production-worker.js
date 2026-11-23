@@ -83,6 +83,7 @@ function permissionForRoute(path,method){
  if(path==='/api/payments')return v==='GET'?'billing.read':null;
  if(match('/api/complaints')||match('/api/tickets'))return v==='GET'?'tickets.read':['POST','PUT','PATCH'].includes(v)?'tickets.manage':null;
  if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
+ if(match('/api/routers'))return v==='GET'?'routers.read':['POST','PATCH','DELETE'].includes(v)?'routers.manage':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
  if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
@@ -149,6 +150,18 @@ async function pppoeCryptoKey(env,usages){
  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']);
  return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-PPPOE-SALT-V1'),info:new TextEncoder().encode('NEXUS-PPPOE-PASSWORD-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,usages)
 }
+
+async function routerCredentialKey(env,usages){
+ if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
+ const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']);
+ return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-ROUTER-SALT-V1'),info:new TextEncoder().encode('NEXUS-ROUTER-CREDENTIAL-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,usages);
+}
+async function encryptRouterPassword(password,env){
+ const key=await routerCredentialKey(env,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12));
+ const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(password));
+ return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(ciphertext));
+}
+
 async function encryptPppoePassword(password,env){
  const key=await pppoeCryptoKey(env,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12));
  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(password));
@@ -200,6 +213,7 @@ async function runMigrations(env){
  ['pppoe',"CREATE TABLE IF NOT EXISTS pppoe_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,username TEXT NOT NULL,password TEXT NOT NULL,ip_address TEXT,status TEXT DEFAULT 'active',created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,username))"],
  ['network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT'],
  ['network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT'],
+ ['network_devices.credentials_ciphertext','ALTER TABLE network_devices ADD COLUMN credentials_ciphertext TEXT'],
  ['network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER'],
  ['onu_devices',"CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT 'unknown',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,serial_number))"],
  ['user_permissions',"CREATE TABLE IF NOT EXISTS user_permissions(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,permission TEXT NOT NULL,allowed INTEGER NOT NULL CHECK(allowed IN(0,1)),updated_by TEXT,updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,user_id,permission))"],
@@ -309,6 +323,11 @@ if(path==='/api/pppoe'&&m==='POST')return await createPppoe(request,env,orgId,us
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='GET')return await getPppoe(env,path,orgId);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='PUT')return await updatePppoe(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/pppoe\/[^/]+$/)&&m==='DELETE')return await delPppoe(env,path,orgId,userId,ip);
+if(path==='/api/routers'&&m==='GET')return await listRouters(env,url,orgId);
+if(path==='/api/routers'&&m==='POST')return await createRouter(request,env,orgId,userId,ip);
+if(/^\/api\/routers\/[^/]+$/.test(path)&&m==='PATCH')return await updateRouter(request,env,path,orgId,userId,ip);
+if(/^\/api\/routers\/[^/]+$/.test(path)&&m==='DELETE')return await deleteRouter(env,path,orgId,userId,ip);
+if(/^\/api\/routers\/[^/]+\/(?:test|sync|pppoe(?:\/.*)?)$/.test(path))return json({error:'Live RouterOS operations are not enabled in this hosted Worker yet',code:'ROUTER_LIVE_ADAPTER_UNAVAILABLE',message:'Router inventory and encrypted credential storage are available. Live API-SSL tests, PPPoE reads/writes and customer synchronization require a verified RouterOS network adapter and staging device acceptance.'},501);
 if(path==='/api/network/devices'&&m==='GET')return await listNetworkDevices(env,url,orgId);
 if(path==='/api/network/devices'&&m==='POST')return await createNetworkDevice(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='GET')return await getNetworkDevice(env,path,orgId);
@@ -908,6 +927,67 @@ async function delPppoe(env,path,oid,uid,ip){
  if(!r.meta?.changes)return json({error:'Not found'},404);
  await audit(env,oid,uid,'delete_pppoe','PPPoE:'+id,ip);return json({success:true})
 }
+
+async function listRouters(env,url,oid){
+ const {page,pp,off}=pg(url);
+ const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM network_devices WHERE organization_id=? AND device_type='mikrotik'").bind(oid).first();
+ const rows=await env.DB.prepare("SELECT id,name,host,port,notes,username,status,model,management_protocol,CASE WHEN credentials_ciphertext IS NOT NULL AND credentials_ciphertext<>'' THEN 1 ELSE 0 END AS credentials_configured,created_at,updated_at FROM network_devices WHERE organization_id=? AND device_type='mikrotik' ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
+ return json({success:true,data:(rows.results||[]).map(x=>({...x,apiPort:x.port,location:x.notes||null,credentialsConfigured:Number(x.credentials_configured)===1})),pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+}
+async function createRouter(request,env,oid,uid,ip){
+ const b=await parseBody(request);
+ if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const name=typeof b.name==='string'?b.name.trim():'',host=typeof b.host==='string'?b.host.trim():'',username=typeof b.username==='string'?b.username.trim():'',password=typeof b.password==='string'?b.password:'';
+ const port=Number(b.apiPort??8729),location=typeof b.location==='string'?b.location.trim():'';
+ if(!name||name.length>120||!host||host.length>253||!username||username.length>128||password.length<8||password.length>256)return json({error:'Router name, host, username and an 8-256 character password are required'},400);
+ if(!Number.isInteger(port)||port<1||port>65535)return json({error:'apiPort must be between 1 and 65535'},400);
+ if(location.length>300)return json({error:'Location must be 300 characters or fewer'},400);
+ const id=uuid(),ciphertext=await encryptRouterPassword(password,env);
+ await env.DB.prepare("INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,credentials_ciphertext) VALUES(?,?,?,'mikrotik',?,?,?,'inactive',?,'RouterOS 7','routeros-api-ssl',?)").bind(id,oid,name,host,port,username,location||null,ciphertext).run();
+ await audit(env,oid,uid,'create_router','Router:'+id,ip);
+ const row=await env.DB.prepare("SELECT id,name,host,port,username,status,notes,model,management_protocol,CASE WHEN credentials_ciphertext IS NOT NULL AND credentials_ciphertext<>'' THEN 1 ELSE 0 END AS credentials_configured,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?").bind(id,oid).first();
+ return json({success:true,data:{...row,apiPort:row.port,location:row.notes||null,credentialsConfigured:Number(row.credentials_configured)===1}},201);
+}
+async function updateRouter(request,env,path,oid,uid,ip){
+ const id=decodeURIComponent(path.split('/')[3]),b=await parseBody(request);
+ if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const existing=await env.DB.prepare("SELECT id FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(id,oid).first();
+ if(!existing)return json({error:'Router not found'},404);
+ const sets=[],values=[];
+ const fields={name:'name',host:'host',apiPort:'port',location:'notes',username:'username'};
+ for(const [input,column] of Object.entries(fields)){
+  if(b[input]===undefined)continue;
+  const value=b[input];
+  if(input==='name'||input==='host'||input==='username'||input==='location'){
+   if(value!==null&&typeof value!=='string')return json({error:'Invalid '+input},400);
+   const clean=value===null?'':value.trim();
+   const max=input==='name'?120:input==='host'?253:input==='username'?128:300;
+   if(clean.length>max||(input!=='location'&&!clean))return json({error:'Invalid '+input},400);
+   sets.push(column+'=?');values.push(clean||null);
+  }else{
+   const port=Number(value);if(!Number.isInteger(port)||port<1||port>65535)return json({error:'apiPort must be between 1 and 65535'},400);
+   sets.push('port=?');values.push(port);
+  }
+ }
+ if(b.password!==undefined){
+  if(typeof b.password!=='string'||b.password.length<8||b.password.length>256)return json({error:'Password must be 8-256 characters'},400);
+  sets.push('credentials_ciphertext=?');values.push(await encryptRouterPassword(b.password,env));
+ }
+ if(!sets.length)return json({error:'No supported fields to update'},400);
+ sets.push("updated_at=datetime('now')");values.push(id,oid);
+ await env.DB.prepare("UPDATE network_devices SET "+sets.join(', ')+" WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(...values).run();
+ await audit(env,oid,uid,'update_router','Router:'+id,ip);
+ const row=await env.DB.prepare("SELECT id,name,host,port,username,status,notes,model,management_protocol,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?").bind(id,oid).first();
+ return json({success:true,data:{...row,apiPort:row.port,location:row.notes||null,credentialsConfigured:Number(row.credentials_configured)===1}});
+}
+async function deleteRouter(env,path,oid,uid,ip){
+ const id=decodeURIComponent(path.split('/')[3]);
+ const result=await env.DB.prepare("DELETE FROM network_devices WHERE id=? AND organization_id=? AND device_type='mikrotik'").bind(id,oid).run();
+ if(!result.meta?.changes)return json({error:'Router not found'},404);
+ await audit(env,oid,uid,'delete_router','Router:'+id,ip);
+ return json({success:true});
+}
+
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
  const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
