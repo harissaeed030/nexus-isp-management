@@ -67,3 +67,13 @@ The connected Pages project `nexus-isp-management` is configured with `main` as 
 - Build and deploy stages: success (2026-11-23 05:40 UTC)
 
 This confirms the static dashboard preview is published. It does not prove browser sign-in, API CORS, or live D1 functionality. The production Pages branch remains `main`; no production Pages promotion or Worker deployment was performed.
+
+
+## Staff role contract follow-up
+
+The dashboard previously offered a `noc` role, but the D1 Worker only accepts `admin`, `billing`, `support`, `technician`, and `staff`. The UI now maps the network/NOC and field technician job description to the supported `technician` role and no longer submits the unsupported `noc` value. A contract test ensures the dashboard role choices stay within the Worker enum.
+
+The role contract change is included in commit `5b2d770a5d60a2ba39698d64d8e738f21a689122`; all four CI checks passed for that commit. Cloudflare Pages also published a preview:
+https://071fff80.nexus-isp-management.pages.dev
+
+The preview is not the production Pages site and does not switch the production API.
