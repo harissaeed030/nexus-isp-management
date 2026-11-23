@@ -20,24 +20,27 @@ document.addEventListener("click",event=>{
   if(!button)return;
   event.preventDefault();
   event.stopPropagation();
+  if(button.disabled)return;
+  button.disabled=true;
   const activeToken=token;
-  // Revoke remotely when supported; local sign-out must never depend on network success.
+  // Revoke the server session in the background; local sign-out remains immediate.
   try{
-    fetch(api.replace(/\/$/,"")+"/api/v1/auth/logout",{
-      method:"POST",
-      headers:activeToken?{Authorization:"Bearer "+activeToken}:{},
-      keepalive:true
-    }).catch(()=>{});
+    if(activeToken){
+      fetch(api.replace(/\/$/,"")+"/api/v1/auth/logout",{
+        method:"POST",
+        headers:{Authorization:"Bearer "+activeToken},
+        keepalive:true
+      }).catch(()=>{});
+    }
   }catch(_){}
   localStorage.removeItem("nexus_token");
   sessionStorage.removeItem("nexus_token");
   token="";
   document.querySelector(".nx-ai-launch")?.remove();
   document.querySelector(".nx-ai-panel")?.remove();
-  shell?.classList.remove("authenticated");
-  if(shell)shell.style.display="none";
-  auth(false);
-  msg("You have been signed out.");
+  // Force a clean navigation through the dedicated login route. This also
+  // replaces any stale dashboard DOM restored by the mobile PWA cache.
+  window.location.replace("/login.html");
 });
 let menuBackdrop=null;
 function closeMenu(){
