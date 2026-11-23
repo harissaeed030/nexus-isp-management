@@ -182,8 +182,6 @@ strict_fk_violations = strict.execute("PRAGMA foreign_key_check").fetchall()
 assert not strict_fk_violations, "Strict production-compatible users schema has FK violations"
 strict.close()
 
-fresh.close()
-
 # Tenant-integrity regression: a promise cannot point at another tenant's customer or actor.
 fresh.execute("INSERT INTO organizations(id,name,slug) VALUES('promise-a','Promise A','promise-a'),('promise-b','Promise B','promise-b')")
 fresh.execute("INSERT INTO customers(id,organization_id,first_name,last_name) VALUES('promise-customer-a','promise-a','A','Customer'),('promise-customer-b','promise-b','B','Customer')")
