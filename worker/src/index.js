@@ -275,7 +275,7 @@ if(path==='/api/tenant'&&['GET','PATCH'].includes(m)){
  const address=b.address===undefined?current.address:(b.address===null?null:String(b.address).trim());
  if(typeof name!=='string'||name.length<2||name.length>120)return json({error:'Workspace name must be 2–120 characters'},400);
  if(typeof color!=='string'||!/^#[0-9a-fA-F]{6}$/.test(color))return json({error:'Brand colour must look like #16a34a'},400);
- if(phone!==null&&(typeof phone!=='string'||phone.length>30||!/^[0-9+()\\-\\s]*$/.test(phone)))return json({error:'Support phone is not valid'},400);
+ if(phone!==null&&(typeof phone!=='string'||phone.length>30||!/^[0-9+()\s-]*$/.test(phone)))return json({error:'Support phone is not valid'},400);
  if(address!==null&&(typeof address!=='string'||address.length>300))return json({error:'Address is too long'},400);
  await env.DB.prepare('UPDATE organizations SET name=?,brand_color=?,phone=?,address=? WHERE id=?').bind(name,color,phone||null,address||null,orgId).run();
  await audit(env,orgId,userId,'update_tenant_settings','Workspace settings updated',ip);
