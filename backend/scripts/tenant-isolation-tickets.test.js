@@ -2,7 +2,12 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
+import { permissionFor } from "../src/lib/permissions.js";
 import { once } from "node:events";
+
+assert.equal(permissionFor("/api/v1/unallocated-payments","POST"),"billing.adjust");
+assert.equal(permissionFor("/api/v1/unallocated-payments/123/allocate","POST"),"billing.reconcile");
+assert.equal(permissionFor("/api/v1/unallocated-payments","GET"),"billing.read");
 
 const dir = mkdtempSync(join(tmpdir(), "nexus-isolation-"));
 process.env.SQLITE_PATH = join(dir, "test.sqlite");
