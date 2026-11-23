@@ -984,15 +984,15 @@ async function getTr069Parameters(env,path,oid,uid,ip){
  walk(tree.InternetGatewayDevice||tree.Device||{});
  await auditTr069(env,oid,uid,row.id,row.acs_connection_id,'read_parameters',null,null,null,'success',null,ip);return json({data:params});
 }
-async function queueTr069Task(env,path,oid,uid,ip,taskName,parameters=[]){
+async function queueTr069Task(env,path,oid,uid,ip,taskName,taskOptions={}){
  const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
- const body={name:taskName};if(parameters.length)body.parameterValues=parameters;
+ const body={name:taskName,...taskOptions};
  const url='devices/'+encodeURIComponent(row.device_id)+'/tasks';await acsRequest(row,env,url,'connection_request',body);
  await auditTr069(env,oid,uid,row.id,row.acs_connection_id,'queue_'+taskName,null,null,null,'queued',null,ip);return json({success:true,data:{queued:true,task:taskName}});
 }
 async function queueTr069Diagnostics(env,path,oid,uid,ip){
  const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
- const root='InternetGatewayDevice';return await queueTr069Task(env,path,oid,uid,ip,'refreshObject',[[root+'.WANDevice','']]);
+ const root='InternetGatewayDevice';return await queueTr069Task(env,path,oid,uid,ip,'refreshObject',{objectName:root+'.WANDevice'});
 }
 async function queueTr069Reboot(env,path,oid,uid,ip){const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);await queueTr069Task(env,path,oid,uid,ip,'reboot');return json({success:true,data:{queued:true,deviceId:row.device_id}})}
 async function queueTr069Wifi(request,env,path,oid,uid,ip){
@@ -1002,7 +1002,7 @@ async function queueTr069Wifi(request,env,path,oid,uid,ip){
  const values=[[b.ssidParameter,b.ssid,'xsd:string'],[b.passwordParameter,b.password,'xsd:string']];
  if(b.enableParameter){if(!validParam(b.enableParameter))return json({error:'Invalid Wi-Fi enable parameter path'},400);values.push([b.enableParameter,String(b.enabled!=='false'),'xsd:boolean'])}
  const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
- return await queueTr069Task(env,path,oid,uid,ip,'setParameterValues',values);
+ return await queueTr069Task(env,path,oid,uid,ip,'setParameterValues',{parameterValues:values});
 }
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
