@@ -9,6 +9,7 @@ migration_7 = (root / "cloudflare" / "d1" / "migrations" / "0007_customer_portal
 migration_8 = (root / "cloudflare" / "d1" / "migrations" / "0008_user_email_index_parity.sql").read_text()
 migration_9 = (root / "cloudflare" / "d1" / "migrations" / "0009_repair_global_user_email_index.sql").read_text()
 migration_22 = (root / "cloudflare" / "d1" / "migrations" / "0022_payment_promises.sql").read_text()
+migration_23 = (root / "cloudflare" / "d1" / "migrations" / "0023_router_credentials_ciphertext.sql").read_text()
 
 def normalize_sql(value):
     compact = " ".join((value or "").split()).lower()
@@ -38,6 +39,9 @@ assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=9").fetch
 before.executescript(migration_22)
 before.executescript(migration_22)
 assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=22").fetchone()[0] == 1
+before.executescript(migration_23)
+assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=23").fetchone()[0] == 1
+assert "credentials_ciphertext" in {row[1] for row in before.execute("PRAGMA table_info(network_devices)")}
 assert before.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_users_email_global'").fetchone() is not None
 
 expected = sqlite3.connect(":memory:")
@@ -53,7 +57,7 @@ if missing or extra or different:
     print("Different object definitions:", different)
     for key in different:
         print("DIFF", key, "actual=", actual_objects[key][:500], "expected=", expected_objects[key][:500])
-    raise AssertionError("Production v6 + migrations 0007-0009 and 0022 do not match canonical schema")
+    raise AssertionError("Production v6 + migrations 0007-0009 and 0022-0023 do not match canonical schema")
 
 before.execute("INSERT INTO organizations(id,name,slug) VALUES('org-a','Org A','org-a'),('org-b','Org B','org-b')")
 before.execute("INSERT INTO customers(id,organization_id,first_name,last_name) VALUES('cust-a','org-a','A','Test'),('cust-b','org-b','B','Test')")
@@ -88,7 +92,7 @@ except sqlite3.IntegrityError:
 else:
     raise AssertionError("Case-insensitive per-organization user email uniqueness was not enforced")
 
-print("D1 schema validation passed: v6 -> idempotent v7/v8/v9/22 migrations, object parity, tenant guards and email uniqueness.")
+print("D1 schema validation passed: v6 -> idempotent v7/v8/v9/22/23 migrations, object parity, tenant guards and email uniqueness.")
 
 # Fresh-install path: the canonical snapshot is the only supported bootstrap
 # for an empty D1 database. Validate it independently from the v6 upgrade path.
@@ -108,7 +112,7 @@ assert required_fresh_tables <= fresh_tables, (
     "Fresh schema is missing tables: " + repr(sorted(required_fresh_tables - fresh_tables))
 )
 fresh_versions = [row[0] for row in fresh.execute("SELECT id FROM schema_migrations ORDER BY id")]
-assert fresh_versions and max(fresh_versions) == 22, "Fresh schema must include migration ledger through 0022"
+assert fresh_versions and max(fresh_versions) == 23, "Fresh schema must include migration ledger through 0023"
 fresh_indexes = {
     row[1] for row in fresh.execute("PRAGMA index_list('users')")
 }
@@ -203,4 +207,4 @@ except sqlite3.IntegrityError as exc:
     assert "payment promise updater" in str(exc)
 else:
     raise AssertionError("Cross-tenant payment promise updater was not rejected")
-print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0022, required indexes and foreign keys, payment-promise tenant guards.")
+print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0023, required indexes and foreign keys, payment-promise tenant guards and encrypted router credential column.")
