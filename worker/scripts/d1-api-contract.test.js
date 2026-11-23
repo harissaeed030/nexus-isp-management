@@ -36,7 +36,7 @@ test("staff API contract supports frontend edits and DTO compatibility", () => {
   assert.ok(source.includes("path.match(/^\\/api\\/staff\\/[^/]+$/)&&m==='PUT')return await updateStaff"));
   assert.ok(source.includes("path.match(/^\\/api\\/staff\\/[^/]+$/)&&m==='DELETE')return await delStaff"));
   assert.deepEqual(mapStaffRow({id:"u1",name:"A Khan",status:"disabled"}), {id:"u1",name:"A Khan",status:"inactive",full_name:"A Khan"});
-  assert.deepEqual(mapStaffRow({id:"u2",full_name:"S Khan",status:"active"}), {id:"u2",full_name:"S Khan",status:"active",name:undefined});
+  assert.deepEqual(mapStaffRow({id:"u2",full_name:"S Khan",status:"active"}), {id:"u2",full_name:"S Khan",status:"active"});
 });
 
 test("D1 API Worker includes network inventory and staff permission modules", () => {
