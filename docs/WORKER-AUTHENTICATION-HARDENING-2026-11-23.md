@@ -41,3 +41,18 @@ The live Worker script uploads were inspected after the source change. The curre
 Both deployed script bundles still contain the previous verifier, including the `if(!salt)return pw===h` fallback. Therefore the fail-closed verifier change is **saved and CI-verified in GitHub, but is not yet deployed to either Worker**.
 
 The production version binds the production D1 database; staging binds the staging D1 database. Both have secret bindings (JWT, CORS, Turnstile; staging also has PPPoE encryption). Secret values were not read. No deployment was initiated because replacing a live Worker requires preserving all current bindings and reconciling the branch source against the deployed bundle; a blind upload could break authentication, CORS, RouterOS encryption or production traffic.
+
+
+## Frontend/API integration follow-up
+
+A route audit found that the hosted dashboard's first-owner / new-workspace setup form called `/api/v1/setup`, but the D1 Worker exposes tenant registration at `/api/v1/tenants/register` (normalized to `/api/auth/register`). The dashboard now targets the actual registration route.
+
+The dashboard also displayed a password-reset form that called an endpoint not implemented by the hosted D1 Worker and had no configured email-token delivery flow. It now clearly explains that hosted password recovery is not enabled and directs the user to the workspace owner/admin, rather than submitting a guaranteed-failing request or implying a reset token can be issued.
+
+A new architecture-boundary contract test covers both behaviors. All four GitHub workflow checks passed for commit `49a0d7651174376149fc20f1cdabfa89c697bc5c`:
+- Nexus backend verification
+- Nexus backend checks (including `node --check assets/js/app.js`)
+- Cloudflare D1 API Worker checks
+- NEXUS backend verification
+
+This verifies source syntax and contract tests; it does not constitute a live browser sign-in test or Worker deployment.
