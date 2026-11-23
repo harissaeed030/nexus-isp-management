@@ -349,6 +349,7 @@ if(path==='/api/profile'&&m==='PUT')return await updProf(request,env,auth,ip);
 if(path==='/api/profile/password'&&m==='PUT')return await chgPw(request,env,auth,ip);
 if(path==='/api/company'&&m==='GET')return await getCo(env,orgId);
 if(path==='/api/company'&&m==='PUT')return await updCo(request,env,orgId,userId,ip);
+if(path.startsWith('/api/network/devices/'))return json({error:'Hosted D1 currently supports router inventory and encrypted credential storage only. Live RouterOS/PPPoE operations require the separate network connector.'},501);
 return json({error:'Not Found',path},404)}catch(e){return json({error:'Server Error',message:e.message},500)}}
 
 
@@ -999,7 +1000,14 @@ export async function decryptAcsSecret(value,env){
  const key=await acsCryptoKey(env,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
  return new TextDecoder().decode(plain);
 }
-export function validateAcsUrl(value){
+export async function encryptRouterSecret(value,env){
+ if(!value)return null;if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
+ const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']);
+ const key=await crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-ROUTER-SALT-V1'),info:new TextEncoder().encode('NEXUS-ROUTER-CREDENTIAL-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,['encrypt']);
+ const iv=crypto.getRandomValues(new Uint8Array(12)),cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(value));
+ return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(cipher));
+}
+function validateAcsUrl(value){
  let u;try{u=new URL(String(value||''))}catch{return null}
  const h=u.hostname.toLowerCase();
  if(u.protocol!=='https:'||u.username||u.password||u.hash||!h.includes('.')||h==='localhost'||h.endsWith('.local')||h.endsWith('.internal')||h.endsWith('.localhost')||/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.startsWith('['))return null;
@@ -1109,7 +1117,7 @@ async function queueTr069Wifi(request,env,path,oid,uid,ip){
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
  const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
- return json({data:rows.results||[],pagination:{page,per_page:pp,total:cnt.n,total_pages:Math.ceil(cnt.n/pp)}})
+ return json({data:(rows.results||[]).map(x=>({...x,apiPort:x.port,location:x.notes,liveSupported:false})),pagination:{page,per_page:pp,pageSize:pp,total:cnt.n,total_pages:Math.ceil(cnt.n/pp)}})
 }
 async function listOnus(env,url,oid){
  const{page,pp,off}=pg(url,50),q=url.searchParams.get('search')||'',status=url.searchParams.get('status')||'',olt=url.searchParams.get('olt_id')||'';
@@ -1167,31 +1175,41 @@ async function deleteOnu(env,path,oid,uid,ip){
 }
 async function createNetworkDevice(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
- const name=s(b.name),type=b.device_type||b.type,port=b.port===undefined||b.port===null||b.port===''?null:parseInt(b.port,10);
+ const name=s(b.name),type=b.device_type||b.deviceType||b.type,portValue=b.port??b.apiPort,port=portValue===undefined||portValue===null||portValue===''?null:parseInt(portValue,10);
  if(!name||!['mikrotik','olt','acs','other'].includes(type))return json({error:'name and valid device_type are required'},400);
  if(port!==null&&(!Number.isInteger(port)||port<1||port>65535))return json({error:'port must be between 1 and 65535'},400);
  if(b.status!==undefined&&!['active','inactive','maintenance'].includes(b.status))return json({error:'Invalid status'},400);
- const id=uuid();
- const model=s(b.model||'')||null,protocol=s(b.management_protocol||'')||null,ponPorts=b.pon_ports===undefined||b.pon_ports===''?null:parseInt(b.pon_ports,10);
+ if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8||b.password.length>1000))return json({error:'Router password must contain 8–1000 characters'},400);
+ const id=uuid(),model=s(b.model||'')||null,protocol=s(b.management_protocol||'routeros_api_ssl')||null,ponPorts=b.pon_ports===undefined||b.pon_ports===''?null:parseInt(b.pon_ports,10);
  if(ponPorts!==null&&(!Number.isInteger(ponPorts)||ponPorts<1||ponPorts>256))return json({error:'pon_ports must be between 1 and 256'},400);
- await env.DB.prepare('INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports)VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,name,type,b.host||null,port,b.username||null,b.status||'inactive',b.notes||null,model,protocol,ponPorts).run();
+ const passwordCipher=b.password?await encryptRouterSecret(b.password,env):null;
+ await env.DB.prepare('INSERT INTO network_devices(id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,credential_password_cipher)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,name,type,s(b.host||'')||null,port,s(b.username||'')||null,b.status||'inactive',s(b.notes??b.location??'')||null,model,protocol,ponPorts,passwordCipher).run();
  await audit(env,oid,uid,'create_network_device',type+':'+name,ip);
- return json(await env.DB.prepare('SELECT * FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first(),201)
+ return json({success:true,data:await getNetworkDeviceRow(env,id,oid)},201)
+}
+async function getNetworkDeviceRow(env,id,oid){
+ const row=await env.DB.prepare('SELECT id,organization_id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first();
+ return row?{...row,apiPort:row.port,location:row.notes,liveSupported:false}:null
 }
 async function getNetworkDevice(env,path,oid){
- const id=path.split('/')[4],row=await env.DB.prepare('SELECT * FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first();
- return row?json(row):json({error:'Not found'},404)
+ const id=path.split('/')[4],row=await getNetworkDeviceRow(env,id,oid);
+ return row?json({success:true,data:row}):json({error:'Not found'},404)
 }
 async function updateNetworkDevice(r,env,path,oid,uid,ip){
  const id=path.split('/')[4],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ex=await env.DB.prepare('SELECT id FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
- const sets=[],params=[];for(const f of ['name','host','port','username','status','notes','model','management_protocol','pon_ports'])if(b[f]!==undefined){sets.push(f+'=?');params.push(f==='port'&&b[f]!==null&&b[f]!==''?parseInt(b[f],10):b[f])}
- if(b.device_type!==undefined){if(!['mikrotik','olt','acs','other'].includes(b.device_type))return json({error:'Invalid device_type'},400);sets.push('device_type=?');params.push(b.device_type)}
+ const port=b.port??b.apiPort,notes=b.notes??b.location,sets=[],params=[];
+ for(const[f,v]of Object.entries({name:b.name,host:b.host,port,username:b.username,status:b.status,notes,model:b.model,management_protocol:b.management_protocol,pon_ports:b.pon_ports})){
+  if(v!==undefined){sets.push(f+'=?');params.push(f==='port'&&v!==null&&v!==''?parseInt(v,10):v)}
+ }
+ if(b.password!==undefined){if(typeof b.password!=='string'||b.password.length<8||b.password.length>1000)return json({error:'Router password must contain 8–1000 characters'},400);sets.push('credential_password_cipher=?');params.push(await encryptRouterSecret(b.password,env))}
+ const type=b.device_type??b.deviceType;if(type!==undefined){if(!['mikrotik','olt','acs','other'].includes(type))return json({error:'Invalid device_type'},400);sets.push('device_type=?');params.push(type)}
  if(b.status!==undefined&&!['active','inactive','maintenance'].includes(b.status))return json({error:'Invalid status'},400);
  if(!sets.length)return json({error:'No fields'},400);
  sets.push("updated_at=datetime('now')");params.push(id,oid);
  await env.DB.prepare('UPDATE network_devices SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...params).run();
- await audit(env,oid,uid,'update_network_device','Device:'+id,ip);return await getNetworkDevice(env,'/api/network/devices/'+id,oid)
+ await audit(env,oid,uid,'update_network_device','Device:'+id,ip);
+ return await getNetworkDevice(env,'/api/network/devices/'+id,oid)
 }
 async function delNetworkDevice(env,path,oid,uid,ip){
  const id=path.split('/')[4],r=await env.DB.prepare('DELETE FROM network_devices WHERE id=? AND organization_id=?').bind(id,oid).run();
