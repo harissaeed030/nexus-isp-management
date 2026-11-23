@@ -49,6 +49,12 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 - The Worker returns `customer_limit: null` because hosted D1 plan-limit policy is not yet implemented; the UI now says the limit is not configured instead of inventing a number.
 - `worker/wrangler.toml` targets `nexus-saas-api-staging` / `nexus-saas-staging-db`. No Worker deployment or D1 migration was run. This is source-level parity only, not deployed or production-verified.
 
+## Dashboard API compatibility
+- Added hosted Worker compatibility routes `GET /api/dashboard` and `GET /api/reports/summary` to match the current dashboard frontend contract.
+- The dashboard response wraps the existing tenant-scoped dashboard statistics in `{stats}`; the summary adapter maps monthly revenue and outstanding balance into the frontend's expected fields.
+- Added the dashboard permission mapping so role-based access continues to use the existing `dashboard.read` permission.
+- These are source changes only; CI is required and the staging Worker remains undeployed.
+
 ## Frontend / hosted D1 API parity audit
 - Added `docs/HOSTED-D1-FRONTEND-API-PARITY.md` after comparing frontend request paths with Worker routes.
 - Confirmed that several frontend screens still call paths not implemented by the hosted Worker: dashboard summary, financial aging, payment promises, routers alias, tickets alias and TR-069/ACS management.
