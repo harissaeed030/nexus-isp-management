@@ -44,3 +44,10 @@ test("Hosted dashboard signup targets the D1 tenant registration route and passw
   assert.match(dashboardSource, /Password reset is not enabled on the hosted API yet/);
   assert.doesNotMatch(dashboardSource, /call\("\/api\/v1\/auth\/reset-password"/);
 });
+
+
+test("Hosted dashboard staff role choices are accepted by the D1 Worker", () => {
+  assert.match(dashboardSource, /const roleChoices=\[\["billing","Billing"\],\["support","Customer support"\],\["technician","Network \/ NOC & Field Technician"\],\["staff","Limited staff"\]\]/);
+  assert.match(d1WorkerSource, /const allowed=\['admin','billing','support','technician','staff'\]/);
+  assert.doesNotMatch(dashboardSource, /\["noc","Network \/ NOC"\]/);
+});
