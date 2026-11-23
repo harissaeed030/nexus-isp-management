@@ -31,7 +31,7 @@ test("tenant slug scopes customer portal email login when emails repeat across I
  db.exec(`
  CREATE TABLE tenants(id TEXT PRIMARY KEY,name TEXT,slug TEXT);
  CREATE TABLE users(id TEXT PRIMARY KEY,tenant_id TEXT);
- CREATE TABLE customers(id TEXT PRIMARY KEY,tenant_id TEXT,customer_code TEXT,full_name TEXT,email TEXT,account_number TEXT);
+ CREATE TABLE customers(id TEXT PRIMARY KEY,tenant_id TEXT,customer_code TEXT,full_name TEXT,email TEXT,account_number TEXT,status TEXT DEFAULT 'active');
  CREATE TABLE subscriptions(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
  CREATE TABLE invoices(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
  CREATE TABLE support_tickets(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
