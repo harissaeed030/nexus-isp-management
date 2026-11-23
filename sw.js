@@ -1,4 +1,4 @@
-const CACHE_NAME = "nexus-shell-v6-login-syntax-20261123";
+const CACHE_NAME = "nexus-shell-v7-login-final-20261123";
 const APP_SHELL = [
   "./",
   "./index.html",
