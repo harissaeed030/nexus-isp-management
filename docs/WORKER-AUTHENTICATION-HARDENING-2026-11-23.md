@@ -101,3 +101,12 @@ A new candidate version was uploaded to the existing staging Worker only:
 The candidate metadata confirms it retains the staging D1 binding and all four existing secret-text binding names (values remain secret and were not read), as well as the staging environment variables. The currently active staging deployment was separately checked and still routes 100% of traffic to version 29. Version 30 has **not** been promoted or assigned traffic.
 
 No production Worker or D1 database was changed. This creates a rollback-free staging candidate for further validation without interrupting the currently active staging API.
+
+
+## Customer portal integration follow-up
+
+A source-to-source audit found that the static customer portal still expected an older backend response shape. It now consumes the hosted D1 Worker contract for customer profile, subscriptions, invoice totals/paid/outstanding amounts, payment method/date, and support tickets. The portal contract tests cover the route aliases and the current DTO field names.
+
+The portal complaint form already offered priority selection, but the D1 Worker previously inserted every customer-submitted ticket as `medium`. The Worker now validates the submitted priority (`normal`, `low`, `medium`, `high`, or `urgent`), maps `normal` to `medium`, and persists the resulting value using a bound SQL parameter. Contract tests cover this behavior.
+
+The CI run for commit `f736f35d812ebd250425b4f89c989b94d4720a6d` passed all four checks (backend verification, backend checks, Cloudflare D1 API Worker, and NEXUS backend verification). This confirms source syntax and automated tests; live customer sign-in and live Worker deployment remain unverified.
