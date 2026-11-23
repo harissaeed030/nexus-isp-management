@@ -78,6 +78,23 @@ jobs:
             });
             assert.equal(protectedResponse.status, 401, environment + " unauthenticated API guard");
 
+            // The frontend uses the /api/v1 compatibility prefix. These checks
+            // prove the sign-out and AI routes normalize and remain protected.
+            const logoutGuard = await fetch(base + "/api/v1/auth/logout", {
+              method: "POST",
+              headers: { Accept: "application/json" },
+              signal: AbortSignal.timeout(15000),
+            });
+            assert.equal(logoutGuard.status, 401, environment + " sign-out route auth guard");
+
+            const aiGuard = await fetch(base + "/api/v1/ai/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify({ messages: [{ role: "user", content: "health check" }] }),
+              signal: AbortSignal.timeout(15000),
+            });
+            assert.equal(aiGuard.status, 401, environment + " AI route auth guard");
+
             for (const header of [
               "x-content-type-options",
               "x-frame-options",
@@ -107,6 +124,11 @@ jobs:
           const html = await page.text();
           assert.match(html, /NEXUS/i, "Pages frontend content");
           console.log("Pages production: HTTP 200 and NEXUS HTML verified");
+
+          const loginPage = await fetch(origin + "/login.html", { signal: AbortSignal.timeout(15000) });
+          assert.equal(loginPage.status, 200, "Pages login route status");
+          assert.match(await loginPage.text(), /NEXUS|sign-in/i, "Pages login route content");
+          console.log("Pages login route: HTTP 200 and sign-in redirect verified");
 
           const portalPage = await fetch(origin + "/portal/", { signal: AbortSignal.timeout(15000) });
           assert.equal(portalPage.status, 200, "Customer portal page status");
