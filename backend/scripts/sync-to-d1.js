@@ -28,7 +28,7 @@ while (batches < 100) {
       counts[event.entityType] = (counts[event.entityType] || 0) + 1;
       operations[event.operation] = (operations[event.operation] || 0) + 1;
     }
-    process.stdout.write(JSON.stringify({ dryRun: true, tenantId: source.tenantId, after: cursor, nextCursor: source.nextCursor, events: source.events.length, entities: counts, operations }) + "\\n");
+    process.stdout.write(JSON.stringify({ dryRun: true, tenantId: source.tenantId, after: cursor, nextCursor: source.nextCursor, events: source.events.length, entities: counts, operations }) + "\n");
     cursor = Number(source.nextCursor);
     batches += 1;
     if (source.events.length < 50) break;
