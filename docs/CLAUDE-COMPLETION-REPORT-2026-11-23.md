@@ -30,7 +30,7 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 
 ## Follow-up completed during continuation
 - Updated the dashboard activity panel to use server-calculated daily/monthly collection and outstanding receivables, plus suspended-customer and seven-day subscription-expiry counts. Existing customer/payment tables remain unchanged.
-- Exact commit `fed1ad9ed209d20112d648002dd505b5f4d6e34b` passed backend verification, tenant-isolation/customer-portal E2E, production/staging endpoint smoke, migration reconciliation and database-hardening workflows. Android APK build was still running at the time of this report update.
+- Exact commit `fed1ad9ed209d20112d648002dd505b5f4d6e34b` passed backend verification, tenant-isolation/customer-portal E2E, production/staging endpoint smoke, migration reconciliation and database-hardening workflows. Android debug APK build subsequently passed in workflow run `45115338510`; artifact `nexus-android-debug-apk` was uploaded successfully (expires 2026-12-23).
 
 ## Known limitations
 - No UI to change plan and no payment collection for SaaS plans (plan is changed in the database).
