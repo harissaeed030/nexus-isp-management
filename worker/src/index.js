@@ -318,6 +318,8 @@ if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
 if((path==='/api/complaints'||path==='/api/tickets')&&m==='GET')return await listComp(env,url,orgId);
 if((path==='/api/complaints'||path==='/api/tickets')&&m==='POST')return await createComp(request,env,orgId,userId,ip);
+if(/^\/api\/tickets\/[^/]+\/messages$/.test(path)&&m==='GET')return await listTicketMessages(env,path,orgId);
+if(/^\/api\/tickets\/[^/]+\/messages$/.test(path)&&m==='POST')return await createTicketMessage(request,env,path,orgId,userId,ip);
 if(/^\/api\/(?:complaints|tickets)\/[^/]+$/.test(path)&&['PUT','PATCH'].includes(m))return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
@@ -717,6 +719,28 @@ async function updateRefund(request,env,path,oid,uid,ip){
 }
 
 async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*) AS total FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT t.*,('TKT-'||upper(substr(t.id,1,8))) AS ticket_number,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name,COALESCE(NULLIF(u.name,''),u.email,'Unassigned') AS assigned_to_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id AND c.organization_id=t.organization_id LEFT JOIN users u ON t.assigned_to=u.id AND u.organization_id=t.organization_id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();const total=Number(cnt?.total||0),totalPages=Math.ceil(total/pp);return json({data:rows.results||[],pagination:{page,pp,per_page:pp,total,totalPages,total_pages:totalPages}})}
+
+async function listTicketMessages(env,path,oid){
+ const ticketId=decodeURIComponent(path.split('/')[3]);
+ const ticket=await env.DB.prepare('SELECT id FROM support_tickets WHERE id=? AND organization_id=?').bind(ticketId,oid).first();
+ if(!ticket)return json({error:'Ticket not found'},404);
+ const rows=await env.DB.prepare("SELECT tm.id,tm.ticket_id,tm.user_id,tm.message,tm.is_staff,tm.created_at,COALESCE(NULLIF(u.name,''),u.email,'Former user') AS author_name FROM ticket_messages tm LEFT JOIN users u ON u.id=tm.user_id WHERE tm.ticket_id=? ORDER BY tm.created_at ASC,tm.id ASC").bind(ticketId).all();
+ return json({success:true,data:rows.results||[]});
+}
+async function createTicketMessage(request,env,path,oid,uid,ip){
+ const ticketId=decodeURIComponent(path.split('/')[3]),body=await parseBody(request);
+ if(!body||typeof body.message!=='string'||!body.message.trim()||body.message.trim().length>4000)return json({error:'Message must be 1-4000 characters'},400);
+ const ticket=await env.DB.prepare('SELECT id,status FROM support_tickets WHERE id=? AND organization_id=?').bind(ticketId,oid).first();
+ if(!ticket)return json({error:'Ticket not found'},404);
+ if(ticket.status==='closed')return json({error:'Closed tickets cannot receive new messages'},409);
+ const id=uuid(),message=body.message.trim();
+ await env.DB.prepare('INSERT INTO ticket_messages(id,ticket_id,user_id,message,is_staff) VALUES(?,?,?,?,1)').bind(id,ticketId,uid,message).run();
+ await env.DB.prepare("UPDATE support_tickets SET updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(ticketId,oid).run();
+ await audit(env,oid,uid,'ticket_message_added','Ticket:'+ticketId,ip);
+ const row=await env.DB.prepare("SELECT tm.id,tm.ticket_id,tm.user_id,tm.message,tm.is_staff,tm.created_at,COALESCE(NULLIF(u.name,''),u.email,'Former user') AS author_name FROM ticket_messages tm LEFT JOIN users u ON u.id=tm.user_id WHERE tm.id=? AND tm.ticket_id=?").bind(id,ticketId).first();
+ return json({success:true,data:row},201);
+}
+
 async function createComp(r,env,oid,uid,ip){
  const raw=await parseBody(r);if(!raw||typeof raw!=='object'||Array.isArray(raw))return json({error:'Invalid body'},400);
  const b={...raw,customer_id:raw.customer_id??raw.customerId,assigned_to:raw.assigned_to??raw.assignedTo,priority:raw.priority==='normal'?'medium':raw.priority};
