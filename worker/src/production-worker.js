@@ -573,7 +573,7 @@ async function createCust(r,env,oid,uid,ip){
  await env.DB.prepare('INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,city,status,customer_code,balance,notes,installation_address,installation_date,id_type,id_number,service_address,coverage_area,connection_status,account_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,first,last,email||null,phone||null,address,city,status,code,Number(b.balance||0),s(b.notes||'')||null,address,installation,s(b.id_type||'')||null,s(b.id_number||'')||null,address,s(b.coverage_area??b.coverageArea??'')||null,connectionStatus,status).run();
  await env.DB.prepare('INSERT INTO customer_connection_history(id,organization_id,customer_id,event_type,old_status,new_status,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,'registered',null,connectionStatus,'Customer account created',uid).run();
  await audit(env,oid,uid,'create_customer','Customer:'+first,ip);
- return json(await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first(),201)
+ return json({success:true,data:await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first()},201)
 }
 async function getCustomerProfile(env,path,oid){
  const id=path.split('/')[3];
@@ -589,7 +589,7 @@ async function getCustomerProfile(env,path,oid){
  ]);
  return json({success:true,data:{customer,subscriptions:subs.results||[],invoices:invoices.results||[],payments:payments.results||[],complaints:tickets.results||[],connectionHistory:connectionHistory.results||[],subscriptionHistory:subscriptionHistory.results||[]}});
 }
-async function getCust(env,path,oid){const id=path.split('/')[3];const cu=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!cu)return json({error:'Not found'},404);const subs=await env.DB.prepare('SELECT s.*,p.name package_name,p.price,p.speed_mbps FROM subscriptions s LEFT JOIN packages p ON s.package_id=p.id WHERE s.customer_id=? AND s.organization_id=?').bind(id,oid).all();const inv=await env.DB.prepare('SELECT * FROM invoices WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const pay=await env.DB.prepare('SELECT * FROM payments WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const comp=await env.DB.prepare('SELECT * FROM support_tickets WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();return json({...cu,subscriptions:subs.results,invoices:inv.results,payments:pay.results,complaints:comp.results})}
+async function getCust(env,path,oid){const id=path.split('/')[3];const cu=await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first();if(!cu)return json({error:'Not found'},404);return json({success:true,data:cu})}
 async function updateCust(r,env,path,oid,uid,ip){
  const id=path.split('/')[3],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
@@ -610,7 +610,7 @@ async function updateCust(r,env,path,oid,uid,ip){
  if(connection!==undefined&&connection!==ex.connection_status)await env.DB.prepare('INSERT INTO customer_connection_history(id,organization_id,customer_id,event_type,old_status,new_status,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,'connection_status_changed',ex.connection_status,connection,'Connection status updated',uid).run();
  if(installation!==ex.installation_date)await env.DB.prepare('INSERT INTO customer_connection_history(id,organization_id,customer_id,event_type,old_status,new_status,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,'installation_date_changed',ex.installation_date,installation,'Installation date updated',uid).run();
  await audit(env,oid,uid,'update_customer','Updated:'+id,ip);
- return json(await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first())
+ return json({success:true,data:await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first()})
 }
 async function delCust(env,path,oid,uid,ip){const id=path.split('/')[3];const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM customers WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_customer','Deleted:'+ex.first_name,ip);return json({success:true})}
 
