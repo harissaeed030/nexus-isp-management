@@ -28,8 +28,8 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 - Headless Chromium at 390×844: login, Complaints (number, assign, status save), Settings (save, brand colour persists after reload).
 - Test Node version: v22. Not yet run on Node v26 or on a physical Android device.
 
-## Known limitations
+## Follow-up completed during continuation\n- Updated the dashboard activity panel to use the server-calculated KPI values and display monthly collection, suspended customer count and seven-day subscription expiry count. Existing customer/payment tables remain unchanged.\n- GitHub Actions was triggered by the update; results are being checked for the exact commit.\n\n## Known limitations
 - No UI to change plan and no payment collection for SaaS plans (plan is changed in the database).
-- Dashboard cards do not yet display the new KPI fields (API only).
+- Dashboard KPI cards now display daily/monthly collections, outstanding receivables, suspended customers and subscriptions expiring within seven days. The dashboard JavaScript change is included in commit `eba7e012c4f6d2ae7767fdeca6b885a6bca847f8`.
 - Router, OLT and payment-gateway behaviour is not tested on real devices.
 - `build/nexus-isp-core` and `main` have diverged and were not merged.
