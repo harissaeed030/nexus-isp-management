@@ -558,10 +558,11 @@ async function createCust(r,env,oid,uid,ip){
  const fullName=s(b.full_name??b.fullName??b.first_name??''),parts=fullName.split(/\s+/),first=s(b.first_name??parts.shift()??''),last=s(b.last_name??parts.join(' '));
  if(!first)return json({error:'Customer name is required'},400);
  const phone=s(b.phone||''),email=s(b.email||'');if(email&&!vEmail(email))return json({error:'Valid email address is required'},400);
- const status=b.status||'active';if(!['active','suspended','terminated','inactive','blocked'].includes(status))return json({error:'Invalid customer status'},400);
+ const requestedStatus=b.status||'active',statusMap={active:'active',suspended:'suspended',blocked:'suspended',inactive:'terminated',terminated:'terminated'},status=statusMap[requestedStatus];if(!status)return json({error:'Invalid customer status'},400);
+ const connectionStatus=b.connection_status??b.connectionStatus??'pending';if(!['pending','active','suspended','disconnected'].includes(connectionStatus))return json({error:'Invalid connection status'},400);
  const id=uuid(),code='CUS-'+crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase();
  const address=s(b.service_address??b.serviceAddress??b.address??'')||null,city=s(b.city??b.coverageArea??'')||null,installation=s(b.installation_date??b.installationDate??'')||null;
- await env.DB.prepare('INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,city,status,customer_code,balance,notes,installation_address,installation_date,id_type,id_number,service_address,coverage_area,connection_status,account_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,first,last,email||null,phone||null,address,city,status,code,Number(b.balance||0),s(b.notes||'')||null,address,installation,s(b.id_type||'')||null,s(b.id_number||'')||null,address,s(b.coverage_area??b.coverageArea??'')||null,b.connection_status??b.connectionStatus??'pending',status).run();
+ await env.DB.prepare('INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,city,status,customer_code,balance,notes,installation_address,installation_date,id_type,id_number,service_address,coverage_area,connection_status,account_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,first,last,email||null,phone||null,address,city,status,code,Number(b.balance||0),s(b.notes||'')||null,address,installation,s(b.id_type||'')||null,s(b.id_number||'')||null,address,s(b.coverage_area??b.coverageArea??'')||null,connectionStatus,status).run();
  await audit(env,oid,uid,'create_customer','Customer:'+first,ip);
  return json(await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first(),201)
 }
