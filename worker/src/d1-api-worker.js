@@ -502,6 +502,8 @@ if(path==='/api/complaints'&&m==='POST'){const body=normalizeTicketPayload(await
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
+if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
+if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
 if(path.match(/^\/api\/staff\/[^/]+\/permissions$/)&&['GET','PUT'].includes(m))return await staffPermissions(env,path,orgId,role,userId,request,ip);
 if(path==='/api/pppoe'&&m==='GET')return await listPppoe(env,url,orgId);
 if(path==='/api/pppoe'&&m==='POST')return await createPppoe(request,env,orgId,userId,ip);
@@ -972,7 +974,7 @@ async function markAllNotificationsRead(env,oid,uid){
  return json({success:true});
 }
 
-async function listStaff(env,oid){const rows=await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();return json({data:rows.results||[]})}
+export function mapStaffRow(row){return {...row,full_name:row.full_name||row.name||'',status:row.status==='disabled'?'inactive':row.status}}\nasync function listStaff(env,oid){const rows=await env.DB.prepare('SELECT id,email,name,role,phone,status,last_login,created_at FROM users WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();return json({data:(rows.results||[]).map(mapStaffRow)})}
 async function createStaff(r,env,oid,uid,role,ip){
  if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
@@ -997,10 +999,10 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
  const allowed=['admin','billing','support','technician','staff'];
  if(b.role!==undefined&&!allowed.includes(b.role))return json({error:'Invalid role'},400);
  if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8))return json({error:'Password must be at least 8 characters'},400);
- if(b.status!==undefined&&!['active','disabled'].includes(b.status))return json({error:'Invalid user status'},400);
+ if(b.status!==undefined&&!['active','inactive','disabled'].includes(b.status))return json({error:'Invalid user status'},400);
  if(id===uid&&b.role!==undefined&&b.role!==role)return json({error:'You cannot change your own role'},400);
  const fields=['name','role','phone','status'],sets=[],params=[];
- for(const f of fields)if(b[f]!==undefined){sets.push(f+'=?');params.push(b[f])}
+ for(const f of fields)if(b[f]!==undefined){sets.push(f+'=?');params.push(f==='status'&&b[f]==='inactive'?'disabled':b[f])}
  if(b.password){const{hash,salt}=await hashPw(b.password);sets.push('password_hash=?','password_salt=?');params.push(hash,salt)}if(b.password||(b.role!==undefined&&b.role!==ex.role)||(b.status!==undefined&&b.status!==ex.status))sets.push('token_version=COALESCE(token_version,0)+1');
  if(!sets.length)return json({error:'No fields'},400);
  sets.push("updated_at=datetime('now')");params.push(id,oid);
