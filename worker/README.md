@@ -34,7 +34,7 @@ The RouterOS and HSGQ adapters must be treated according to their documented cap
 
 - Authenticated endpoint: `POST /api/ai/chat`.
 - Uses the OpenAI Responses API with `gpt-6-luna`; the API key is read only from the Worker secret `OPENAI_API_KEY`.
-- Chat history is limited to 12 alternating messages and 10,000 total characters; per-user requests are rate-limited.
+- Chat history is limited to 12 alternating messages and 10,000 total characters. The checked-in production Worker source reserves a maximum of 5 AI attempts per user per organization in a rolling one-minute window using one atomic D1 `INSERT ... SELECT` statement, so failed upstream attempts count and concurrent Worker isolates share the limit. This source change is committed but is not yet deployed to the live Worker; the currently deployed `nexus-saas-api` has its separate in-memory 10/minute guard.
 - The browser never receives the OpenAI API key. The assistant does not access or mutate customer, billing, router or ONU records.
 - Never add API key values to Git, Wrangler configuration, logs, or frontend code.
 
