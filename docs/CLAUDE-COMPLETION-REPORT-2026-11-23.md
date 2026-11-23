@@ -26,17 +26,17 @@ Existing workspaces are upgraded to plan `pro` (limit 100000) so nobody is locke
 - `cd backend && npm run verify` passes (all earlier tests plus `scripts/tenant-isolation-tickets.test.js`).
 - Migration upgrade tested against a database created by the previous code (existing tickets back-filled, new ticket numbered correctly).
 - Headless Chromium at 390×844: login, Complaints (number, assign, status save), Settings (save, brand colour persists after reload).
-- Original browser/migration verification used Node v22. A new CI matrix now runs the full backend verification on Node 22 and Node 26 to cover the Termux runtime version; the new matrix results are pending.
+- Original browser/migration verification used Node v22. The new CI matrix passed on both Node 22 and Node 26 in run `45116271628` (commit `166043a0c87d1aab31e3e004d587f9d6ab91aa89`).
 
 ## Follow-up completed during continuation
 - Updated the dashboard activity panel to use server-calculated daily/monthly collection and outstanding receivables, plus suspended-customer and seven-day subscription-expiry counts. Existing customer/payment tables remain unchanged.
-- Exact commit `fed1ad9ed209d20112d648002dd505b5f4d6e34b` passed backend verification, tenant-isolation/customer-portal E2E, production/staging endpoint smoke, migration reconciliation and database-hardening workflows. Android debug APK build subsequently passed in workflow run `45115338510`; artifact `nexus-android-debug-apk` was uploaded successfully (expires 2026-12-23).
+- Commit `166043a0c87d1aab31e3e004d587f9d6ab91aa89` passed Node 22/26 backend syntax/verification, backend E2E and tenant-isolation tests, production/staging smoke, migration reconciliation, SQLite-D1 sync contract, database hardening, and Android debug APK build. Latest APK artifact from that CI run: `nexus-android-debug-apk` (workflow `45116298532`, expires 2026-12-23). Later commits only remove a local-path symlink, clarify the hosted Settings API gap, and update documentation; a new CI run for the latest head was not returned during this audit.
 
 ## Additional audit fixes
 - Removed the accidentally committed `backend/node_modules` absolute-path symlink (`/home/claude/nexus-isp-management/backend/node_modules`) from this PR branch. It must not be included in the merge.
 - Added migration `013_tenant_plan_branding.sql` to the SQLite migration version registry.
 - Expanded `.github/workflows/backend-checks.yml` to verify on Node 22 and 26.
-- Confirmed the hosted D1 Worker on `main` does not expose `/api/v1/tenant`; updated the Settings screen to explain this hosted API gap instead of incorrectly telling every user they lack owner access.
+- Confirmed the hosted D1 Worker on `main` does not expose `/api/v1/tenant`; updated the Settings screen to explain this hosted API gap instead of incorrectly telling every user they lack owner access. This small frontend fallback change was committed after the successful CI run and has not yet had a fresh CI result attached.
 
 ## Known limitations
 - No UI to change plan and no payment collection for SaaS plans (plan is changed in the database).
