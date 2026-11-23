@@ -46,6 +46,23 @@
   </main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+/* Keep the dashboard pointed at the API serving this page.
+   Remove the retired read-only Worker URL if it was saved by an earlier build. */
+(() => {
+  try {
+    const saved = sessionStorage.getItem("nexus_api") || "";
+    if (saved.includes("nexus-saas-api.harissaeed030.workers.dev")) {
+      sessionStorage.removeItem("nexus_api");
+    }
+    if (!sessionStorage.getItem("nexus_api")) {
+      sessionStorage.setItem("nexus_api", window.location.origin);
+    }
+  } catch (_) {
+    // The sign-in form still allows the API address to be entered manually.
+  }
+})();
+</script>
 <script src="assets/js/app.js?v=nexus-reset-v1"></script>
 </body>
 </html>
