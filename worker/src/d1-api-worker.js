@@ -277,8 +277,8 @@ async function runMigrations(env){
 let _migrated=false;
 export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=normalizeApiPath(url.pathname);const m=normalizeApiMethod(request.method);const apiRequest=request.method==='PATCH'?new Request(request,{method:'PUT'}):request;
 if(m==='OPTIONS')return withCors(new Response(null,{status:204}),request,env);
-if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
+if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path.startsWith('/api/'))return withCors(await handleApi(apiRequest,env,url,path,m),request,env);
 return new Response(FRONTEND_HTML,{headers:{'Content-Type':'text/html;charset=utf-8'}})}};
 
