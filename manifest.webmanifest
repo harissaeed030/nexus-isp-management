@@ -2,7 +2,7 @@
   "name": "NEXUS ISP Management",
   "short_name": "NEXUS",
   "description": "Mobile-first ISP operations platform for Vancom Networks.",
-  "start_url": "./",
+  "start_url": "./?login=1",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
