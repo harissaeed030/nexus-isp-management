@@ -984,9 +984,10 @@ async function getTr069Parameters(env,path,oid,uid,ip){
  walk(tree.InternetGatewayDevice||tree.Device||{});
  await auditTr069(env,oid,uid,row.id,row.acs_connection_id,'read_parameters',null,null,null,'success',null,ip);return json({data:params});
 }
+export function buildGenieAcsTask(taskName,taskOptions={}){return{name:taskName,...taskOptions}}
 async function queueTr069Task(env,path,oid,uid,ip,taskName,taskOptions={}){
  const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
- const body={name:taskName,...taskOptions};
+ const body=buildGenieAcsTask(taskName,taskOptions);
  const url='devices/'+encodeURIComponent(row.device_id)+'/tasks';await acsRequest(row,env,url,'connection_request',body);
  await auditTr069(env,oid,uid,row.id,row.acs_connection_id,'queue_'+taskName,null,null,null,'queued',null,ip);return json({success:true,data:{queued:true,task:taskName}});
 }
