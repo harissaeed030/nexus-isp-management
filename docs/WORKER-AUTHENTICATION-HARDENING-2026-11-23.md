@@ -173,3 +173,14 @@ The read-only smoke workflow is prepared for a manual run. Direct browser-based 
 After staging version 34 was deployed, the same reviewed source from commit `9684487370a30f85fb7fca27f31148bcea2e5071` was uploaded to the production Worker as version 32 (ID `30a31289-0f39-4a6c-b7ab-ba37ac6c44c1`). This is an upload-only candidate: the active production deployment was rechecked and remains version 31 at 100% traffic. The candidate preserves the production D1 binding `ce88098b-bff4-4d06-a0df-7bf29622a085`, `ENVIRONMENT=production`, the feature flag value, and all existing secret binding names (`ALLOWED_ORIGINS`, `JWT_SECRET`, `OPENAI_API_KEY`, `TURNSTILE_SECRET_KEY`); secret values were never read. Candidate startup validation reported 3 ms.
 
 No production traffic was shifted and no production D1 data/schema was changed. The production candidate must remain unpromoted until the staging read-only live smoke workflow passes and the production release/rollback review is completed.
+
+
+## Read-only staging smoke assertions strengthened — 2026-11-23
+
+The staging smoke script now additionally verifies the trusted Pages origin on the health GET response, the `no-store` cache policy, and the Worker security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and HSTS). Its trusted preflight now checks that POST and Authorization are advertised; the untrusted-origin non-reflection assertion remains. The probes still avoid login attempts and any tenant, customer, invoice, payment, or ticket writes.
+
+Change commit: `fea3cd02411db78f509250ae778d8cf0ee00af31`. All five reported checks completed successfully, including the D1 Worker syntax/contract workflow and Cloudflare Pages preview deployment. Preview URLs reported for this commit:
+- Branch preview: https://build-nexus-isp-core.nexus-isp-management.pages.dev
+- Deployment-specific preview: https://8f1c81df.nexus-isp-management.pages.dev
+
+This CI result validates the smoke script syntax and contract tests; it is **not** a run of the manual live staging smoke workflow. Live staging health/CORS/security-header assertions remain unverified. Production Worker version 31 remains active; production candidate version 32 remains uploaded but unpromoted. No D1 data/schema writes or production traffic changes were made.
