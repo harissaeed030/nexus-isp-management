@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload, corsHeaders } from "../src/d1-api-worker.js";
+import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload, corsHeaders, hashPw, verifyPw, needsPasswordUpgrade } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
@@ -449,12 +449,32 @@ test("D1 Worker AI defaults to the same Gemini model as the local backend", () =
 });
 
 
-test("Worker password verification rejects plaintext or malformed legacy credentials and compares derived hashes without early exit", () => {
-  assert.match(source, /async function verifyPw\(pw,h,salt\)\{if\(typeof pw!=='string'\|\|typeof h!=='string'\|\|typeof salt!=='string'\)return false/);
-  assert.match(source, /!\/\^\[a-f0-9\]\{64\}\$\/i\.test\(h\)/);
-  assert.match(source, /!\/\^\[a-f0-9\]\{32\}\$\/i\.test\(salt\)/);
-  assert.match(source, /for\(let i=0;i<64;i\+\+\)diff\|=hash\.charCodeAt\(i\)\^expected\.charCodeAt\(i\)/);
+test("Worker password verification rejects plaintext or malformed credentials and compares derived hashes without early exit", () => {
+  assert.match(source, /PASSWORD_HASH_ITERATIONS=600000/);
+  assert.match(source, /LEGACY_PASSWORD_HASH_ITERATIONS=100000/);
+  assert.match(source, /safeHashEqual/);
   assert.doesNotMatch(source, /if\(!salt\)return pw===h/);
+});
+
+test("D1 password hashes are versioned PBKDF2-SHA256 and reject plaintext fallback", async () => {
+  const credentials = await hashPw("Nexus-Strong-Password-2026!");
+  assert.match(credentials.salt, /^v2:600000:[0-9a-f]{32}$/);
+  assert.equal(needsPasswordUpgrade(credentials.salt), false);
+  assert.equal(await verifyPw("Nexus-Strong-Password-2026!", credentials.hash, credentials.salt), true);
+  assert.equal(await verifyPw("wrong-password", credentials.hash, credentials.salt), false);
+  assert.equal(await verifyPw("plaintext", "plaintext", null), false);
+  assert.equal(await verifyPw("password", "not-a-hash", "not-a-salt"), false);
+});
+
+test("legacy salted 100,000-iteration hashes verify and are marked for transparent upgrade", async () => {
+  const saltBytes = new Uint8Array(16).fill(7);
+  const salt = Array.from(saltBytes).map(value => value.toString(16).padStart(2, "0")).join("");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode("Legacy-Password-2026!"), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: saltBytes, iterations: 100000, hash: "SHA-256" }, key, 256);
+  const hash = Array.from(new Uint8Array(bits)).map(value => value.toString(16).padStart(2, "0")).join("");
+  assert.equal(await verifyPw("Legacy-Password-2026!", hash, salt), true);
+  assert.equal(await verifyPw("incorrect", hash, salt), false);
+  assert.equal(needsPasswordUpgrade(salt), true);
 });
 
 
