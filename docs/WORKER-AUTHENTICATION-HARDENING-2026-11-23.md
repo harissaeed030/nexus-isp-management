@@ -86,3 +86,18 @@ The static Pages preview is hosted on a deployment-specific subdomain such as `0
 The Worker now accepts HTTPS origins on the exact NEXUS Pages project hostname and its subdomains, while rejecting lookalike domains and HTTP origins. The CORS header builder is exported for direct contract testing. The Cloudflare D1 API Worker workflow passed for commit `992064bab4948a69189f091a62efe8ede948ec73`.
 
 This is a source and test change only. The currently deployed production and staging Worker versions have not been replaced; the CORS fix becomes effective only after a reviewed Worker deployment.
+
+
+## Staging candidate version uploaded (not deployed)
+
+A new candidate version was uploaded to the existing staging Worker only:
+- Worker: `nexus-saas-api-staging`
+- Candidate version: `30`
+- Version ID: `3c0f065c-3719-444e-8d6c-438d4a5cc7f1`
+- Source branch commit: `6a650dc7d5602b86a5a0419074658520891bbb6f`
+- Runtime startup validation: 4 ms
+- Handlers: `fetch`, `scheduled`
+
+The candidate metadata confirms it retains the staging D1 binding and all four existing secret-text binding names (values remain secret and were not read), as well as the staging environment variables. The currently active staging deployment was separately checked and still routes 100% of traffic to version 29. Version 30 has **not** been promoted or assigned traffic.
+
+No production Worker or D1 database was changed. This creates a rollback-free staging candidate for further validation without interrupting the currently active staging API.
