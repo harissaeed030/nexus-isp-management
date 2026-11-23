@@ -8,6 +8,7 @@ current = (root / "worker" / "schema.sql").read_text()
 migration_7 = (root / "cloudflare" / "d1" / "migrations" / "0007_customer_portal_tenant_guards.sql").read_text()
 migration_8 = (root / "cloudflare" / "d1" / "migrations" / "0008_user_email_index_parity.sql").read_text()
 migration_9 = (root / "cloudflare" / "d1" / "migrations" / "0009_repair_global_user_email_index.sql").read_text()
+migration_22 = (root / "cloudflare" / "d1" / "migrations" / "0022_payment_promises.sql").read_text()
 
 def normalize_sql(value):
     compact = " ".join((value or "").split()).lower()
@@ -34,6 +35,9 @@ assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=8").fetch
 before.executescript(migration_9)
 before.executescript(migration_9)
 assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=9").fetchone()[0] == 1
+before.executescript(migration_22)
+before.executescript(migration_22)
+assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=22").fetchone()[0] == 1
 assert before.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_users_email_global'").fetchone() is not None
 
 expected = sqlite3.connect(":memory:")
@@ -49,7 +53,7 @@ if missing or extra or different:
     print("Different object definitions:", different)
     for key in different:
         print("DIFF", key, "actual=", actual_objects[key][:500], "expected=", expected_objects[key][:500])
-    raise AssertionError("Production v6 + migration 0007 does not match canonical v7 schema")
+    raise AssertionError("Production v6 + migrations 0007-0009 and 0022 do not match canonical schema")
 
 before.execute("INSERT INTO organizations(id,name,slug) VALUES('org-a','Org A','org-a'),('org-b','Org B','org-b')")
 before.execute("INSERT INTO customers(id,organization_id,first_name,last_name) VALUES('cust-a','org-a','A','Test'),('cust-b','org-b','B','Test')")
@@ -84,7 +88,7 @@ except sqlite3.IntegrityError:
 else:
     raise AssertionError("Case-insensitive per-organization user email uniqueness was not enforced")
 
-print("D1 schema validation passed: v6 -> idempotent v7/v8/v9 migrations, object parity, tenant guards and email uniqueness.")
+print("D1 schema validation passed: v6 -> idempotent v7/v8/v9/22 migrations, object parity, tenant guards and email uniqueness.")
 
 # Fresh-install path: the canonical snapshot is the only supported bootstrap
 # for an empty D1 database. Validate it independently from the v6 upgrade path.
@@ -104,7 +108,7 @@ assert required_fresh_tables <= fresh_tables, (
     "Fresh schema is missing tables: " + repr(sorted(required_fresh_tables - fresh_tables))
 )
 fresh_versions = [row[0] for row in fresh.execute("SELECT id FROM schema_migrations ORDER BY id")]
-assert fresh_versions and max(fresh_versions) == 9, "Fresh schema must include migration ledger through 0009"
+assert fresh_versions and max(fresh_versions) == 22, "Fresh schema must include migration ledger through 0022"
 fresh_indexes = {
     row[1] for row in fresh.execute("PRAGMA index_list('users')")
 }
@@ -180,4 +184,25 @@ strict.close()
 
 fresh.close()
 
-print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0009, required indexes and foreign keys.")
+# Tenant-integrity regression: a promise cannot point at another tenant's customer or actor.
+fresh.execute("INSERT INTO organizations(id,name,slug) VALUES('promise-a','Promise A','promise-a'),('promise-b','Promise B','promise-b')")
+fresh.execute("INSERT INTO customers(id,organization_id,first_name,last_name) VALUES('promise-customer-a','promise-a','A','Customer'),('promise-customer-b','promise-b','B','Customer')")
+fresh.execute("INSERT INTO users(id,organization_id,email,role) VALUES('promise-user-a','promise-a','promise-a@example.invalid','owner'),('promise-user-b','promise-b','promise-b@example.invalid','owner')")
+fresh.execute("INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,created_by) VALUES('promise-valid','promise-a','promise-customer-a',1000,'2026-12-01','promise-user-a')")
+for statement in [
+    "INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,created_by) VALUES('promise-cross-customer','promise-a','promise-customer-b',1000,'2026-12-01','promise-user-a')",
+    "INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,created_by) VALUES('promise-cross-actor','promise-a','promise-customer-a',1000,'2026-12-01','promise-user-b')",
+]:
+    try:
+        fresh.execute(statement)
+    except sqlite3.IntegrityError as exc:
+        assert "payment promise" in str(exc)
+    else:
+        raise AssertionError("Cross-tenant payment promise write was not rejected")
+try:
+    fresh.execute("UPDATE payment_promises SET updated_by='promise-user-b' WHERE id='promise-valid'")
+except sqlite3.IntegrityError as exc:
+    assert "payment promise updater" in str(exc)
+else:
+    raise AssertionError("Cross-tenant payment promise updater was not rejected")
+print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0022, required indexes and foreign keys, payment-promise tenant guards.")
