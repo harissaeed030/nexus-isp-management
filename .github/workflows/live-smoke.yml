@@ -72,7 +72,24 @@ jobs:
               environment + " CORS origin",
             );
 
-            const protectedResponse = await fetch(base + "/api/dashboard/stats", {
+            const androidOrigin = "https://localhost";
+          const androidPreflight = await fetch(base + "/api/v1/auth/login", {
+            method: "OPTIONS",
+            headers: {
+              Origin: androidOrigin,
+              "Access-Control-Request-Method": "POST",
+              "Access-Control-Request-Headers": "content-type",
+            },
+            signal: AbortSignal.timeout(15000),
+          });
+          assert.equal(androidPreflight.status, 204, environment + " Android WebView CORS preflight");
+          assert.equal(
+            androidPreflight.headers.get("access-control-allow-origin"),
+            androidOrigin,
+            environment + " Android WebView CORS origin",
+          );
+
+          const protectedResponse = await fetch(base + "/api/dashboard/stats", {
               headers: { Accept: "application/json" },
               signal: AbortSignal.timeout(15000),
             });
