@@ -5,7 +5,12 @@ function json(data,status=200){return new Response(JSON.stringify(data),{status,
 async function sha256(value){const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("");}
 async function equalSecret(a,b){if(!a||!b)return false;const [x,y]=await Promise.all([sha256(a),sha256(b)]);let diff=0;for(let i=0;i<x.length;i++)diff|=x.charCodeAt(i)^y.charCodeAt(i);return diff===0;}
 function clean(v){return typeof v==="string"?v.trim():v;}
-function statusCustomer(v){return v==="active"?"active":"suspended";}
+export function normalizeCustomerSyncFields(record={}) {
+  const accountStatus=["active","blocked","inactive"].includes(record.status)?record.status:"active";
+  const status=accountStatus==="blocked"?"suspended":accountStatus==="inactive"?"terminated":"active";
+  const connectionStatus=["pending","active","suspended","disconnected"].includes(record.connection_status)?record.connection_status:"pending";
+  return {status,accountStatus,connectionStatus};
+}
 function statusSubscription(v){return ["active","suspended","cancelled","expired"].includes(v)?v:"active";}
 function statusInvoice(v){return v==="paid"?"paid":v==="overdue"?"overdue":v==="cancelled"||v==="void"?"cancelled":"pending";}
 function paymentMethod(v){return v==="cash"?"cash":v==="bank"?"bank_transfer":v==="jazzcash"||v==="easypaisa"?"mobile_money":v==="bank_transfer"?"bank_transfer":v==="mobile_money"?"mobile_money":"other";}
@@ -61,11 +66,13 @@ async function applyEvent(env,orgId,sourceTenantId,event,repository){
       if(!first)throw new Error("Customer name is required.");
       const customerCode=r.account_number||r.customer_code||null;
       if(customerCode){const sameCode=await env.DB.prepare("SELECT id FROM customers WHERE organization_id=? AND customer_code=?").bind(orgId,customerCode).first();if(sameCode&&sameCode.id!==id)throw new Error("Customer code already exists in D1 under a different ID; reconcile before syncing.");}
-      statement=env.DB.prepare(`INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,status,customer_code,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(id) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,email=excluded.email,phone=excluded.phone,address=excluded.address,status=excluded.status,customer_code=excluded.customer_code,updated_at=excluded.updated_at
+      const customerState=normalizeCustomerSyncFields(r),accountNumber=r.account_number||r.customer_code||null;
+      const serviceAddress=r.service_address||r.address||null;
+      statement=env.DB.prepare(`INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,status,customer_code,created_at,updated_at,account_number,service_address,coverage_area,connection_status,account_status)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,email=excluded.email,phone=excluded.phone,address=excluded.address,status=excluded.status,customer_code=excluded.customer_code,updated_at=excluded.updated_at,account_number=excluded.account_number,service_address=excluded.service_address,coverage_area=excluded.coverage_area,connection_status=excluded.connection_status,account_status=excluded.account_status
         WHERE customers.organization_id=excluded.organization_id AND excluded.updated_at>=customers.updated_at`)
-        .bind(id,orgId,first,last,r.email||null,r.phone||null,r.service_address||r.address||null,statusCustomer(r.status),r.account_number||r.customer_code||null,r.created_at||changedAt(event),changedAt(event));
+        .bind(id,orgId,first,last,r.email||null,r.phone||null,serviceAddress,customerState.status,accountNumber,r.created_at||changedAt(event),changedAt(event),accountNumber,serviceAddress,r.coverage_area||null,customerState.connectionStatus,customerState.accountStatus);
     }else if(type==="packages"){
       const down=Number(r.speed_down_mbps),up=Number(r.speed_up_mbps),price=Number(r.monthly_price_pkr);
       if(!Number.isInteger(down)||down<1||!Number.isInteger(up)||up<1||!Number.isFinite(price)||price<0)throw new Error("Invalid package speed or PKR price.");
