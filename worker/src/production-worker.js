@@ -580,7 +580,26 @@ async function getCustomerProfile(env,path,oid){
  return json({success:true,data:{customer,subscriptions:subs.results||[],invoices:invoices.results||[],payments:payments.results||[],complaints:tickets.results||[],connectionHistory:connectionHistory.results||[],subscriptionHistory:subscriptionHistory.results||[]}});
 }
 async function getCust(env,path,oid){const id=path.split('/')[3];const cu=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!cu)return json({error:'Not found'},404);const subs=await env.DB.prepare('SELECT s.*,p.name package_name,p.price,p.speed_mbps FROM subscriptions s LEFT JOIN packages p ON s.package_id=p.id WHERE s.customer_id=? AND s.organization_id=?').bind(id,oid).all();const inv=await env.DB.prepare('SELECT * FROM invoices WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const pay=await env.DB.prepare('SELECT * FROM payments WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const comp=await env.DB.prepare('SELECT * FROM support_tickets WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();return json({...cu,subscriptions:subs.results,invoices:inv.results,payments:pay.results,complaints:comp.results})}
-async function updateCust(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);const f=['first_name','last_name','email','phone','address','city','status','notes','installation_address','installation_date','id_type','id_number','balance'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE customers SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();await audit(env,oid,uid,'update_customer','Updated:'+ex.first_name,ip);return json(await env.DB.prepare('SELECT * FROM customers WHERE id=?').bind(id).first())}
+async function updateCust(r,env,path,oid,uid,ip){
+ const id=path.split('/')[3],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
+ const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
+ const statusMap={active:'active',suspended:'suspended',blocked:'suspended',inactive:'terminated',terminated:'terminated'};
+ const nextStatus=b.status===undefined?ex.status:(statusMap[b.status]||'');
+ if(!nextStatus)return json({error:'Invalid customer status'},400);
+ const connection=b.connectionStatus??b.connection_status;
+ if(connection!==undefined&&!['pending','active','suspended','disconnected'].includes(connection))return json({error:'Invalid connection status'},400);
+ const name=s(b.fullName??b.full_name??[ex.first_name,ex.last_name].filter(Boolean).join(' ')),parts=name.split(/\s+/),first=parts.shift()||'',last=parts.join(' ');
+ if(!first||first.length>160)return json({error:'Valid customer name is required'},400);
+ const email=s(b.email??ex.email??''),phone=s(b.phone??ex.phone??'');
+ if(email&&!vEmail(email))return json({error:'Valid email address is required'},400);
+ const address=s(b.serviceAddress??b.service_address??b.address??ex.service_address??ex.address??'')||null;
+ const area=s(b.coverageArea??b.coverage_area??ex.coverage_area??'')||null;
+ const installation=b.installationDate??b.installation_date??ex.installation_date;
+ if(installation&&!/^\d{4}-\d{2}-\d{2}$/.test(String(installation)))return json({error:'Installation date must use YYYY-MM-DD'},400);
+ await env.DB.prepare("UPDATE customers SET first_name=?,last_name=?,email=?,phone=?,address=?,service_address=?,coverage_area=?,installation_address=?,installation_date=?,status=?,account_status=?,connection_status=COALESCE(?,connection_status),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(first,last,email||null,phone||null,address,address,area,address,installation||null,nextStatus,nextStatus,connection??null,id,oid).run();
+ await audit(env,oid,uid,'update_customer','Updated:'+id,ip);
+ return json(await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first())
+}
 async function delCust(env,path,oid,uid,ip){const id=path.split('/')[3];const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM customers WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_customer','Deleted:'+ex.first_name,ip);return json({success:true})}
 
 async function listPkg(env,url,oid){const{page,pp,off}=pg(url,50);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM packages WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT * FROM packages WHERE organization_id=? ORDER BY created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
