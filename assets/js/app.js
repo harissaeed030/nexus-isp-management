@@ -23,7 +23,7 @@ document.addEventListener("click",event=>{
   const activeToken=token;
   // Revoke remotely when supported; local sign-out must never depend on network success.
   try{
-    fetch(api.replace(/\\/$/,"")+"/api/v1/auth/logout",{
+    fetch(api.replace(/\/$/,"")+"/api/v1/auth/logout",{
       method:"POST",
       headers:activeToken?{Authorization:"Bearer "+activeToken}:{},
       keepalive:true
