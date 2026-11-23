@@ -2,8 +2,8 @@
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 function uuid(){return crypto.randomUUID()}
-function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
-const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
+function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
+const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
 async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
@@ -44,6 +44,8 @@ const PERMISSIONS=[
  {key:'subscriptions.read',group:'Subscriptions',label:'View subscriptions'},
  {key:'subscriptions.manage',group:'Subscriptions',label:'Create and change subscriptions'},
  {key:'billing.read',group:'Billing',label:'View invoices and payments'},
+ {key:'payment_promises.read',group:'Billing',label:'View payment promises'},
+ {key:'payment_promises.manage',group:'Billing',label:'Create and update payment promises'},
  {key:'invoices.create',group:'Billing',label:'Create invoices'},
  {key:'payments.create',group:'Billing',label:'Record payments'},
  {key:'billing.generate',group:'Billing',label:'Generate monthly invoices'},
@@ -56,6 +58,8 @@ const PERMISSIONS=[
  {key:'pppoe.manage',group:'Network',label:'Manage PPPoE accounts'},
  {key:'onus.read',group:'Network',label:'View ONU / ONT inventory'},
  {key:'onus.manage',group:'Network',label:'Manage ONU / ONT inventory'},
+ {key:'tr069.read',group:'Network',label:'View TR-069 / ACS devices'},
+ {key:'tr069.manage',group:'Network',label:'Manage ACS connections and CPE tasks'},
  {key:'connection.read',group:'Network',label:'View connection status'},
  {key:'audit.read',group:'Administration',label:'View activity log'},
  {key:'notifications.read',group:'Administration',label:'View notifications'},
@@ -64,9 +68,9 @@ const PERMISSIONS=[
 ];
 const ROLE_PERMISSIONS={
  owner:['*'],admin:['*'],
- billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read','refunds.read','refunds.manage'],
+ billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','payment_promises.read','payment_promises.manage','reports.read','notifications.read','refunds.read','refunds.manage'],
  support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read','notifications.read'],
- technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read'],
+ technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','tr069.read','tr069.manage','connection.read','notifications.read'],
  staff:['dashboard.read','notifications.read']
 };
 function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
@@ -76,6 +80,11 @@ function permissionForRoute(path,method){
  if(match('/api/customers'))return ({GET:'customers.read',POST:'customers.create',PUT:'customers.update',DELETE:'customers.delete'})[v]||null;
  if(match('/api/packages'))return v==='GET'?'packages.read':['POST','PUT','DELETE'].includes(v)?'packages.manage':null;
  if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
+ if(match('/api/operations/payment-promises'))return v==='GET'?'payment_promises.read':['POST','PUT'].includes(v)?'payment_promises.manage':null;
+ if(path==='/api/financial/aging')return v==='GET'?'billing.read':null;
+ if(match('/api/acs/connections'))return v==='GET'?'tr069.read':'tr069.manage';
+ if(match('/api/tr069/devices'))return v==='GET'?'tr069.read':'tr069.manage';
+ if(path==='/api/tr069/audit-logs')return v==='GET'?'tr069.read':null;
  if(path==='/api/billing/generate')return v==='POST'?'billing.generate':null;
  if(path.match(/^\/api\/invoices\/[^/]+\/payments$/))return v==='POST'?'payments.create':null;
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
@@ -125,7 +134,7 @@ function roleAllowed(role,path,method){
  if(path==='/api/profile'&&(method==='GET'||method==='PUT'))return true;
  if(path==='/api/profile/password'&&method==='PUT')return true;
  const grants={
-  billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions'],POST:['/api/invoices','/api/billing/generate'],PUT:['/api/invoices']},
+  billing:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/invoices','/api/payments','/api/operations/payment-promises','/api/financial/aging','/api/reports/revenue','/api/reports/customers','/api/reports/subscriptions','/api/reports/summary'],POST:['/api/invoices','/api/billing/generate','/api/operations/payment-promises'],PUT:['/api/invoices','/api/operations/payment-promises']},
   support:{GET:['/api/dashboard/stats','/api/customers','/api/complaints','/api/onus'],POST:['/api/complaints'],PUT:['/api/complaints']},
   technician:{GET:['/api/dashboard/stats','/api/customers','/api/packages','/api/subscriptions','/api/complaints','/api/pppoe','/api/network/devices','/api/network/status','/api/onus'],POST:['/api/complaints','/api/pppoe','/api/network/devices','/api/onus'],PUT:['/api/complaints','/api/pppoe','/api/network/devices','/api/onus'],DELETE:['/api/pppoe','/api/network/devices','/api/onus']},
   staff:{GET:['/api/dashboard/stats','/api/customers','/api/complaints'],POST:['/api/complaints']}
@@ -192,6 +201,14 @@ async function runMigrations(env){
  ['network_devices.model','ALTER TABLE network_devices ADD COLUMN model TEXT'],
  ['network_devices.protocol','ALTER TABLE network_devices ADD COLUMN management_protocol TEXT'],
  ['network_devices.pon_ports','ALTER TABLE network_devices ADD COLUMN pon_ports INTEGER'],
+ ['acs_connections',"CREATE TABLE IF NOT EXISTS acs_connections(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,name TEXT NOT NULL,base_url TEXT NOT NULL,username_cipher TEXT,password_cipher TEXT,token_cipher TEXT,timeout_ms INTEGER NOT NULL DEFAULT 8000,enabled INTEGER NOT NULL DEFAULT 1,last_test_at TEXT,last_test_ok INTEGER,last_error TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,name),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"],
+ ['acs_connections.index','CREATE INDEX IF NOT EXISTS idx_acs_connections_org ON acs_connections(organization_id)'],
+ ['tr069_devices',"CREATE TABLE IF NOT EXISTS tr069_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,acs_connection_id TEXT NOT NULL,device_id TEXT NOT NULL,manufacturer TEXT,oui TEXT,product_class TEXT,model TEXT,serial_number TEXT,last_inform_at TEXT,last_boot_at TEXT,inform_status TEXT NOT NULL DEFAULT 'unknown',parameter_snapshot TEXT NOT NULL DEFAULT '{}',last_synced_at TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,acs_connection_id,device_id),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(acs_connection_id) REFERENCES acs_connections(id) ON DELETE CASCADE)"],
+ ['tr069_devices.index','CREATE INDEX IF NOT EXISTS idx_tr069_devices_org_inform ON tr069_devices(organization_id,last_inform_at)'],
+ ['tr069_audit_logs',"CREATE TABLE IF NOT EXISTS tr069_audit_logs(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,actor_user_id TEXT,device_id TEXT,acs_connection_id TEXT,action TEXT NOT NULL,parameter_name TEXT,old_value TEXT,new_value TEXT,result TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"],
+ ['tr069_audit_logs.index','CREATE INDEX IF NOT EXISTS idx_tr069_audit_org_created ON tr069_audit_logs(organization_id,created_at)'],
+ ['customer_connection_history',"CREATE TABLE IF NOT EXISTS customer_connection_history(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,event_type TEXT NOT NULL,old_status TEXT,new_status TEXT,notes TEXT,actor_user_id TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE)"],
+ ['subscription_history',"CREATE TABLE IF NOT EXISTS subscription_history(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,subscription_id TEXT NOT NULL,customer_id TEXT NOT NULL,event_type TEXT NOT NULL,old_value TEXT,new_value TEXT,notes TEXT,actor_user_id TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE)"],
  ['onu_devices',"CREATE TABLE IF NOT EXISTS onu_devices(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,olt_device_id TEXT,customer_id TEXT,serial_number TEXT NOT NULL,mac_address TEXT,pon_port TEXT,onu_number INTEGER,model TEXT,status TEXT NOT NULL DEFAULT 'unknown',rx_power_dbm REAL,last_seen_at TEXT,notes TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,serial_number))"],
  ['user_permissions',"CREATE TABLE IF NOT EXISTS user_permissions(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,permission TEXT NOT NULL,allowed INTEGER NOT NULL CHECK(allowed IN(0,1)),updated_by TEXT,updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,user_id,permission))"],
  ['invoices.period_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period ON invoices(organization_id,subscription_id,billing_period) WHERE subscription_id IS NOT NULL AND billing_period IS NOT NULL'],
@@ -207,8 +224,30 @@ async function runMigrations(env){
  return results
 }
 
+export function normalizeApiPath(input){
+ const path=String(input||'/');
+ const base=path.replace(/^\/api\/v1\//,'/api/');
+ const exact=new Map([
+  ['/api/setup','/api/auth/register'],
+  ['/api/dashboard','/api/dashboard/stats'],
+  ['/api/tickets','/api/complaints'],
+  ['/api/routers','/api/network/devices'],
+  ['/api/acs/connections','/api/acs/connections'],
+  ['/api/tr069/devices','/api/tr069/devices'],
+  ['/api/tr069/audit-logs','/api/tr069/audit-logs']
+ ]);
+ if(exact.has(base))return exact.get(base);
+ if(base.startsWith('/api/tickets/'))return '/api/complaints/'+base.slice('/api/tickets/'.length);
+ if(base.startsWith('/api/routers/'))return '/api/network/devices/'+base.slice('/api/routers/'.length);
+ return base;
+}
+export function normalizeApiMethod(path,method){
+ const verb=String(method||'GET').toUpperCase();
+ if(verb==='PATCH'&&(/^\/api\/customers\/[^/]+$/.test(path)||/^\/api\/complaints\/[^/]+$/.test(path)||/^\/api\/operations\/payment-promises\/[^/]+$/.test(path)))return 'PUT';
+ return verb;
+}
 let _migrated=false;
-export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=url.pathname.replace(/^\/api\/v1\//,'/api/');const m=request.method;
+export default{async scheduled(controller,env,ctx){ctx.waitUntil(runScheduledBilling(controller,env).catch(e=>console.error('NEXUS_SCHEDULED_BILLING_FAILED',{errorType:safeErrorType(e)})))},async fetch(request,env){const url=new URL(request.url);const path=normalizeApiPath(url.pathname);const m=normalizeApiMethod(path,request.method);
 if(m==='OPTIONS')return withCors(new Response(null,{status:204}),request,env);
 if(path.startsWith('/api/')&&!_migrated){await runMigrations(env);_migrated=true}
 if(path==='/api/health'){let st='ok';try{const r=await env.DB.prepare('SELECT 1 AS ok').first();st=r?.ok===1?'ok':'bad'}catch{st='err'}return withCors(json({status:st==='ok'?'healthy':'degraded',database:st},st==='ok'?200:503),request,env)}
@@ -231,6 +270,7 @@ if(path==='/api/auth/logout'&&m==='POST'){await env.DB.prepare('UPDATE users SET
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
 if(path==='/api/customers'&&m==='GET')return await listCust(env,url,orgId);
 if(path==='/api/customers'&&m==='POST')return await createCust(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/customers\/[^/]+\/profile$/)&&m==='GET')return await getCustomerProfile(env,path,orgId);
 if(path.match(/^\/api\/customers\/[^/]+$/)&&m==='GET')return await getCust(env,path,orgId);
 if(path.match(/^\/api\/customers\/[^/]+$/)&&m==='PUT')return await updateCust(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/customers\/[^/]+$/)&&m==='DELETE')return await delCust(env,path,orgId,userId,ip);
@@ -250,6 +290,10 @@ if(path==='/api/billing/generate'&&m==='POST')return await generateBilling(reque
 if(path.match(/^\/api\/invoices\/[^/]+$/)&&m==='GET')return await getInv(env,path,orgId);
 if(path.match(/^\/api\/invoices\/[^/]+\/payments$/)&&m==='POST')return await recPay(request,env,path,orgId,userId,ip);
 if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
+if(path==='/api/operations/payment-promises'&&m==='GET')return await listPaymentPromises(env,url,orgId);
+if(path==='/api/operations/payment-promises'&&m==='POST')return await createPaymentPromise(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/operations\/payment-promises\/[^/]+$/)&&m==='PUT')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
+if(path==='/api/financial/aging'&&m==='GET')return await financialAging(env,orgId);
 if(path==='/api/refunds'&&m==='GET')return await listRefunds(env,url,orgId);
 if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId,userId,ip);
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
@@ -270,6 +314,16 @@ if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='GET')return await getNet
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='PUT')return await updateNetworkDevice(request,env,path,orgId,userId,ip);
 if(path.match(/^\/api\/network\/devices\/[^/]+$/)&&m==='DELETE')return await delNetworkDevice(env,path,orgId,userId,ip);
 if(path==='/api/network/status'&&m==='GET')return await networkStatus(env,orgId);
+if(path==='/api/acs/connections'&&m==='GET')return await listAcsConnections(env,orgId);
+if(path==='/api/acs/connections'&&m==='POST')return await createAcsConnection(request,env,orgId,userId,ip);
+if(path.match(/^\/api\/acs\/connections\/[^/]+\/test$/)&&m==='POST')return await testAcsConnection(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/acs\/connections\/[^/]+\/sync$/)&&m==='POST')return await syncAcsDevices(env,path,orgId,userId,ip);
+if(path==='/api/tr069/devices'&&m==='GET')return await listTr069Devices(env,url,orgId);
+if(path==='/api/tr069/audit-logs'&&m==='GET')return await listTr069Audit(env,url,orgId);
+if(path.match(/^\/api\/tr069\/devices\/[^/]+\/parameters$/)&&m==='GET')return await getTr069Parameters(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/tr069\/devices\/[^/]+\/diagnostics$/)&&m==='POST')return await queueTr069Diagnostics(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/tr069\/devices\/[^/]+\/reboot$/)&&m==='POST')return await queueTr069Reboot(env,path,orgId,userId,ip);
+if(path.match(/^\/api\/tr069\/devices\/[^/]+\/wifi$/)&&m==='POST')return await queueTr069Wifi(request,env,path,orgId,userId,ip);
 if(path==='/api/onus'&&m==='GET')return await listOnus(env,url,orgId);
 if(path==='/api/onus'&&m==='POST')return await createOnu(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='GET')return await getOnu(env,path,orgId);
@@ -277,6 +331,7 @@ if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='PUT')return await updateOnu(request,
 if(path.match(/^\/api\/onus\/[^/]+$/)&&m==='DELETE')return await deleteOnu(env,path,orgId,userId,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
+if(path==='/api/reports/summary'&&m==='GET')return await reportSummary(env,url,orgId);
 if(path==='/api/reports/revenue'&&m==='GET')return await repRev(env,url,orgId);
 if(path==='/api/reports/customers'&&m==='GET')return await repCust(env,orgId);
 if(path==='/api/reports/subscriptions'&&m==='GET')return await repSubs(env,orgId);
@@ -503,12 +558,60 @@ return json({success:true,token:tk,user:{id:u.id,email:u.email,name:u.name||u.em
 
 async function authMe(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status,organization_id FROM users WHERE id=?').bind(auth.userId).first();if(!u)return json({error:'Not found'},404);const org=await env.DB.prepare('SELECT id,name,slug,email,phone,address,currency FROM organizations WHERE id=?').bind(auth.orgId).first();return json({user:u,tenant:org})}
 
-async function dashStats(env,oid){const c=await env.DB.prepare('SELECT COUNT(*)v FROM customers WHERE organization_id=?').bind(oid).first();const ac=await env.DB.prepare("SELECT COUNT(*)v FROM customers WHERE organization_id=? AND status='active'").bind(oid).first();const pk=await env.DB.prepare('SELECT COUNT(*)v FROM packages WHERE organization_id=?').bind(oid).first();const sc=await env.DB.prepare('SELECT COUNT(*)v FROM subscriptions WHERE organization_id=?').bind(oid).first();const pi=await env.DB.prepare("SELECT COUNT(*)v,COALESCE(SUM(total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)),0)amt FROM invoices WHERE organization_id=? AND status IN ('pending','overdue') AND total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)").bind(oid).first();const rev=await env.DB.prepare("SELECT COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)v FROM payments WHERE organization_id=? AND status='completed'").bind(oid).first();const oc=await env.DB.prepare("SELECT COUNT(*)v FROM support_tickets WHERE organization_id=? AND status='open'").bind(oid).first();const st=await env.DB.prepare('SELECT COUNT(*)v FROM users WHERE organization_id=?').bind(oid).first();const mr=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now','-6 months')GROUP BY m ORDER BY m").bind(oid).all();return json({customers:c.v,activeCustomers:ac.v,packages:pk.v,subscriptions:sc.v,pendingInvoices:pi.v,pendingAmount:pi.amt,totalRevenue:rev.v,openComplaints:oc.v,staff:st.v,monthlyRevenue:mr.results||[]})}
+async function dashStats(env,oid){const c=await env.DB.prepare('SELECT COUNT(*)v FROM customers WHERE organization_id=?').bind(oid).first();const ac=await env.DB.prepare("SELECT COUNT(*)v FROM customers WHERE organization_id=? AND status='active'").bind(oid).first();const pk=await env.DB.prepare('SELECT COUNT(*)v FROM packages WHERE organization_id=?').bind(oid).first();const sc=await env.DB.prepare('SELECT COUNT(*)v FROM subscriptions WHERE organization_id=?').bind(oid).first();const pi=await env.DB.prepare("SELECT COUNT(*)v,COALESCE(SUM(total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)),0)amt FROM invoices WHERE organization_id=? AND status IN ('pending','overdue') AND total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)").bind(oid).first();const rev=await env.DB.prepare("SELECT COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)v FROM payments WHERE organization_id=? AND status='completed'").bind(oid).first();const oc=await env.DB.prepare("SELECT COUNT(*)v FROM support_tickets WHERE organization_id=? AND status='open'").bind(oid).first();const st=await env.DB.prepare('SELECT COUNT(*)v FROM users WHERE organization_id=?').bind(oid).first();const mr=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now','-6 months')GROUP BY m ORDER BY m").bind(oid).all();return json({stats:{customers:c.v,activeCustomers:ac.v,revenuePkr:rev.v,openTickets:oc.v,staff:st.v},customers:c.v,activeCustomers:ac.v,packages:pk.v,subscriptions:sc.v,pendingInvoices:pi.v,pendingAmount:pi.amt,totalRevenue:rev.v,openComplaints:oc.v,staff:st.v,monthlyRevenue:mr.results||[]})}
 
 async function listCust(env,url,oid){const{page,pp,off}=pg(url);const q=url.searchParams.get('search')||'';const st=url.searchParams.get('status')||'';let w='WHERE organization_id=?';const p=[oid];if(q){w+=' AND(first_name LIKE? OR last_name LIKE? OR email LIKE? OR phone LIKE?)';const s='%'+q+'%';p.push(s,s,s,s)}if(st){w+=' AND status=?';p.push(st)}const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM customers '+w).bind(...p).first();const rows=await env.DB.prepare('SELECT * FROM customers '+w+' ORDER BY created_at DESC LIMIT? OFFSET?').bind(...p,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
-async function createCust(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['first_name']);if(ms.length)return json({error:'Missing fields',fields:ms},400);const id=uuid();const code='CUS-'+crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase();await env.DB.prepare('INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,city,status,customer_code,balance,notes,installation_address,installation_date,id_type,id_number)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,s(b.first_name),b.last_name||'',b.email||null,b.phone||null,b.address||null,b.city||null,b.status||'active',code,b.balance||0,b.notes||null,b.installation_address||null,b.installation_date||null,b.id_type||null,b.id_number||null).run();await audit(env,oid,uid,'create_customer','Customer:'+b.first_name,ip);return json(await env.DB.prepare('SELECT * FROM customers WHERE id=?').bind(id).first(),201)}
-async function getCust(env,path,oid){const id=path.split('/')[3];const cu=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!cu)return json({error:'Not found'},404);const subs=await env.DB.prepare('SELECT s.*,p.name package_name,p.price,p.speed_mbps FROM subscriptions s LEFT JOIN packages p ON s.package_id=p.id WHERE s.customer_id=? AND s.organization_id=?').bind(id,oid).all();const inv=await env.DB.prepare('SELECT * FROM invoices WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const pay=await env.DB.prepare('SELECT * FROM payments WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();const comp=await env.DB.prepare('SELECT * FROM support_tickets WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC').bind(id,oid).all();return json({...cu,subscriptions:subs.results,invoices:inv.results,payments:pay.results,complaints:comp.results})}
-async function updateCust(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);const f=['first_name','last_name','email','phone','address','city','status','notes','installation_address','installation_date','id_type','id_number','balance'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE customers SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();await audit(env,oid,uid,'update_customer','Updated:'+ex.first_name,ip);return json(await env.DB.prepare('SELECT * FROM customers WHERE id=?').bind(id).first())}
+async function createCust(r,env,oid,uid,ip){
+ const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
+ const fullName=s(b.full_name??b.fullName??b.first_name??''),parts=fullName.split(/\s+/),first=s(b.first_name??parts.shift()??''),last=s(b.last_name??parts.join(' '));
+ if(!first)return json({error:'Customer name is required'},400);
+ const phone=s(b.phone||''),email=s(b.email||'');if(email&&!vEmail(email))return json({error:'Valid email address is required'},400);
+ const requestedStatus=b.status||'active',statusMap={active:'active',suspended:'suspended',blocked:'suspended',inactive:'terminated',terminated:'terminated'},status=statusMap[requestedStatus];if(!status)return json({error:'Invalid customer status'},400);
+ const connectionStatus=b.connection_status??b.connectionStatus??'pending';if(!['pending','active','suspended','disconnected'].includes(connectionStatus))return json({error:'Invalid connection status'},400);
+ const id=uuid(),code='CUS-'+crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase();
+ const address=s(b.service_address??b.serviceAddress??b.address??'')||null,city=s(b.city??b.coverageArea??'')||null,installation=s(b.installation_date??b.installationDate??'')||null;
+ await env.DB.prepare('INSERT INTO customers(id,organization_id,first_name,last_name,email,phone,address,city,status,customer_code,balance,notes,installation_address,installation_date,id_type,id_number,service_address,coverage_area,connection_status,account_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,oid,first,last,email||null,phone||null,address,city,status,code,Number(b.balance||0),s(b.notes||'')||null,address,installation,s(b.id_type||'')||null,s(b.id_number||'')||null,address,s(b.coverage_area??b.coverageArea??'')||null,connectionStatus,status).run();
+ await env.DB.prepare('INSERT INTO customer_connection_history(id,organization_id,customer_id,event_type,old_status,new_status,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,'registered',null,connectionStatus,'Customer account created',uid).run();
+ await audit(env,oid,uid,'create_customer','Customer:'+first,ip);
+ return json({success:true,data:await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first()},201)
+}
+async function getCustomerProfile(env,path,oid){
+ const id=path.split('/')[3];
+ const customer=await env.DB.prepare("SELECT c.*,c.first_name||' '||c.last_name AS full_name FROM customers c WHERE c.id=? AND c.organization_id=?").bind(id,oid).first();
+ if(!customer)return json({error:'Customer not found'},404);
+ const [subs,invoices,payments,tickets,connectionHistory,subscriptionHistory]=await Promise.all([
+  env.DB.prepare("SELECT s.*,s.start_date AS started_at,s.end_date AS expires_at,p.name AS package_name,p.price AS monthly_price_pkr,p.speed_mbps AS speed_down_mbps,COALESCE(p.speed_up,p.speed_mbps) AS speed_up_mbps FROM subscriptions s LEFT JOIN packages p ON p.id=s.package_id AND p.organization_id=s.organization_id WHERE s.customer_id=? AND s.organization_id=? ORDER BY s.created_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT i.*,i.total AS amount_pkr FROM invoices i WHERE i.customer_id=? AND i.organization_id=? ORDER BY i.created_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT p.*,p.paid_at AS received_at,p.amount AS amount_pkr,p.payment_method AS method,i.invoice_number FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id AND i.organization_id=p.organization_id WHERE p.customer_id=? AND p.organization_id=? ORDER BY p.paid_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT * FROM support_tickets WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT * FROM customer_connection_history WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC").bind(id,oid).all(),
+  env.DB.prepare("SELECT * FROM subscription_history WHERE customer_id=? AND organization_id=? ORDER BY created_at DESC").bind(id,oid).all()
+ ]);
+ return json({success:true,data:{customer,subscriptions:subs.results||[],invoices:invoices.results||[],payments:payments.results||[],complaints:tickets.results||[],connectionHistory:connectionHistory.results||[],subscriptionHistory:subscriptionHistory.results||[]}});
+}
+async function getCust(env,path,oid){const id=path.split('/')[3];const cu=await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first();if(!cu)return json({error:'Not found'},404);return json({success:true,data:cu})}
+async function updateCust(r,env,path,oid,uid,ip){
+ const id=path.split('/')[3],b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
+ const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);
+ const statusMap={active:'active',suspended:'suspended',blocked:'suspended',inactive:'terminated',terminated:'terminated'};
+ const nextStatus=b.status===undefined?ex.status:(statusMap[b.status]||'');
+ if(!nextStatus)return json({error:'Invalid customer status'},400);
+ const connection=b.connectionStatus??b.connection_status;
+ if(connection!==undefined&&!['pending','active','suspended','disconnected'].includes(connection))return json({error:'Invalid connection status'},400);
+ const name=s(b.fullName??b.full_name??[ex.first_name,ex.last_name].filter(Boolean).join(' ')),parts=name.split(/\s+/),first=parts.shift()||'',last=parts.join(' ');
+ if(!first||first.length>160)return json({error:'Valid customer name is required'},400);
+ const email=s(b.email??ex.email??''),phone=s(b.phone??ex.phone??'');
+ if(email&&!vEmail(email))return json({error:'Valid email address is required'},400);
+ const address=s(b.serviceAddress??b.service_address??b.address??ex.service_address??ex.address??'')||null;
+ const area=s(b.coverageArea??b.coverage_area??ex.coverage_area??'')||null;
+ const installation=b.installationDate??b.installation_date??ex.installation_date;
+ if(installation&&!/^\d{4}-\d{2}-\d{2}$/.test(String(installation)))return json({error:'Installation date must use YYYY-MM-DD'},400);
+ await env.DB.prepare("UPDATE customers SET first_name=?,last_name=?,email=?,phone=?,address=?,service_address=?,coverage_area=?,installation_address=?,installation_date=?,status=?,account_status=?,connection_status=COALESCE(?,connection_status),updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(first,last,email||null,phone||null,address,address,area,address,installation||null,nextStatus,nextStatus,connection??null,id,oid).run();
+ if(connection!==undefined&&connection!==ex.connection_status)await env.DB.prepare('INSERT INTO customer_connection_history(id,organization_id,customer_id,event_type,old_status,new_status,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,'connection_status_changed',ex.connection_status,connection,'Connection status updated',uid).run();
+ if(installation!==ex.installation_date)await env.DB.prepare('INSERT INTO customer_connection_history(id,organization_id,customer_id,event_type,old_status,new_status,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,'installation_date_changed',ex.installation_date,installation,'Installation date updated',uid).run();
+ await audit(env,oid,uid,'update_customer','Updated:'+id,ip);
+ return json({success:true,data:await env.DB.prepare("SELECT *,first_name||' '||last_name AS full_name FROM customers WHERE id=? AND organization_id=?").bind(id,oid).first()})
+}
 async function delCust(env,path,oid,uid,ip){const id=path.split('/')[3];const ex=await env.DB.prepare('SELECT * FROM customers WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM customers WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_customer','Deleted:'+ex.first_name,ip);return json({success:true})}
 
 async function listPkg(env,url,oid){const{page,pp,off}=pg(url,50);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM packages WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT * FROM packages WHERE organization_id=? ORDER BY created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
@@ -518,8 +621,8 @@ async function updatePkg(r,env,path,oid,uid,ip){const id=path.split('/')[3];cons
 async function delPkg(env,path,oid,uid,ip){const id=path.split('/')[3];const ex=await env.DB.prepare('SELECT * FROM packages WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM packages WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_package','Deleted:'+ex.name,ip);return json({success:true})}
 
 async function listSubs(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM subscriptions WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT s.*,c.first_name,c.last_name,p.name package_name,p.price,p.speed_mbps FROM subscriptions s LEFT JOIN customers c ON s.customer_id=c.id LEFT JOIN packages p ON s.package_id=p.id WHERE s.organization_id=? ORDER BY s.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
-async function createSub(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['customer_id','package_id']);if(ms.length)return json({error:'Missing fields',fields:ms},400);if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);if(!await env.DB.prepare('SELECT id FROM packages WHERE id=? AND organization_id=?').bind(b.package_id,oid).first())return json({error:'Package not found'},404);const id=uuid();const sd=b.start_date||new Date().toISOString().split('T')[0];let ed=b.end_date;if(!ed){const d=new Date(sd);d.setMonth(d.getMonth()+1);ed=d.toISOString().split('T')[0]}await env.DB.prepare('INSERT INTO subscriptions(id,organization_id,customer_id,package_id,status,start_date,end_date,auto_renew)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id,b.package_id,b.status||'active',sd,ed,b.auto_renew?1:0).run();await audit(env,oid,uid,'create_subscription','Sub for '+b.customer_id,ip);return json(await env.DB.prepare('SELECT * FROM subscriptions WHERE id=?').bind(id).first(),201)}
-async function updateSub(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);const f=['status','start_date','end_date'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(b.auto_renew!==undefined){u.push('auto_renew=?');p.push(b.auto_renew?1:0)}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE subscriptions SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();return json(await env.DB.prepare('SELECT * FROM subscriptions WHERE id=?').bind(id).first())}
+async function createSub(r,env,oid,uid,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ms=vReq(b,['customer_id','package_id']);if(ms.length)return json({error:'Missing fields',fields:ms},400);if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);if(!await env.DB.prepare('SELECT id FROM packages WHERE id=? AND organization_id=?').bind(b.package_id,oid).first())return json({error:'Package not found'},404);const id=uuid();const sd=b.start_date||new Date().toISOString().split('T')[0];let ed=b.end_date;if(!ed){const d=new Date(sd);d.setMonth(d.getMonth()+1);ed=d.toISOString().split('T')[0]}await env.DB.prepare('INSERT INTO subscriptions(id,organization_id,customer_id,package_id,status,start_date,end_date,auto_renew)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id,b.package_id,b.status||'active',sd,ed,b.auto_renew?1:0).run();await env.DB.prepare('INSERT INTO subscription_history(id,organization_id,subscription_id,customer_id,event_type,old_value,new_value,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,b.customer_id,'created',null,b.package_id,'Subscription created',uid).run();await audit(env,oid,uid,'create_subscription','Sub for '+b.customer_id,ip);return json(await env.DB.prepare('SELECT * FROM subscriptions WHERE id=?').bind(id).first(),201)}
+async function updateSub(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);const f=['status','start_date','end_date'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(b.auto_renew!==undefined){u.push('auto_renew=?');p.push(b.auto_renew?1:0)}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE subscriptions SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();if(b.status!==undefined&&b.status!==ex.status)await env.DB.prepare('INSERT INTO subscription_history(id,organization_id,subscription_id,customer_id,event_type,old_value,new_value,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,ex.customer_id,'status_changed',ex.status,b.status,'Subscription status updated',uid).run();if(b.package_id!==undefined&&b.package_id!==ex.package_id)await env.DB.prepare('INSERT INTO subscription_history(id,organization_id,subscription_id,customer_id,event_type,old_value,new_value,notes,actor_user_id) VALUES(?,?,?,?,?,?,?,?,?)').bind(uuid(),oid,id,ex.customer_id,'package_changed',ex.package_id,b.package_id,'Subscription package updated',uid).run();return json(await env.DB.prepare('SELECT * FROM subscriptions WHERE id=?').bind(id).first())}
 async function delSub(env,path,oid,uid,ip){const id=path.split('/')[3];if(!await env.DB.prepare('SELECT * FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).first())return json({error:'Not found'},404);await env.DB.prepare('DELETE FROM subscriptions WHERE id=? AND organization_id=?').bind(id,oid).run();return json({success:true})}
 
 async function listInv(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM invoices WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT i.*,c.first_name,c.last_name,COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) AS paid_amount,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_amount,CASE WHEN COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)>0 AND COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)<i.total THEN 'partial' ELSE i.status END AS display_status FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id AND c.organization_id=i.organization_id WHERE i.organization_id=? ORDER BY i.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
@@ -779,6 +882,129 @@ async function delPppoe(env,path,oid,uid,ip){
  if(!r.meta?.changes)return json({error:'Not found'},404);
  await audit(env,oid,uid,'delete_pppoe','PPPoE:'+id,ip);return json({success:true})
 }
+function acsCryptoKey(env,usages){
+ if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');
+ return crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),'HKDF',false,['deriveKey']).then(material=>crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('NEXUS-ACS-SALT-V1'),info:new TextEncoder().encode('NEXUS-ACS-CREDENTIAL-ENCRYPTION')},material,{name:'AES-GCM',length:256},false,usages));
+}
+export async function encryptAcsSecret(value,env){
+ if(!value)return null;
+ const key=await acsCryptoKey(env,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12));
+ const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(value));
+ return 'enc:v1:'+b64u(iv)+':'+b64u(new Uint8Array(cipher));
+}
+export async function decryptAcsSecret(value,env){
+ if(!value)return '';
+ const p=String(value).split(':');if(p.length!==4||p[0]!=='enc'||p[1]!=='v1')throw new Error('ACS credential ciphertext is invalid');
+ const key=await acsCryptoKey(env,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
+ return new TextDecoder().decode(plain);
+}
+export function validateAcsUrl(value){
+ let u;try{u=new URL(String(value||''))}catch{return null}
+ const h=u.hostname.toLowerCase();
+ if(u.protocol!=='https:'||u.username||u.password||u.hash||!h.includes('.')||h==='localhost'||h.endsWith('.local')||h.endsWith('.internal')||h.endsWith('.localhost')||/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.startsWith('['))return null;
+ if(u.port&&(!/^\d+$/.test(u.port)||Number(u.port)<1||Number(u.port)>65535))return null;
+ u.search='';u.hash='';u.pathname=u.pathname.replace(/\/+$/,'')+'/';return u;
+}
+function acsView(row){return{id:row.id,name:row.name,baseUrl:row.base_url,timeoutMs:row.timeout_ms,enabled:Number(row.enabled)===1,lastTestAt:row.last_test_at,lastTestOk:row.last_test_ok===null?null:Number(row.last_test_ok)===1,lastError:row.last_error,createdAt:row.created_at,updatedAt:row.updated_at}}
+async function listAcsConnections(env,oid){
+ const rows=await env.DB.prepare('SELECT id,name,base_url,timeout_ms,enabled,last_test_at,last_test_ok,last_error,created_at,updated_at FROM acs_connections WHERE organization_id=? ORDER BY created_at DESC').bind(oid).all();
+ return json({data:(rows.results||[]).map(acsView)});
+}
+async function createAcsConnection(request,env,oid,uid,ip){
+ const b=await parseBody(request);if(!b||typeof b.name!=='string'||!b.name.trim()||b.name.trim().length>100)return json({error:'Connection name is required'},400);
+ const base=validateAcsUrl(b.baseUrl);if(!base)return json({error:'ACS NBI URL must be a public HTTPS URL; local/private HTTP endpoints are not accepted'},400);
+ const username=String(b.username||''),password=String(b.password||''),token=String(b.token||'');
+ if((username&&!password)||(!username&&password)||(token&&(username||password)))return json({error:'Use either a complete username/password pair or a bearer token, not both'},400);
+ if(username.length>200||password.length>1000||token.length>2000)return json({error:'ACS credential is too long'},400);
+ const timeout=Number(b.timeoutMs||8000);if(!Number.isInteger(timeout)||timeout<1000||timeout>30000)return json({error:'Timeout must be between 1000 and 30000 ms'},400);
+ const id=uuid(),uc=await encryptAcsSecret(username,env),pc=await encryptAcsSecret(password,env),tc=await encryptAcsSecret(token,env);
+ await env.DB.prepare('INSERT INTO acs_connections(id,organization_id,name,base_url,username_cipher,password_cipher,token_cipher,timeout_ms,enabled) VALUES(?,?,?,?,?,?,?,?,1)').bind(id,oid,b.name.trim(),base.toString(),uc,pc,tc,timeout).run();
+ await audit(env,oid,uid,'create_acs_connection','ACS:'+id,ip);
+ return json({success:true,data:acsView(await env.DB.prepare('SELECT * FROM acs_connections WHERE id=? AND organization_id=?').bind(id,oid).first())},201);
+}
+async function getAcsConnection(env,id,oid){return await env.DB.prepare('SELECT * FROM acs_connections WHERE id=? AND organization_id=? AND enabled=1').bind(id,oid).first()}
+async function acsRequest(connection,env,pathname,query='',body=null){
+ const base=validateAcsUrl(connection.base_url);if(!base)throw new Error('ACS URL is invalid or no longer allowed');
+ const url=new URL(pathname.replace(/^\/+/,''),base);if(query)url.search=query;
+ const token=await decryptAcsSecret(connection.token_cipher,env),username=await decryptAcsSecret(connection.username_cipher,env),password=await decryptAcsSecret(connection.password_cipher,env);
+ const headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;else if(username)headers.Authorization='Basic '+btoa(username+':'+password);
+ if(body!==null)headers['Content-Type']='application/json';
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),Math.min(30000,Math.max(1000,Number(connection.timeout_ms)||8000)));
+ try{const response=await fetch(url.toString(),{method:body===null?'GET':'POST',headers,body:body===null?undefined:JSON.stringify(body),signal:controller.signal,redirect:'error'});const raw=await response.text();if(!response.ok)throw new Error('ACS returned HTTP '+response.status);let data;try{data=raw?JSON.parse(raw):{}}catch{throw new Error('ACS returned invalid JSON')}return data}finally{clearTimeout(timer)}
+}
+function tr069IdFromPath(path){return decodeURIComponent(path.split('/')[4]||'')}
+export function tr069Status(lastInform){if(!lastInform)return'unknown';const age=Date.now()-Date.parse(lastInform);if(!Number.isFinite(age))return'unknown';return age<=600000?'online':'offline'}
+export function redactTr069Tree(value,key=''){
+ if(/password|passphrase|secret|token|private.?key|pre.?shared|wep.?key|network.?key|psk/i.test(key))return undefined;
+ if(Array.isArray(value))return value.slice(0,100).map(x=>redactTr069Tree(x,key)).filter(x=>x!==undefined);
+ if(value&&typeof value==='object'){const out={};for(const[k,v]of Object.entries(value)){const safe=redactTr069Tree(v,k);if(safe!==undefined)out[k]=safe}return out}
+ if(typeof value==='string')return value.slice(0,1000);return value;
+}
+async function listTr069Devices(env,url,oid){
+ const{page,pp,off}=pg(url,50),q=url.searchParams.get('search')||'',status=url.searchParams.get('status')||'';
+ let where='WHERE d.organization_id=?',params=[oid];if(q){where+=' AND (d.device_id LIKE ? OR d.serial_number LIKE ? OR d.model LIKE ? OR d.manufacturer LIKE ?)';const v='%'+q+'%';params.push(v,v,v,v)}if(status){where+=' AND d.inform_status=?';params.push(status)}
+ const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM tr069_devices d '+where).bind(...params).first();
+ const rows=await env.DB.prepare('SELECT d.*,a.name AS connection_name FROM tr069_devices d LEFT JOIN acs_connections a ON a.id=d.acs_connection_id AND a.organization_id=d.organization_id '+where+' ORDER BY d.last_inform_at DESC LIMIT ? OFFSET ?').bind(...params,pp,off).all();
+ return json({data:(rows.results||[]).map(x=>({id:x.id,deviceId:x.device_id,manufacturer:x.manufacturer,oui:x.oui,productClass:x.product_class,model:x.model,serialNumber:x.serial_number,lastInformAt:x.last_inform_at,lastBootAt:x.last_boot_at,status:tr069Status(x.last_inform_at),lastSyncedAt:x.last_synced_at,connectionName:x.connection_name})),pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+}
+async function listTr069Audit(env,url,oid){
+ const{page,pp,off}=pg(url,50),rows=await env.DB.prepare('SELECT id,actor_user_id,device_id,acs_connection_id,action,parameter_name,old_value,new_value,result,details,created_at FROM tr069_audit_logs WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp}});
+}
+async function acsDeviceByLocalId(env,path,oid){
+ const id=tr069IdFromPath(path);
+ return await env.DB.prepare('SELECT d.*,a.base_url,a.username_cipher,a.password_cipher,a.token_cipher,a.timeout_ms,a.enabled FROM tr069_devices d JOIN acs_connections a ON a.id=d.acs_connection_id AND a.organization_id=d.organization_id WHERE d.id=? AND d.organization_id=? AND a.enabled=1').bind(id,oid).first();
+}
+async function auditTr069(env,oid,uid,deviceId,connectionId,action,param,oldValue,newValue,result,details,ip){
+ await env.DB.prepare('INSERT INTO tr069_audit_logs(id,organization_id,actor_user_id,device_id,acs_connection_id,action,parameter_name,old_value,new_value,result,details) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(uuid(),oid,uid,deviceId,connectionId,action,param,oldValue===null?null:String(oldValue).slice(0,300),newValue===null?null:String(newValue).slice(0,300),result,details?String(details).slice(0,500):null).run();
+ await audit(env,oid,uid,'tr069_'+action,'Device:'+deviceId,ip);
+}
+async function syncAcsDevices(env,path,oid,uid,ip){
+ const id=path.split('/')[4],connection=await getAcsConnection(env,id,oid);if(!connection)return json({error:'ACS connection not found or disabled'},404);
+ let devices;try{devices=await acsRequest(connection,env,'devices','query='+encodeURIComponent('{}')+'&projection='+encodeURIComponent('_id,_lastInform,_lastBoot,DeviceID,InternetGatewayDevice.DeviceInfo,Device.DeviceInfo'))}catch(e){await env.DB.prepare("UPDATE acs_connections SET last_test_at=datetime('now'),last_test_ok=0,last_error=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(String(e.message).slice(0,200),id,oid).run();await auditTr069(env,oid,uid,null,id,'sync_devices',null,null,null,'failed',e.message,ip);return json({error:'ACS sync failed: '+e.message},502)}
+ if(!Array.isArray(devices))return json({error:'ACS device list response is invalid'},502);
+ const statements=[];for(const d of devices.slice(0,5000)){const deviceId=String(d._id||'');if(!deviceId)continue;const tree=d.InternetGatewayDevice?.DeviceInfo||d.Device?.DeviceInfo||{},val=x=>x&&typeof x==='object'&&'_value'in x?x._value:x??null,serial=val(tree.SerialNumber)||null,manufacturer=val(tree.Manufacturer)||null,model=val(tree.ModelName)||val(tree.ProductClass)||null,lastInform=d._lastInform||null,lastBoot=d._lastBoot||null;
+ statements.push(env.DB.prepare("INSERT INTO tr069_devices(id,organization_id,acs_connection_id,device_id,manufacturer,oui,product_class,model,serial_number,last_inform_at,last_boot_at,inform_status,parameter_snapshot,last_synced_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'{}',datetime('now')) ON CONFLICT(organization_id,acs_connection_id,device_id) DO UPDATE SET manufacturer=excluded.manufacturer,oui=excluded.oui,product_class=excluded.product_class,model=excluded.model,serial_number=excluded.serial_number,last_inform_at=excluded.last_inform_at,last_boot_at=excluded.last_boot_at,inform_status=excluded.inform_status,last_synced_at=datetime('now'),updated_at=datetime('now')").bind(uuid(),oid,id,deviceId,manufacturer,val(tree.OUI),val(tree.ProductClass),model,serial,lastInform,lastBoot,tr069Status(lastInform)));
+ }
+ for(let i=0;i<statements.length;i+=50)await env.DB.batch(statements.slice(i,i+50));
+ await env.DB.prepare("UPDATE acs_connections SET last_test_at=datetime('now'),last_test_ok=1,last_error=NULL,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid).run();
+ const synced=statements.length;await auditTr069(env,oid,uid,null,id,'sync_devices',null,null,String(synced),'success',null,ip);
+ return json({success:true,data:{synced}});
+}
+async function testAcsConnection(env,path,oid,uid,ip){
+ const id=path.split('/')[4],connection=await getAcsConnection(env,id,oid);if(!connection)return json({error:'ACS connection not found or disabled'},404);
+ try{const devices=await acsRequest(connection,env,'devices','query='+encodeURIComponent('{}')+'&projection='+encodeURIComponent('_id'));if(!Array.isArray(devices))throw new Error('Unexpected ACS response');await env.DB.prepare("UPDATE acs_connections SET last_test_at=datetime('now'),last_test_ok=1,last_error=NULL,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(id,oid).run();await auditTr069(env,oid,uid,null,id,'test_connection',null,null,String(devices.length),'success',null,ip);return json({success:true,data:{deviceCount:devices.length}})}catch(e){await env.DB.prepare("UPDATE acs_connections SET last_test_at=datetime('now'),last_test_ok=0,last_error=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(String(e.message).slice(0,200),id,oid).run();await auditTr069(env,oid,uid,null,id,'test_connection',null,null,null,'failed',e.message,ip);return json({error:'ACS connection test failed: '+e.message},502)}
+}
+async function getTr069Parameters(env,path,oid,uid,ip){
+ const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
+ const query='query='+encodeURIComponent(JSON.stringify({_id:row.device_id}))+'&projection='+encodeURIComponent('_id,InternetGatewayDevice,Device');
+ const found=await acsRequest(row,env,'devices',query),device=Array.isArray(found)?found[0]:null;if(!device)return json({error:'Device is no longer present in ACS'},404);
+ const tree=redactTr069Tree(device),params={};
+ function walk(value,prefix=''){if(!value||typeof value!=='object'||Array.isArray(value))return;for(const[k,v]of Object.entries(value)){if(k==='_value')continue;if(v&&typeof v==='object'){if('_value'in v)params[prefix?prefix+'.'+k:k]={value:v._value,type:v._type||null};else walk(v,prefix?prefix+'.'+k:k)}}}
+ walk(tree.InternetGatewayDevice||tree.Device||{});
+ await auditTr069(env,oid,uid,row.id,row.acs_connection_id,'read_parameters',null,null,null,'success',null,ip);return json({data:params});
+}
+export function buildGenieAcsTask(taskName,taskOptions={}){return{name:taskName,...taskOptions}}
+async function queueTr069Task(env,path,oid,uid,ip,taskName,taskOptions={}){
+ const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
+ const body=buildGenieAcsTask(taskName,taskOptions);
+ const url='devices/'+encodeURIComponent(row.device_id)+'/tasks';await acsRequest(row,env,url,'connection_request',body);
+ await auditTr069(env,oid,uid,row.id,row.acs_connection_id,'queue_'+taskName,null,null,null,'queued',null,ip);return json({success:true,data:{queued:true,task:taskName}});
+}
+async function queueTr069Diagnostics(env,path,oid,uid,ip){
+ const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
+ const root='InternetGatewayDevice';return await queueTr069Task(env,path,oid,uid,ip,'refreshObject',{objectName:root+'.WANDevice'});
+}
+async function queueTr069Reboot(env,path,oid,uid,ip){const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);await queueTr069Task(env,path,oid,uid,ip,'reboot');return json({success:true,data:{queued:true,deviceId:row.device_id}})}
+async function queueTr069Wifi(request,env,path,oid,uid,ip){
+ const b=await parseBody(request);if(!b)return json({error:'Invalid body'},400);
+ const validParam=v=>typeof v==='string'&&v.length<=240&&/^(InternetGatewayDevice|Device)\.(?:[A-Za-z0-9_\-]+\.){1,18}[A-Za-z0-9_\-]+$/.test(v);
+ if(!validParam(b.ssidParameter)||!validParam(b.passwordParameter)||typeof b.ssid!=='string'||b.ssid.length<1||b.ssid.length>32||typeof b.password!=='string'||b.password.length<8||b.password.length>63)return json({error:'Valid discovered SSID/password parameter paths and values are required'},400);
+ const values=[[b.ssidParameter,b.ssid,'xsd:string'],[b.passwordParameter,b.password,'xsd:string']];
+ if(b.enableParameter){if(!validParam(b.enableParameter))return json({error:'Invalid Wi-Fi enable parameter path'},400);values.push([b.enableParameter,String(b.enabled!=='false'),'xsd:boolean'])}
+ const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
+ return await queueTr069Task(env,path,oid,uid,ip,'setParameterValues',{parameterValues:values});
+}
 async function listNetworkDevices(env,url,oid){
  const{page,pp,off}=pg(url),cnt=await env.DB.prepare('SELECT COUNT(*) AS n FROM network_devices WHERE organization_id=?').bind(oid).first();
  const rows=await env.DB.prepare('SELECT id,name,device_type,host,port,username,status,notes,model,management_protocol,pon_ports,created_at,updated_at FROM network_devices WHERE organization_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(oid,pp,off).all();
@@ -877,6 +1103,49 @@ async function networkStatus(env,oid){
  return json({configured:Object.values(counts).reduce((a,b)=>a+b,0)>0,devices:counts,connection_tested:false,note:'Device inventory is configured; live router/OLT connectivity requires reachable management endpoints and credentials.'})
 }
 
+async function listPaymentPromises(env,url,oid){
+ const {page,pp,off}=pg(url);
+ const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM payment_promises WHERE organization_id=?').bind(oid).first();
+ const rows=await env.DB.prepare("SELECT p.id,p.customer_id,p.amount_pkr,p.promise_date,p.status,p.notes,p.created_at,c.first_name||' '||c.last_name AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.promise_date ASC,p.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
+ return json({data:rows.results||[],pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+}
+async function createPaymentPromise(request,env,oid,uid,ip){
+ const b=await parseBody(request);
+ const promiseDate=String(b?.promiseDate||''),parsedDate=new Date(promiseDate+'T00:00:00Z');
+ if(!b||!b.customerId||!Number.isSafeInteger(Number(b.amountPkr))||Number(b.amountPkr)<=0||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(promiseDate)||Number.isNaN(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==promiseDate)return json({error:'Customer, positive whole-rupee amount and valid promise date are required'},400);
+ if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customerId,oid).first())return json({error:'Customer not found'},404);
+ const id=uuid(),notes=typeof b.notes==='string'?b.notes.trim().slice(0,500):null;
+ await env.DB.prepare("INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,status,notes,created_by) VALUES(?,?,?,?,?,'open',?,?)").bind(id,oid,b.customerId,Number(b.amountPkr),b.promiseDate,notes||null,uid).run();
+ await audit(env,oid,uid,'create_payment_promise','Promise:'+id,ip);
+ const row=await env.DB.prepare("SELECT p.*,c.first_name||' '||c.last_name AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row},201);
+}
+async function updatePaymentPromise(request,env,path,oid,uid,ip){
+ const id=path.split('/').pop(),b=await parseBody(request);
+ const allowed=['open','kept','broken','cancelled'];
+ if(!b||!allowed.includes(String(b.status||'')))return json({error:'A valid payment promise status is required'},400);
+ const exists=await env.DB.prepare('SELECT id FROM payment_promises WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!exists)return json({error:'Payment promise not found'},404);
+ await env.DB.prepare("UPDATE payment_promises SET status=?,updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(b.status,id,oid).run();
+ await audit(env,oid,uid,'update_payment_promise','Promise:'+id+':'+b.status,ip);
+ return json({success:true});
+}
+async function financialAging(env,oid){
+ const rows=await env.DB.prepare("SELECT i.id,i.invoice_number,i.due_date,i.total,c.first_name||' '||c.last_name AS customer_name,MAX(0,CAST(julianday('now')-julianday(i.due_date) AS INTEGER)) AS days_overdue,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_pkr FROM invoices i JOIN customers c ON c.id=i.customer_id AND c.organization_id=i.organization_id WHERE i.organization_id=? AND i.status IN ('pending','overdue') AND i.due_date<date('now') ORDER BY i.due_date ASC").bind(oid).all();
+ const invoices=(rows.results||[]).filter(x=>Number(x.outstanding_pkr)>0).map(x=>({customerName:x.customer_name,invoiceNumber:x.invoice_number,dueDate:x.due_date,daysOverdue:Number(x.days_overdue||0),outstandingPkr:Number(x.outstanding_pkr||0)}));
+ const bucketsPkr={'1_30':0,'31_60':0,'61_90':0,'90_plus':0};
+ for(const row of invoices){const d=row.daysOverdue,k=d<=30?'1_30':d<=60?'31_60':d<=90?'61_90':'90_plus';bucketsPkr[k]+=row.outstandingPkr;}
+ return json({data:{invoices,bucketsPkr}});
+}
+async function reportSummary(env,url,oid){
+ const [dashboard,revenue]=await Promise.all([
+  dashStats(env,oid),
+  env.DB.prepare("SELECT strftime('%Y-%m',paid_at) AS month,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0) AS revenue FROM payments WHERE organization_id=? AND status='completed' AND paid_at>=datetime('now','-6 months') GROUP BY strftime('%Y-%m',paid_at) ORDER BY month").bind(oid).all()
+ ]);
+ const stats=await dashboard.json();
+ const invoiceCounts=await env.DB.prepare('SELECT status,COUNT(*) AS count FROM invoices WHERE organization_id=? GROUP BY status ORDER BY status').bind(oid).all();
+ return json({data:{revenuePkr:Number(stats.totalRevenue||0),monthlyRevenue:(revenue.results||[]).map(x=>({month:x.month,revenue:x.revenue})),outstandingPkr:Number(stats.pendingAmount||0),invoiceCounts:invoiceCounts.results||[]}});
+}
 async function repRev(env,url,oid){const months=parseInt(url.searchParams.get('months')||'6');const rows=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COUNT(*)c,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now',?)GROUP BY m ORDER BY m").bind(oid,'-'+months+' months').all();return json({data:rows.results||[]})}
 async function repCust(env,oid){const bs=await env.DB.prepare('SELECT status,COUNT(*)c FROM customers WHERE organization_id=? GROUP BY status').bind(oid).all();return json({byStatus:bs.results||[]})}
 async function repSubs(env,oid){const bs=await env.DB.prepare('SELECT status,COUNT(*)c FROM subscriptions WHERE organization_id=? GROUP BY status').bind(oid).all();const bp=await env.DB.prepare('SELECT p.name package_name,COUNT(s.id)c FROM packages p LEFT JOIN subscriptions s ON p.id=s.package_id AND s.organization_id=? WHERE p.organization_id=? GROUP BY p.id').bind(oid,oid).all();return json({byStatus:bs.results||[],byPackage:bp.results||[]})}
