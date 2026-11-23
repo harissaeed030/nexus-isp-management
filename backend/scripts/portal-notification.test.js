@@ -52,11 +52,11 @@ test("tenant slug scopes customer portal email login when emails repeat across I
 test("customer portal login tenant predicate scopes account number, customer code, and email together",()=>{
  const source=readFileSync(new URL("../src/routes/portal-notification.routes.js",import.meta.url),"utf8");
  assert.match(source,/\(\(c\.account_number=\? OR c\.customer_code=\? OR c\.email=\? COLLATE NOCASE\) AND \(\? IS NULL OR t\.slug=\?\)\)/);
- assert.doesNotMatch(login,/OR c\.email=\? COLLATE NOCASE\) AND a\.status/);
+ assert.doesNotMatch(source,/OR c\.email=\? COLLATE NOCASE\) AND a\.status/);
 });
 
 test("customer portal password reset revokes sessions and writes an audit event",()=>{
  const source=readFileSync(new URL("../src/routes/portal-notification.routes.js",import.meta.url),"utf8");
  assert.match(source,/DELETE FROM customer_portal_sessions WHERE account_id=\?/);
- assert.match(reset,/audit\(req\.user,"reset_password","customer_portal_account",account\.id\)/);
+ assert.match(source,/audit\(req\.user,"reset_password","customer_portal_account",account\.id\)/);
 });
