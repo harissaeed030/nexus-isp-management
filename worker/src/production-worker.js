@@ -1178,6 +1178,7 @@ async function createNetworkDevice(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const name=s(b.name),type=b.device_type||b.deviceType||b.type||'mikrotik',portValue=b.port??b.apiPort,port=portValue===undefined||portValue===null||portValue===''?null:parseInt(portValue,10);
  if(!name||!['mikrotik','olt','acs','other'].includes(type))return json({error:'name and valid device_type are required'},400);
+ if(type==='mikrotik'&&(!s(b.host)||!s(b.username)||typeof b.password!=='string'||b.password.length<8))return json({error:'MikroTik inventory requires host, API username and password'},400);
  if(port!==null&&(!Number.isInteger(port)||port<1||port>65535))return json({error:'port must be between 1 and 65535'},400);
  if(b.status!==undefined&&!['active','inactive','maintenance'].includes(b.status))return json({error:'Invalid status'},400);
  if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8||b.password.length>1000))return json({error:'Router password must contain 8–1000 characters'},400);
