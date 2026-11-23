@@ -8,7 +8,7 @@ test("customer portal migration creates isolated accounts and notification outbo
  db.exec(`
  CREATE TABLE tenants(id TEXT PRIMARY KEY,name TEXT,slug TEXT);
  CREATE TABLE users(id TEXT PRIMARY KEY,tenant_id TEXT);
- CREATE TABLE customers(id TEXT PRIMARY KEY,tenant_id TEXT,customer_code TEXT,full_name TEXT);
+ CREATE TABLE customers(id TEXT PRIMARY KEY,tenant_id TEXT,customer_code TEXT,full_name TEXT,email TEXT,account_number TEXT);
  CREATE TABLE subscriptions(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
  CREATE TABLE invoices(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
  CREATE TABLE support_tickets(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
@@ -23,5 +23,27 @@ test("customer portal migration creates isolated accounts and notification outbo
  db.prepare("INSERT INTO customer_portal_accounts(id,tenant_id,customer_id,password_hash) VALUES('a1','t1','c1','hash')").run();
  db.prepare("INSERT INTO customer_portal_sessions(token_hash,account_id,expires_at) VALUES('token','a1','2099-01-01T00:00:00.000Z')").run();
  assert.equal(db.prepare("SELECT COUNT(*) count FROM customer_portal_sessions").get().count,1);
+ db.close();
+});
+
+test("tenant slug scopes customer portal email login when emails repeat across ISPs",()=>{
+ const db=new DatabaseSync(":memory:");
+ db.exec(`
+ CREATE TABLE tenants(id TEXT PRIMARY KEY,name TEXT,slug TEXT);
+ CREATE TABLE users(id TEXT PRIMARY KEY,tenant_id TEXT);
+ CREATE TABLE customers(id TEXT PRIMARY KEY,tenant_id TEXT,customer_code TEXT,full_name TEXT,email TEXT,account_number TEXT);
+ CREATE TABLE subscriptions(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
+ CREATE TABLE invoices(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
+ CREATE TABLE support_tickets(id TEXT PRIMARY KEY,tenant_id TEXT,customer_id TEXT);
+ `);
+ db.exec(readFileSync(new URL("../migrations/003_customer_portal_notifications.sql",import.meta.url),"utf8"));
+ db.prepare("INSERT INTO tenants(id,name,slug) VALUES('t1','ISP One','isp-one'),('t2','ISP Two','isp-two')").run();
+ db.prepare("INSERT INTO customers(id,tenant_id,customer_code,full_name,email,account_number) VALUES('c1','t1','C-1','One','same@example.test','A-1'),('c2','t2','C-2','Two','same@example.test','A-2')").run();
+ db.prepare("INSERT INTO customer_portal_accounts(id,tenant_id,customer_id,password_hash) VALUES('a1','t1','c1','hash'),('a2','t2','c2','hash')").run();
+ const sql="SELECT a.id,a.tenant_id FROM customer_portal_accounts a JOIN customers c ON c.id=a.customer_id JOIN tenants t ON t.id=c.tenant_id WHERE ((c.account_number=? OR c.customer_code=? OR c.email=? COLLATE NOCASE) AND (? IS NULL OR t.slug=?)) AND a.status='active' AND c.status='active' ORDER BY a.created_at LIMIT 2";
+ const selected=db.prepare(sql).all("same@example.test","same@example.test","same@example.test","isp-two","isp-two");
+ assert.deepEqual(selected.map(x=>x.id),["a2"]);
+ const ambiguous=db.prepare(sql).all("same@example.test","same@example.test","same@example.test",null,null);
+ assert.equal(ambiguous.length,2);
  db.close();
 });
