@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, mapStaffRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload, corsHeaders } from "../src/d1-api-worker.js";
+import { normalizeWorkspaceLoginSlug, normalizeApiMethod, normalizePortalTicketPriority, normalizeApiPath, mapTicketRow, normalizeTicketPayload, mapCustomerRow, normalizeCustomerPayload, mapPackageRow, normalizePackagePayload, mapSubscriptionRow, normalizeSubscriptionPayload, mapInvoiceRow, normalizeInvoicePayload, mapPaymentRow, normalizePaymentPayload, mapOltRow, mapOnuRow, normalizeOnuPayload, mapRouterRow, mapStaffRow, validateAcsBaseUrl, mapAcsConnection, mapAcsDevice, mapAcsParameters, normalizeAcsConnectionPayload, corsHeaders } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboardSource = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
@@ -520,4 +520,16 @@ test("customer portal complaint priority is validated and persisted", () => {
   assert.match(source, /requestedPriority==='normal'\?'medium':requestedPriority/);
   assert.match(source, /VALUES\(\?,\?,\?,\?,\?,\?, 'open'\)/);
   assert.match(source, /description\|\|null,priority\)\.run\(\)/);
+});
+
+
+test("customer portal complaint priority normalization maps supported values to the D1 enum", () => {
+  assert.equal(normalizePortalTicketPriority(undefined), "medium");
+  assert.equal(normalizePortalTicketPriority("normal"), "medium");
+  assert.equal(normalizePortalTicketPriority("low"), "low");
+  assert.equal(normalizePortalTicketPriority("medium"), "medium");
+  assert.equal(normalizePortalTicketPriority("high"), "high");
+  assert.equal(normalizePortalTicketPriority("urgent"), "urgent");
+  assert.equal(normalizePortalTicketPriority("critical"), null);
+  assert.equal(normalizePortalTicketPriority({}), null);
 });
