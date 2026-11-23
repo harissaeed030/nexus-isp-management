@@ -67,6 +67,15 @@ try {
   assert.equal((await request("/api/v1/staff", "GET", undefined, tt)).status, 403, "technician cannot manage staff");
   assert.equal((await request("/api/v1/staff", "GET", undefined, tbill)).status, 403, "billing role cannot manage staff");
   assert.equal((await request("/api/v1/payments", "POST", { invoiceId: inv.id, amountPkr: 100, method: "cash" }, tbill)).status, 201, "billing role records payments");
+  const dash = (await request("/api/v1/dashboard", "GET", undefined, ta)).data.stats;
+  assert.equal(dash.dailyCollectionPkr, 600, "daily collection counts today's payments");
+  assert.equal(dash.monthlyCollectionPkr, 600);
+  assert.equal(dash.outstandingPkr, 900, "outstanding = invoice minus payments");
+  assert.equal(dash.suspendedCustomers, 0);
+  assert.equal(dash.expiringSubscriptions, 0);
+  db.prepare("UPDATE subscriptions SET expires_at=date('now','+3 days') WHERE tenant_id=?").run(db.prepare("SELECT tenant_id FROM users WHERE email=?").get("owner@alpha.test").tenant_id);
+  assert.equal((await request("/api/v1/dashboard", "GET", undefined, ta)).data.stats.expiringSubscriptions, 1, "subscription expiring within 7 days counted");
+  assert.equal((await request("/api/v1/dashboard", "GET", undefined, tb)).data.stats.expiringSubscriptions, 0, "other tenant unaffected");
   assert.equal((await request("/api/v1/customers", "POST", { fullName: "Nope" }, tbill)).status, 403, "billing role cannot create customers");
   assert.equal((await request("/api/v1/tickets", "GET", undefined, tt)).status, 200, "technician sees complaints");
 
@@ -101,6 +110,22 @@ try {
 
   // Direct DB guard: assignee tenant mismatch is rejected by trigger
   assert.throws(() => db.prepare("UPDATE support_tickets SET assigned_to=? WHERE id=?").run(b.data.user.id, t2.id), /assignee tenant mismatch/);
+
+  // Workspace settings, branding and plan limits
+  const settings = await request("/api/v1/tenant", "PATCH", { brandColor: "#0b5d2a", supportPhone: "+92 300 1234567", address: "Main Road" }, ta);
+  assert.equal(settings.status, 200);
+  assert.equal(settings.data.data.brand_color, "#0b5d2a");
+  assert.equal(settings.data.data.plan, "pro");
+  assert.equal((await request("/api/v1/tenant", "PATCH", { brandColor: "green" }, ta)).status, 400);
+  assert.equal((await request("/api/v1/auth/me", "GET", undefined, tt)).data.tenant.brand_color, "#0b5d2a", "staff see tenant branding via auth/me");
+  assert.equal((await request("/api/v1/tenant", "PATCH", { name: "Hack", plan: "pro" }, tt)).status, 403, "only owner edits settings");
+  assert.equal((await request("/api/v1/tenant", "GET", undefined, tb)).data.data.plan, "starter", "self-registered ISPs start on starter");
+  assert.equal((await request("/api/v1/tenant", "GET", undefined, tb)).data.data.brand_color, "#16a34a");
+  await request("/api/v1/tenant", "PATCH", { plan: "pro", customer_limit: 100000 }, tb);
+  assert.equal((await request("/api/v1/tenant", "GET", undefined, tb)).data.data.plan, "starter", "owner cannot change own plan");
+  db.prepare("UPDATE tenants SET customer_limit=1 WHERE id=?").run(b.data.tenant.id);
+  assert.equal((await request("/api/v1/customers", "POST", { fullName: "Over Limit" }, tb)).status, 402, "plan customer limit enforced");
+  assert.equal((await request("/api/v1/customers", "POST", { fullName: "Alpha Two" }, ta)).status, 201, "other tenant unaffected");
   console.log("NEXUS tenant isolation, role and complaint workflow tests passed.");
 } finally {
   server.close();

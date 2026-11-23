@@ -53,6 +53,7 @@ export function registerCustomerRoutes(app,{db,auth,id,audit,fail}) {
   });
 
   app.post("/api/v1/customers",auth,(req,res)=>{
+    {const t=db.prepare("SELECT customer_limit FROM tenants WHERE id=?").get(req.user.tenant_id),n=db.prepare("SELECT COUNT(*) n FROM customers WHERE tenant_id=?").get(req.user.tenant_id).n;if(t&&n>=t.customer_limit)return fail(res,402,"Customer limit of your plan reached. Please upgrade your plan.");}
     const b=req.body||{},name=clean(b.fullName),phone=clean(b.phone||""),email=clean(b.email||"");
     const address=clean(b.address||""),serviceAddress=clean(b.serviceAddress||b.address||""),area=clean(b.coverageArea||"");
     const status=b.status||"active",connection=b.connectionStatus||"pending";
