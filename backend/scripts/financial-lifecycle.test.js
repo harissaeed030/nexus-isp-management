@@ -29,17 +29,20 @@ try{
  assert.equal(invoice.status,201);
  const unallocated=await request("/api/v1/unallocated-payments","POST",{customerId,amountPkr:1000,method:"cash",reference:"CASH-TEST-001"},token);
  assert.equal(unallocated.status,201);
- const allocation=await request("/api/v1/unallocated-payments/"+unallocated.data.data.id+"/allocate","POST",{invoiceId:invoice.data.data.id},token);
- assert.equal(allocation.status,201);
+ const allocationPath="/api/v1/unallocated-payments/"+unallocated.data.data.id+"/allocate";
+ const attempts=await Promise.all([
+  request(allocationPath,"POST",{invoiceId:invoice.data.data.id},token),
+  request(allocationPath,"POST",{invoiceId:invoice.data.data.id},token)
+ ]);
+ assert.deepEqual(attempts.map(x=>x.status).sort(),[201,409]);
+ const allocation=attempts.find(x=>x.status===201);
  assert.equal(allocation.data.data.amount_pkr,1000);
- const repeated=await request("/api/v1/unallocated-payments/"+unallocated.data.data.id+"/allocate","POST",{invoiceId:invoice.data.data.id},token);
- assert.equal(repeated.status,409);
  const payments=db.prepare("SELECT COUNT(*) n FROM payments WHERE tenant_id=? AND invoice_id=?").get(unallocated.data.data.tenant_id,invoice.data.data.id);
  assert.equal(payments.n,1);
  const stored=db.prepare("SELECT status,allocated_invoice_id FROM unallocated_payments WHERE id=?").get(unallocated.data.data.id);
  assert.equal(stored.status,"allocated");
  assert.equal(stored.allocated_invoice_id,invoice.data.data.id);
- console.log("NEXUS financial lifecycle tests passed: atomic allocation, duplicate allocation rejection and single payment ledger entry.");
+ console.log("NEXUS financial lifecycle tests passed: concurrent allocation, duplicate allocation rejection and single payment ledger entry.");
 }finally{
  await new Promise(resolve=>server.close(resolve));
  db.close();
