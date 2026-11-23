@@ -924,7 +924,7 @@ async function acsRequest(connection,env,pathname,query='',body=null){
 function tr069IdFromPath(path){return decodeURIComponent(path.split('/')[4]||'')}
 function tr069Status(lastInform){if(!lastInform)return'unknown';const age=Date.now()-Date.parse(lastInform);if(!Number.isFinite(age))return'unknown';return age<=600000?'online':'offline'}
 export function redactTr069Tree(value,key=''){
- if(/password|secret|token|privatekey|pre.?shared|psk/i.test(key))return undefined;
+ if(/password|passphrase|secret|token|private.?key|pre.?shared|wep.?key|network.?key|psk/i.test(key))return undefined;
  if(Array.isArray(value))return value.slice(0,100).map(x=>redactTr069Tree(x,key)).filter(x=>x!==undefined);
  if(value&&typeof value==='object'){const out={};for(const[k,v]of Object.entries(value)){const safe=redactTr069Tree(v,k);if(safe!==undefined)out[k]=safe}return out}
  if(typeof value==='string')return value.slice(0,1000);return value;
