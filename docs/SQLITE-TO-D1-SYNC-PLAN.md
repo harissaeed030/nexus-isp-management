@@ -3,7 +3,7 @@
 **Decision date:** 2026-11-15  
 **Authority:** Cloudflare D1 production database  
 **Local role:** SQLite offline workspace  
-**Status:** design approved; implementation and production activation pending
+**Status:** implementation committed; production push Worker deployed; activation pending explicit tenant mapping and local/Worker secret configuration
 
 ## Non-negotiable direction
 
@@ -57,11 +57,13 @@ Local `tenant_id` and production `organization_id` are different identity domain
 
 ## Current limitations
 
-- No sync endpoint, outbox, tenant mapping, or replication process is currently implemented.
-- The local SQLite schema (`tenants`, `tenant_id`, integer PKR fields) and production D1 schema (`organizations`, `organization_id`, separate financial model) are not drop-in compatible.
-- The development branch's Worker is a health-check Worker and must not be deployed over the production Worker.
-- Production Worker/D1 deployment must use `main`'s `worker/src/production-worker.js` and `worker/wrangler.production.toml`, never the development branch's Worker configuration.
-- Existing production customer records must remain untouched until a separately tested migration/reconciliation has been approved.
+- The durable SQLite outbox, authenticated export endpoint, dedicated D1 push Worker, idempotency ledger, and five-entity mapping are implemented.
+- The production push Worker is deployed as `nexus-sqlite-sync` with the production D1 binding. Its `SYNC_PUSH_TOKEN` secret still must be configured before requests can authenticate.
+- The Worker requires a pre-provisioned `sync_tenant_mappings` row. It no longer auto-maps a local tenant to the only D1 organization.
+- The live production D1 currently contains 5 customers, 1 package, 1 subscription, 1 invoice, and 1 payment. These rows are not automatically imported or overwritten; existing local records need a dry-run/reconciliation first.
+- Local SQLite tenant ID and local secret values are device-local and cannot be inferred from GitHub or Cloudflare. Activation therefore remains pending until the owner configures the local `.env` and explicit tenant mapping.
+- The old generic `d1-sync-worker` five-minute cron, which wrote shadow records to `sync_records` rather than the ISP business tables, has been disabled. Its historical shadow rows are retained.
+- Never run the full schema snapshot over an existing database or import live records without a reviewed reconciliation.
 
 ## Acceptance criteria
 
