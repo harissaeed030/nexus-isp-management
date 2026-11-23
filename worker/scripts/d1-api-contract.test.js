@@ -533,3 +533,13 @@ test("customer portal complaint priority normalization maps supported values to 
   assert.equal(normalizePortalTicketPriority("critical"), null);
   assert.equal(normalizePortalTicketPriority({}), null);
 });
+
+
+test("health endpoint is read-only and bypasses startup migrations", () => {
+  const optionsIndex = source.indexOf("if(m==='OPTIONS')");
+  const healthIndex = source.indexOf("if(path==='/api/health')");
+  const migrationIndex = source.indexOf("if(path.startsWith('/api/')&&!_migrated)");
+  assert.ok(optionsIndex >= 0 && optionsIndex < healthIndex, "preflight is handled before health");
+  assert.ok(healthIndex >= 0 && healthIndex < migrationIndex, "health is handled before startup migrations");
+  assert.match(source, /env\\.DB\\.prepare\\('SELECT 1 AS ok'\\)\\.first\\(\\)/);
+});
