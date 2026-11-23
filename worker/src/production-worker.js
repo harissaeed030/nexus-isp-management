@@ -1,7 +1,8 @@
-// Production build: verified customer portal API; staging-only synthetic tenant cleanup endpoint is excluded.
+// Production build: staging-only synthetic tenant cleanup endpoint is excluded.
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
 function uuid(){return crypto.randomUUID()}
+function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
 function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'}})}
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
@@ -15,7 +16,6 @@ async function verifyJWT(t,sec){try{const ps=t.split('.');if(ps.length!==3)retur
 function b64u(b){return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function b64uDec(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const b=atob(s);const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
 function getSec(env){if(!env.JWT_SECRET)throw new Error('JWT_SECRET not configured');return env.JWT_SECRET}
-function safeErrorType(error){const name=error&&typeof error.name==='string'?error.name:'';return ['Error','TypeError','RangeError','ReferenceError','SyntaxError','URIError','EvalError','AbortError'].includes(name)?name:'UnknownError'}
 async function getAuth(r,env){const a=r.headers.get('Authorization');if(!a||!a.startsWith('Bearer '))return null;return await verifyJWT(a.slice(7),getSec(env))}
 async function audit(env,oid,uid,act,det,ip){try{await env.DB.prepare('INSERT INTO audit_log(id,organization_id,user_id,action,detail,ip_address)VALUES(?,?,?,?,?,?)').bind(uuid(),oid,uid,act,det||null,ip||null).run()}catch(e){console.error('NEXUS_AUDIT_WRITE_FAILED',{action:act,errorType:safeErrorType(e)})}}
 function vEmail(e){return/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e||'')}
@@ -60,11 +60,12 @@ const PERMISSIONS=[
  {key:'audit.read',group:'Administration',label:'View activity log'},
  {key:'notifications.read',group:'Administration',label:'View notifications'},
  {key:'refunds.read',group:'Billing',label:'View refunds'},
- {key:'refunds.manage',group:'Billing',label:'Record and process refunds'}
+ {key:'refunds.manage',group:'Billing',label:'Record and process refunds'},
+ {key:'payment_promises.manage',group:'Billing',label:'Create and update payment promises'}
 ];
 const ROLE_PERMISSIONS={
  owner:['*'],admin:['*'],
- billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read','refunds.read','refunds.manage'],
+ billing:['dashboard.read','customers.read','packages.read','subscriptions.read','billing.read','invoices.create','payments.create','billing.generate','reports.read','notifications.read','refunds.read','refunds.manage','payment_promises.manage'],
  support:['dashboard.read','customers.read','packages.read','subscriptions.read','tickets.read','tickets.manage','onus.read','notifications.read'],
  technician:['dashboard.read','customers.read','subscriptions.read','tickets.read','tickets.manage','routers.read','pppoe.read','onus.read','onus.manage','connection.read','notifications.read'],
  staff:['dashboard.read','notifications.read']
@@ -72,7 +73,7 @@ const ROLE_PERMISSIONS={
 function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];return list.includes('*')||list.includes(key)}
 function permissionForRoute(path,method){
  const v=String(method||'GET').toUpperCase(),match=base=>path===base||path.startsWith(base+'/');
- if(path==='/api/dashboard/stats')return v==='GET'?'dashboard.read':null;
+ if(path==='/api/dashboard'||path==='/api/dashboard/stats')return v==='GET'?'dashboard.read':null;
  if(match('/api/customers'))return ({GET:'customers.read',POST:'customers.create',PUT:'customers.update',DELETE:'customers.delete'})[v]||null;
  if(match('/api/packages'))return v==='GET'?'packages.read':['POST','PUT','DELETE'].includes(v)?'packages.manage':null;
  if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
@@ -80,12 +81,14 @@ function permissionForRoute(path,method){
  if(path.match(/^\/api\/invoices\/[^/]+\/payments$/))return v==='POST'?'payments.create':null;
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
  if(path==='/api/payments')return v==='GET'?'billing.read':null;
- if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
+ if(match('/api/complaints')||match('/api/tickets'))return v==='GET'?'tickets.read':['POST','PUT','PATCH'].includes(v)?'tickets.manage':null;
  if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
  if(match('/api/onus'))return v==='GET'?'onus.read':['POST','PUT','DELETE'].includes(v)?'onus.manage':null;
- if(match('/api/reports'))return v==='GET'?'reports.read':null;
+ if(match('/api/reports')||path==='/api/financial/aging')return v==='GET'?'reports.read':null;
+ if(path==='/api/operations/payment-promises')return v==='GET'?'billing.read':v==='POST'?'payment_promises.manage':null;
+ if(match('/api/operations/payment-promises'))return v==='PATCH'?'payment_promises.manage':null;
  if(path.startsWith('/api/exports/')){if(v!=='GET')return null;const resource=path.slice('/api/exports/'.length);return ({'customers.csv':'customers.read','packages.csv':'packages.read','subscriptions.csv':'subscriptions.read','invoices.csv':'billing.read','payments.csv':'billing.read','tickets.csv':'tickets.read','routers.csv':'routers.read','olt.csv':'routers.read','acs.csv':'routers.read','pppoe.csv':'pppoe.read','onus.csv':'onus.read'})[resource]||null}
  if(path==='/api/audit-logs')return v==='GET'?'audit.read':null;
  if(match('/api/notifications'))return ['GET','PUT'].includes(v)?'notifications.read':null;
@@ -171,6 +174,7 @@ async function runMigrations(env){
  ['org.phone','ALTER TABLE organizations ADD COLUMN phone TEXT'],
  ['org.address','ALTER TABLE organizations ADD COLUMN address TEXT'],
  ['org.currency',"ALTER TABLE organizations ADD COLUMN currency TEXT DEFAULT 'USD'"],
+ ['org.brand_color',"ALTER TABLE organizations ADD COLUMN brand_color TEXT NOT NULL DEFAULT '#16a34a'"],
  ['cust.balance','ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0'],
  ['cust.notes','ALTER TABLE customers ADD COLUMN notes TEXT'],
  ['cust.inst_addr','ALTER TABLE customers ADD COLUMN installation_address TEXT'],
@@ -185,6 +189,11 @@ async function runMigrations(env){
  ['refunds.idempotency_key','ALTER TABLE refunds ADD COLUMN idempotency_key TEXT'],
  ['refunds.idempotency_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_refunds_org_idempotency ON refunds(organization_id,idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key<>''"],
  ['refunds.payment_index','CREATE INDEX IF NOT EXISTS idx_refunds_payment_status ON refunds(organization_id,payment_id,status)'],
+ ['payment_promises',"CREATE TABLE IF NOT EXISTS payment_promises(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL CHECK(amount_pkr>0),promise_date TEXT NOT NULL,notes TEXT,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','kept','broken','cancelled')),created_by TEXT NOT NULL,updated_by TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id),FOREIGN KEY(updated_by) REFERENCES users(id))"],
+ ['payment_promises.index','CREATE INDEX IF NOT EXISTS idx_payment_promises_org_status_date ON payment_promises(organization_id,status,promise_date)'],
+ ['payment_promises.customer_index','CREATE INDEX IF NOT EXISTS idx_payment_promises_org_customer ON payment_promises(organization_id,customer_id)'],
+ ['payment_promises.tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_payment_promise_org_i BEFORE INSERT ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer organization mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator organization mismatch') END; END"],
+ ['payment_promises.tenant_guard_update',"CREATE TRIGGER IF NOT EXISTS trg_payment_promise_org_u BEFORE UPDATE OF organization_id,customer_id,created_by,updated_by ON payment_promises BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM customers WHERE id=NEW.customer_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise customer organization mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise creator organization mismatch') END; SELECT CASE WHEN NEW.updated_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.updated_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'payment promise updater organization mismatch') END; END"],
  ['customer_portal_accounts',"CREATE TABLE IF NOT EXISTS customer_portal_accounts(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,customer_id TEXT NOT NULL,email TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),token_version INTEGER NOT NULL DEFAULT 0,last_login TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,email),UNIQUE(organization_id,customer_id),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE)"],
  ['notif',"CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT,title TEXT NOT NULL,message TEXT,type TEXT DEFAULT 'info',is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT(datetime('now')))"],
  ['settings',"CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,created_at TEXT DEFAULT(datetime('now')),updated_at TEXT DEFAULT(datetime('now')),UNIQUE(organization_id,key))"],
@@ -222,12 +231,42 @@ if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
 const{orgId,userId}=auth;const currentUser=await env.DB.prepare('SELECT role,status,token_version FROM users WHERE id=? AND organization_id=?').bind(userId,orgId).first();if(!currentUser||currentUser.status==='disabled')return json({error:'Account is inactive or no longer exists'},401);if(Number(auth.tokenVersion||0)!==Number(currentUser.token_version||0))return json({error:'Session expired. Please sign in again.'},401);const role=currentUser.role;
-// Staging-only E2E teardown. This route is unreachable on production hostnames.
 if(!await roleAllowedWithOverrides(env,orgId,userId,role,path,m))return json({error:'Forbidden',message:'Your role does not have permission for this action'},403);
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='GET')return await getPortalAccount(env,path,orgId,role);
 if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.split('/').length===5&&m==='POST')return await savePortalAccount(request,env,path,orgId,userId,role,ip);
 if(path==='/api/auth/me'&&m==='GET')return await authMe(env,auth);
 if(path==='/api/auth/logout'&&m==='POST'){await env.DB.prepare('UPDATE users SET token_version=COALESCE(token_version,0)+1,updated_at=datetime(\'now\') WHERE id=? AND organization_id=?').bind(userId,orgId).run();return json({success:true})}
+if(path==='/api/tenant'&&['GET','PATCH'].includes(m)){
+ if(role!=='owner')return json({error:'Only the workspace owner can manage workspace settings'},403);
+ if(m==='GET'){
+  const tenant=await env.DB.prepare("SELECT id,name,slug,plan,brand_color,phone AS support_phone,address,created_at FROM organizations WHERE id=?").bind(orgId).first();
+  return tenant?json({success:true,data:{...tenant,customer_limit:null}}):json({error:'Workspace not found'},404);
+ }
+ const b=await parseBody(request);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const current=await env.DB.prepare('SELECT id,name,brand_color,phone,address FROM organizations WHERE id=?').bind(orgId).first();
+ if(!current)return json({error:'Workspace not found'},404);
+ const name=b.name===undefined?current.name:s(b.name);
+ const color=b.brandColor===undefined?current.brand_color:b.brandColor;
+ const phone=b.supportPhone===undefined?current.phone:(b.supportPhone===null?null:String(b.supportPhone).trim());
+ const address=b.address===undefined?current.address:(b.address===null?null:String(b.address).trim());
+ if(typeof name!=='string'||name.length<2||name.length>120)return json({error:'Workspace name must be 2–120 characters'},400);
+ if(typeof color!=='string'||!/^#[0-9a-fA-F]{6}$/.test(color))return json({error:'Brand colour must look like #16a34a'},400);
+ if(phone!==null&&(typeof phone!=='string'||phone.length>30||!/^[0-9+()\s-]*$/.test(phone)))return json({error:'Support phone is not valid'},400);
+ if(address!==null&&(typeof address!=='string'||address.length>300))return json({error:'Address is too long'},400);
+ await env.DB.prepare('UPDATE organizations SET name=?,brand_color=?,phone=?,address=? WHERE id=?').bind(name,color,phone||null,address||null,orgId).run();
+ await audit(env,orgId,userId,'update_tenant_settings','Workspace settings updated',ip);
+ const tenant=await env.DB.prepare("SELECT id,name,slug,plan,brand_color,phone AS support_phone,address,created_at FROM organizations WHERE id=?").bind(orgId).first();
+ return json({success:true,data:{...tenant,customer_limit:null}});
+}
+if(path==='/api/dashboard'&&m==='GET'){
+ const response=await dashStats(env,orgId);
+ return json({stats:await response.json()});
+}
+if(path==='/api/reports/summary'&&m==='GET'){
+ const response=await dashStats(env,orgId),stats=await response.json();
+ const monthlyRevenue=(stats.monthlyRevenue||[]).map(row=>({month:row.m,revenue:Number(row.t||0)}));
+ return json({data:{monthlyRevenue,outstandingPkr:Number(stats.pendingAmount||0)}});
+}
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
 if(path==='/api/customers'&&m==='GET')return await listCust(env,url,orgId);
 if(path==='/api/customers'&&m==='POST')return await createCust(request,env,orgId,userId,ip);
@@ -250,12 +289,18 @@ if(path==='/api/billing/generate'&&m==='POST')return await generateBilling(reque
 if(path.match(/^\/api\/invoices\/[^/]+$/)&&m==='GET')return await getInv(env,path,orgId);
 if(path.match(/^\/api\/invoices\/[^/]+\/payments$/)&&m==='POST')return await recPay(request,env,path,orgId,userId,ip);
 if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
+if(path==='/api/financial/aging'&&m==='GET')return await financialAging(env,orgId);
+if(path==='/api/operations/payment-promises'&&m==='GET')return await listPaymentPromises(env,url,orgId);
+if(path==='/api/operations/payment-promises'&&m==='POST')return await createPaymentPromise(request,env,orgId,userId,ip);
+if(/^\/api\/operations\/payment-promises\/[^/]+$/.test(path)&&m==='PATCH')return await updatePaymentPromise(request,env,path,orgId,userId,ip);
 if(path==='/api/refunds'&&m==='GET')return await listRefunds(env,url,orgId);
 if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId,userId,ip);
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
-if(path==='/api/complaints'&&m==='GET')return await listComp(env,url,orgId);
-if(path==='/api/complaints'&&m==='POST')return await createComp(request,env,orgId,userId,ip);
-if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
+if((path==='/api/complaints'||path==='/api/tickets')&&m==='GET')return await listComp(env,url,orgId);
+if((path==='/api/complaints'||path==='/api/tickets')&&m==='POST')return await createComp(request,env,orgId,userId,ip);
+if(/^\/api\/tickets\/[^/]+\/messages$/.test(path)&&m==='GET')return await listTicketMessages(env,path,orgId);
+if(/^\/api\/tickets\/[^/]+\/messages$/.test(path)&&m==='POST')return await createTicketMessage(request,env,path,orgId,userId,ip);
+if(/^\/api\/(?:complaints|tickets)\/[^/]+$/.test(path)&&['PUT','PATCH'].includes(m))return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+\/permissions$/)&&['GET','PUT'].includes(m))return await staffPermissions(env,path,orgId,role,userId,request,ip);
@@ -613,6 +658,50 @@ async function recPay(r,env,path,oid,uid,ip){
 async function listPay(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM payments WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT p.*,c.first_name,c.last_name,i.invoice_number FROM payments p LEFT JOIN customers c ON p.customer_id=c.id AND c.organization_id=p.organization_id LEFT JOIN invoices i ON p.invoice_id=i.id AND i.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY p.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 
 
+
+async function financialAging(env,oid){
+ const rows=await env.DB.prepare("SELECT i.id,i.invoice_number,i.due_date,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name,MAX(0,i.total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0)) AS outstanding_pkr,CAST(julianday(date('now'))-julianday(date(i.due_date)) AS INTEGER) AS days_overdue FROM invoices i JOIN customers c ON c.id=i.customer_id AND c.organization_id=i.organization_id WHERE i.organization_id=? AND i.status<>'cancelled' AND date(i.due_date)<date('now') AND i.total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=i.id AND p.organization_id=i.organization_id AND p.status='completed'),0) ORDER BY i.due_date ASC").bind(oid).all();
+ const invoices=(rows.results||[]).map(x=>({customerName:x.customer_name,invoiceNumber:x.invoice_number,dueDate:x.due_date,daysOverdue:Number(x.days_overdue||0),outstandingPkr:Number(x.outstanding_pkr||0)}));
+ const bucketsPkr={'1_30':0,'31_60':0,'61_90':0,'90_plus':0};
+ for(const row of invoices){const bucket=row.daysOverdue<=30?'1_30':row.daysOverdue<=60?'31_60':row.daysOverdue<=90?'61_90':'90_plus';bucketsPkr[bucket]+=row.outstandingPkr}
+ return json({success:true,data:{invoices,bucketsPkr}});
+}
+async function listPaymentPromises(env,url,oid){
+ const {page,pp,off}=pg(url);
+ const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM payment_promises WHERE organization_id=?').bind(oid).first();
+ const rows=await env.DB.prepare("SELECT p.*,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.organization_id=? ORDER BY CASE p.status WHEN 'open' THEN 0 ELSE 1 END,p.promise_date ASC,p.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();
+ return json({success:true,data:rows.results||[],pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
+}
+async function createPaymentPromise(request,env,oid,uid,ip){
+ const b=await parseBody(request),customerId=b?.customerId,amount=Number(b?.amountPkr),promiseDate=b?.promiseDate,notes=typeof b?.notes==='string'?b.notes.trim():'';
+ if(typeof customerId!=='string'||!customerId)return json({error:'Customer is required'},400);
+ if(!Number.isSafeInteger(amount)||amount<=0)return json({error:'Promised amount must be a positive whole number of rupees'},400);
+ if(typeof promiseDate!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(promiseDate)||!Number.isFinite(Date.parse(promiseDate+'T00:00:00Z'))||new Date(promiseDate+'T00:00:00Z').toISOString().slice(0,10)!==promiseDate)return json({error:'A valid promise date is required'},400);
+ if(notes.length>500)return json({error:'Notes must be 500 characters or fewer'},400);
+ if(!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(customerId,oid).first())return json({error:'Customer not found'},404);
+ const id=uuid();
+ await env.DB.prepare("INSERT INTO payment_promises(id,organization_id,customer_id,amount_pkr,promise_date,notes,status,created_by) VALUES(?,?,?,?,?,?,'open',?)").bind(id,oid,customerId,amount,promiseDate,notes||null,uid).run();
+ await audit(env,oid,uid,'create_payment_promise','PaymentPromise:'+id,ip);
+ const row=await env.DB.prepare("SELECT p.*,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row},201);
+}
+async function updatePaymentPromise(request,env,path,oid,uid,ip){
+ const id=decodeURIComponent(path.split('/')[4]),b=await parseBody(request);
+ if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);
+ const existing=await env.DB.prepare('SELECT id FROM payment_promises WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!existing)return json({error:'Payment promise not found'},404);
+ const sets=[],values=[];
+ if(b.status!==undefined){if(!['open','kept','broken','cancelled'].includes(b.status))return json({error:'Invalid payment promise status'},400);sets.push('status=?');values.push(b.status)}
+ if(b.notes!==undefined){if(typeof b.notes!=='string'||b.notes.length>500)return json({error:'Notes must be text up to 500 characters'},400);sets.push('notes=?');values.push(b.notes.trim()||null)}
+ if(b.promiseDate!==undefined){if(typeof b.promiseDate!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(b.promiseDate)||!Number.isFinite(Date.parse(b.promiseDate+'T00:00:00Z'))||new Date(b.promiseDate+'T00:00:00Z').toISOString().slice(0,10)!==b.promiseDate)return json({error:'Invalid promise date'},400);sets.push('promise_date=?');values.push(b.promiseDate)}
+ if(!sets.length)return json({error:'No supported fields to update'},400);
+ sets.push("updated_at=datetime('now')",'updated_by=?');values.push(uid,id,oid);
+ await env.DB.prepare('UPDATE payment_promises SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...values).run();
+ await audit(env,oid,uid,'update_payment_promise','PaymentPromise:'+id,ip);
+ const row=await env.DB.prepare("SELECT p.*,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name FROM payment_promises p JOIN customers c ON c.id=p.customer_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=?").bind(id,oid).first();
+ return json({success:true,data:row});
+}
+
 async function listRefunds(env,url,oid){
  const {page,pp,off}=pg(url);
  const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM refunds WHERE organization_id=?').bind(oid).first();
@@ -653,20 +742,60 @@ async function updateRefund(request,env,path,oid,uid,ip){
  return json({success:true,data:await env.DB.prepare('SELECT * FROM refunds WHERE id=? AND organization_id=?').bind(id,oid).first()});
 }
 
-async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT t.*,c.first_name,c.last_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*) AS total FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT t.*,('TKT-'||upper(substr(t.id,1,8))) AS ticket_number,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name,COALESCE(NULLIF(u.name,''),u.email,'Unassigned') AS assigned_to_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id AND c.organization_id=t.organization_id LEFT JOIN users u ON t.assigned_to=u.id AND u.organization_id=t.organization_id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();const total=Number(cnt?.total||0),totalPages=Math.ceil(total/pp);return json({data:rows.results||[],pagination:{page,pp,per_page:pp,total,totalPages,total_pages:totalPages}})}
+
+async function listTicketMessages(env,path,oid){
+ const ticketId=decodeURIComponent(path.split('/')[3]);
+ const ticket=await env.DB.prepare('SELECT id FROM support_tickets WHERE id=? AND organization_id=?').bind(ticketId,oid).first();
+ if(!ticket)return json({error:'Ticket not found'},404);
+ const rows=await env.DB.prepare("SELECT tm.id,tm.ticket_id,tm.user_id,tm.message,tm.is_staff,tm.created_at,COALESCE(NULLIF(u.name,''),u.email,'Former user') AS author_name FROM ticket_messages tm LEFT JOIN users u ON u.id=tm.user_id WHERE tm.ticket_id=? ORDER BY tm.created_at ASC,tm.id ASC").bind(ticketId).all();
+ return json({success:true,data:rows.results||[]});
+}
+async function createTicketMessage(request,env,path,oid,uid,ip){
+ const ticketId=decodeURIComponent(path.split('/')[3]),body=await parseBody(request);
+ if(!body||typeof body.message!=='string'||!body.message.trim()||body.message.trim().length>4000)return json({error:'Message must be 1-4000 characters'},400);
+ const ticket=await env.DB.prepare('SELECT id,status FROM support_tickets WHERE id=? AND organization_id=?').bind(ticketId,oid).first();
+ if(!ticket)return json({error:'Ticket not found'},404);
+ if(ticket.status==='closed')return json({error:'Closed tickets cannot receive new messages'},409);
+ const id=uuid(),message=body.message.trim();
+ await env.DB.prepare('INSERT INTO ticket_messages(id,ticket_id,user_id,message,is_staff) VALUES(?,?,?,?,1)').bind(id,ticketId,uid,message).run();
+ await env.DB.prepare("UPDATE support_tickets SET updated_at=datetime('now') WHERE id=? AND organization_id=?").bind(ticketId,oid).run();
+ await audit(env,oid,uid,'ticket_message_added','Ticket:'+ticketId,ip);
+ const row=await env.DB.prepare("SELECT tm.id,tm.ticket_id,tm.user_id,tm.message,tm.is_staff,tm.created_at,COALESCE(NULLIF(u.name,''),u.email,'Former user') AS author_name FROM ticket_messages tm LEFT JOIN users u ON u.id=tm.user_id WHERE tm.id=? AND tm.ticket_id=?").bind(id,ticketId).first();
+ return json({success:true,data:row},201);
+}
+
 async function createComp(r,env,oid,uid,ip){
- const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
- const ms=vReq(b,['subject']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
+ const raw=await parseBody(r);if(!raw||typeof raw!=='object'||Array.isArray(raw))return json({error:'Invalid body'},400);
+ const b={...raw,customer_id:raw.customer_id??raw.customerId,assigned_to:raw.assigned_to??raw.assignedTo,priority:raw.priority==='normal'?'medium':raw.priority};
+ if(typeof b.subject!=='string'||!b.subject.trim()||b.subject.trim().length>180)return json({error:'Subject must be 1-180 characters'},400);
+ if(typeof (b.description??'')!=='string'||String(b.description||'').length>4000)return json({error:'Description must be text up to 4000 characters'},400);
+ if(!['low','normal','medium','high','urgent'].includes(b.priority||'normal'))return json({error:'Invalid ticket priority'},400);
  if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);
  if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);
  const id=uuid();
- await env.DB.prepare('INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status,assigned_to)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id||null,s(b.subject),b.description||null,b.priority||'medium','open',b.assigned_to||null).run();
- await audit(env,oid,uid,'create_ticket','Ticket:'+b.subject,ip);
- await notifyAdmins(env,oid,'New support ticket',String(b.subject).slice(0,180),'support');
- return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first(),201)
+ await env.DB.prepare('INSERT INTO support_tickets(id,organization_id,customer_id,subject,description,priority,status,assigned_to)VALUES(?,?,?,?,?,?,?,?)').bind(id,oid,b.customer_id||null,b.subject.trim(),(b.description||'').trim()||null,b.priority||'normal','open',b.assigned_to||null).run();
+ await audit(env,oid,uid,'create_ticket','Ticket:'+id,ip);
+ await notifyAdmins(env,oid,'New support ticket',b.subject.trim(),'support');
+ return json({success:true,data:await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first()},201)
 }
-async function updateComp(r,env,path,oid,uid,ip){const id=path.split('/')[3];const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);const ex=await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();if(!ex)return json({error:'Not found'},404);if(b.customer_id&&!await env.DB.prepare('SELECT id FROM customers WHERE id=? AND organization_id=?').bind(b.customer_id,oid).first())return json({error:'Customer not found'},404);if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);const f=['status','priority','assigned_to','resolution','description'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(id,oid);await env.DB.prepare('UPDATE support_tickets SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();return json(await env.DB.prepare('SELECT * FROM support_tickets WHERE id=?').bind(id).first())}
-
+async function updateComp(r,env,path,oid,uid,ip){
+ const id=path.split('/')[3],raw=await parseBody(r);
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))return json({error:'Invalid body'},400);
+ const b={...raw,assigned_to:raw.assigned_to??raw.assignedTo,priority:raw.priority==='normal'?'medium':raw.priority};
+ const ex=await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first();
+ if(!ex)return json({error:'Not found'},404);
+ if(b.assigned_to&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND organization_id=?').bind(b.assigned_to,oid).first())return json({error:'Assigned staff not found'},404);
+ if(b.status!==undefined&&!['open','in_progress','resolved','closed'].includes(b.status))return json({error:'Invalid ticket status'},400);
+ if(b.priority!==undefined&&!['low','normal','medium','high','urgent'].includes(b.priority))return json({error:'Invalid ticket priority'},400);
+ const fields=['status','priority','assigned_to','resolution','description'],sets=[],values=[];
+ for(const field of fields){if(b[field]!==undefined){sets.push(field+'=?');values.push(b[field])}}
+ if(!sets.length)return json({error:'No fields to update'},400);
+ sets.push("updated_at=datetime('now')");values.push(id,oid);
+ await env.DB.prepare('UPDATE support_tickets SET '+sets.join(', ')+' WHERE id=? AND organization_id=?').bind(...values).run();
+ await audit(env,oid,uid,'update_ticket','Ticket:'+id,ip);
+ return json({success:true,data:await env.DB.prepare('SELECT * FROM support_tickets WHERE id=? AND organization_id=?').bind(id,oid).first()})
+}
 
 async function notifyAdmins(env,oid,title,message,type='info'){
  try{
