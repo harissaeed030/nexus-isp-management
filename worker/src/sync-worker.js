@@ -11,6 +11,10 @@ function statusInvoice(v){return v==="paid"?"paid":v==="overdue"?"overdue":v==="
 function paymentMethod(v){return v==="cash"?"cash":v==="bank"?"bank_transfer":v==="jazzcash"||v==="easypaisa"?"mobile_money":v==="bank_transfer"?"bank_transfer":v==="mobile_money"?"mobile_money":"other";}
 function changedAt(e){return e.changedAt||new Date().toISOString();}
 
+export async function getTenantMapping(database, sourceTenantId) {
+  return database.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind(sourceTenantId).first();
+}
+
 export function validateSyncBatch(sourceTenantId, events) {
   if (!sourceTenantId || sourceTenantId.length > 128 || !Array.isArray(events) || events.length < 1 || events.length > 50) {
     return "sourceTenantId and 1-50 events are required";
@@ -134,7 +138,7 @@ export default {
   const events=body?.events;
   const batchError = validateSyncBatch(sourceTenantId, events);
   if (batchError) return json({success:false,error:batchError},400);
-  const mapping=await env.DB.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind(sourceTenantId).first();
+  const mapping=await getTenantMapping(env.DB,sourceTenantId);
   if(!mapping)return json({success:false,error:"No approved SQLite tenant mapping exists. Provision and verify the source tenant to D1 organization mapping before syncing."},409);
   const organization=await env.DB.prepare("SELECT currency FROM organizations WHERE id=?").bind(mapping.organization_id).first();
   if(!organization||organization.currency!=="PKR")return json({success:false,error:"D1 organization currency must be PKR before importing PKR-denominated SQLite records"},409);
