@@ -952,7 +952,7 @@ export function redactTr069Tree(value,key=''){
 }
 async function listTr069Devices(env,url,oid){
  const{page,pp,off}=pg(url,50),q=url.searchParams.get('search')||'',status=url.searchParams.get('status')||'';
- let where='WHERE d.organization_id=?',params=[oid];if(q){where+=' AND (d.device_id LIKE ? OR d.serial_number LIKE ? OR d.model LIKE ? OR d.manufacturer LIKE ?)';const v='%'+q+'%';params.push(v,v,v,v)}if(status){where+=' AND d.inform_status=?';params.push(status)}
+ let where='WHERE d.organization_id=?',params=[oid];if(q){where+=' AND (d.device_id LIKE ? OR d.serial_number LIKE ? OR d.model LIKE ? OR d.manufacturer LIKE ?)';const v='%'+q+'%';params.push(v,v,v,v)}if(status==='online')where+=" AND d.last_inform_at>=datetime('now','-10 minutes')";else if(status==='offline')where+=" AND d.last_inform_at<datetime('now','-10 minutes')";else if(status==='unknown')where+=" AND (d.last_inform_at IS NULL OR julianday('now')-julianday(d.last_inform_at)>10.0/1440)";else if(status)return json({error:'Invalid device status filter'},400);
  const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM tr069_devices d '+where).bind(...params).first();
  const rows=await env.DB.prepare('SELECT d.*,a.name AS connection_name FROM tr069_devices d LEFT JOIN acs_connections a ON a.id=d.acs_connection_id AND a.organization_id=d.organization_id '+where+' ORDER BY d.last_inform_at DESC LIMIT ? OFFSET ?').bind(...params,pp,off).all();
  return json({data:(rows.results||[]).map(x=>({id:x.id,deviceId:x.device_id,manufacturer:x.manufacturer,oui:x.oui,productClass:x.product_class,model:x.model,serialNumber:x.serial_number,lastInformAt:x.last_inform_at,lastBootAt:x.last_boot_at,status:tr069Status(x.last_inform_at),lastSyncedAt:x.last_synced_at,connectionName:x.connection_name})),pagination:{page,per_page:pp,total:Number(count?.total||0),total_pages:Math.ceil(Number(count?.total||0)/pp)}});
@@ -1011,7 +1011,7 @@ async function queueTr069Wifi(request,env,path,oid,uid,ip){
  const validParam=v=>typeof v==='string'&&v.length<=240&&/^(InternetGatewayDevice|Device)\.(?:[A-Za-z0-9_\-]+\.){1,18}[A-Za-z0-9_\-]+$/.test(v);
  if(!validParam(b.ssidParameter)||!validParam(b.passwordParameter)||typeof b.ssid!=='string'||b.ssid.length<1||b.ssid.length>32||typeof b.password!=='string'||b.password.length<8||b.password.length>63)return json({error:'Valid discovered SSID/password parameter paths and values are required'},400);
  const values=[[b.ssidParameter,b.ssid,'xsd:string'],[b.passwordParameter,b.password,'xsd:string']];
- if(b.enableParameter){if(!validParam(b.enableParameter))return json({error:'Invalid Wi-Fi enable parameter path'},400);values.push([b.enableParameter,String(b.enabled!=='false'),'xsd:boolean'])}
+ if(b.enableParameter){if(!validParam(b.enableParameter))return json({error:'Invalid Wi-Fi enable parameter path'},400);values.push([b.enableParameter,String(b.enabled===true||b.enabled==='true'||b.enabled===1),'xsd:boolean'])}
  const row=await acsDeviceByLocalId(env,path,oid);if(!row)return json({error:'TR-069 device not found or ACS connection disabled'},404);
  return await queueTr069Task(env,path,oid,uid,ip,'setParameterValues',{parameterValues:values});
 }
