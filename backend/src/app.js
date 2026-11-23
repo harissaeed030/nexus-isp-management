@@ -44,6 +44,8 @@ function auth(req,res,next){
 }
 function audit(u,action,type,rid){db.prepare("INSERT INTO audit_logs(id,tenant_id,actor_user_id,action,resource_type,resource_id) VALUES(?,?,?,?,?,?)").run(id(),u.tenant_id,u.id,action,type,rid||null);}
 app.get("/",(_q,r)=>r.sendFile(resolve(projectRoot,"index.html")));
+app.get("/sw.js",(_q,r)=>{r.set("Cache-Control","no-cache");r.type("application/javascript");r.sendFile(resolve(projectRoot,"sw.js"));});
+app.get("/manifest.webmanifest",(_q,r)=>{r.type("application/manifest+json");r.sendFile(resolve(projectRoot,"manifest.webmanifest"));});
 app.get("/portal",(_q,r)=>r.sendFile(resolve(projectRoot,"portal/index.html")));
 app.get("/notifications",(_q,r)=>r.sendFile(resolve(projectRoot,"notifications/index.html")));
 app.get("/api/v1/health",(_q,r)=>r.json({success:true,status:"running",database:"connected",timestamp:new Date().toISOString()}));
