@@ -79,7 +79,7 @@ function permissionForRoute(path,method){
  if(path.match(/^\/api\/invoices\/[^/]+\/payments$/))return v==='POST'?'payments.create':null;
  if(match('/api/invoices'))return v==='GET'?'billing.read':v==='POST'?'invoices.create':null;
  if(path==='/api/payments')return v==='GET'?'billing.read':null;
- if(match('/api/complaints'))return v==='GET'?'tickets.read':['POST','PUT'].includes(v)?'tickets.manage':null;
+ if(match('/api/complaints')||match('/api/tickets'))return v==='GET'?'tickets.read':['POST','PUT','PATCH'].includes(v)?'tickets.manage':null;
  if(match('/api/network/devices'))return v==='GET'?'routers.read':['POST','PUT','DELETE'].includes(v)?'routers.manage':null;
  if(path==='/api/network/status')return v==='GET'?'connection.read':null;
  if(match('/api/pppoe'))return v==='GET'?'pppoe.read':['POST','PUT','DELETE'].includes(v)?'pppoe.manage':null;
@@ -316,9 +316,9 @@ if(path==='/api/payments'&&m==='GET')return await listPay(env,url,orgId);
 if(path==='/api/refunds'&&m==='GET')return await listRefunds(env,url,orgId);
 if(path==='/api/refunds'&&m==='POST')return await createRefund(request,env,orgId,userId,ip);
 if(path.startsWith('/api/refunds/')&&m==='PUT')return await updateRefund(request,env,path,orgId,userId,ip);
-if(path==='/api/complaints'&&m==='GET')return await listComp(env,url,orgId);
-if(path==='/api/complaints'&&m==='POST')return await createComp(request,env,orgId,userId,ip);
-if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
+if((path==='/api/complaints'||path==='/api/tickets')&&m==='GET')return await listComp(env,url,orgId);
+if((path==='/api/complaints'||path==='/api/tickets')&&m==='POST')return await createComp(request,env,orgId,userId,ip);
+if(/^\/api\/(?:complaints|tickets)\/[^/]+$/.test(path)&&['PUT','PATCH'].includes(m))return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+\/permissions$/)&&['GET','PUT'].includes(m))return await staffPermissions(env,path,orgId,role,userId,request,ip);
@@ -716,7 +716,7 @@ async function updateRefund(request,env,path,oid,uid,ip){
  return json({success:true,data:await env.DB.prepare('SELECT * FROM refunds WHERE id=? AND organization_id=?').bind(id,oid).first()});
 }
 
-async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT t.*,c.first_name,c.last_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
+async function listComp(env,url,oid){const{page,pp,off}=pg(url);const cnt=await env.DB.prepare('SELECT COUNT(*) AS total FROM support_tickets WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare("SELECT t.*,('TKT-'||upper(substr(t.id,1,8))) AS ticket_number,trim(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS customer_name,COALESCE(NULLIF(u.name,''),u.email,'Unassigned') AS assigned_to_name FROM support_tickets t LEFT JOIN customers c ON t.customer_id=c.id AND c.organization_id=t.organization_id LEFT JOIN users u ON t.assigned_to=u.id AND u.organization_id=t.organization_id WHERE t.organization_id=? ORDER BY t.created_at DESC LIMIT ? OFFSET ?").bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,per_page:pp,total:Number(cnt?.total||0),total_pages:Math.ceil(Number(cnt?.total||0)/pp)}})}
 async function createComp(r,env,oid,uid,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ms=vReq(b,['subject']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
