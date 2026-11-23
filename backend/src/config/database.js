@@ -204,4 +204,18 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(tic
   }
 }
 
+const brandingMigrationVersion = "013_tenant_plan_branding";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(brandingMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/013_tenant_plan_branding.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(brandingMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${brandingMigrationVersion} failed: ${error.message}`);
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}

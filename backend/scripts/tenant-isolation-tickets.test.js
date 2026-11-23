@@ -101,6 +101,21 @@ try {
 
   // Direct DB guard: assignee tenant mismatch is rejected by trigger
   assert.throws(() => db.prepare("UPDATE support_tickets SET assigned_to=? WHERE id=?").run(b.data.user.id, t2.id), /assignee tenant mismatch/);
+
+  // Workspace settings, branding and plan limits
+  const settings = await request("/api/v1/tenant", "PATCH", { brandColor: "#0b5d2a", supportPhone: "+92 300 1234567", address: "Main Road" }, ta);
+  assert.equal(settings.status, 200);
+  assert.equal(settings.data.data.brand_color, "#0b5d2a");
+  assert.equal(settings.data.data.plan, "pro");
+  assert.equal((await request("/api/v1/tenant", "PATCH", { brandColor: "green" }, ta)).status, 400);
+  assert.equal((await request("/api/v1/tenant", "PATCH", { name: "Hack", plan: "pro" }, tt)).status, 403, "only owner edits settings");
+  assert.equal((await request("/api/v1/tenant", "GET", undefined, tb)).data.data.plan, "starter", "self-registered ISPs start on starter");
+  assert.equal((await request("/api/v1/tenant", "GET", undefined, tb)).data.data.brand_color, "#16a34a");
+  await request("/api/v1/tenant", "PATCH", { plan: "pro", customer_limit: 100000 }, tb);
+  assert.equal((await request("/api/v1/tenant", "GET", undefined, tb)).data.data.plan, "starter", "owner cannot change own plan");
+  db.prepare("UPDATE tenants SET customer_limit=1 WHERE id=?").run(b.data.tenant.id);
+  assert.equal((await request("/api/v1/customers", "POST", { fullName: "Over Limit" }, tb)).status, 402, "plan customer limit enforced");
+  assert.equal((await request("/api/v1/customers", "POST", { fullName: "Alpha Two" }, ta)).status, 201, "other tenant unaffected");
   console.log("NEXUS tenant isolation, role and complaint workflow tests passed.");
 } finally {
   server.close();
