@@ -58,7 +58,7 @@ test("customer portal login tenant predicate scopes account number, customer cod
 
 test("customer portal password reset revokes sessions and writes an audit event",()=>{
  const source=readFileSync(new URL("../src/routes/portal-notification.routes.js",import.meta.url),"utf8");
- const reset=source.slice(source.indexOf('app.post("/api/v1/customer-portal/password"'),source.indexOf('app.get("/api/v1/notifications/templates"'));
+ const reset=source.slice(source.indexOf('app.post("/api/v1/portal-admin/customers/:customerId/reset-password"'),source.indexOf('app.get("/api/v1/notifications/templates"'));
  assert.match(reset,/DELETE FROM customer_portal_sessions WHERE account_id=\?/);
  assert.match(reset,/audit\(req\.user,"reset_password","customer_portal_account",account\.id\)/);
 });
