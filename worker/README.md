@@ -53,7 +53,7 @@ This deploys the staging Worker only. It does not deploy the production Worker. 
 
 ### Existing separate Workers
 
-- `wrangler.toml`: health-check Worker only.
+- `wrangler.toml`: development-only health-check Worker (`nexus-healthcheck-dev`), with no D1 binding; it cannot accidentally replace the hosted API or bind a stale database.
 - `wrangler.sync.toml`: SQLite-to-D1 sync Worker (`/sync/push`); not the public API.
 - `wrangler.api.toml`: full D1 API staging Worker, isolated from production by Worker name and staging D1 binding.
 
