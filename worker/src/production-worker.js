@@ -887,7 +887,7 @@ async function decryptAcsSecret(value,env){
  const key=await acsCryptoKey(env,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64uDec(p[2])},key,b64uDec(p[3]));
  return new TextDecoder().decode(plain);
 }
-function validateAcsUrl(value){
+export function validateAcsUrl(value){
  let u;try{u=new URL(String(value||''))}catch{return null}
  const h=u.hostname.toLowerCase();
  if(u.protocol!=='https:'||u.username||u.password||u.hash||!h.includes('.')||h==='localhost'||h.endsWith('.local')||h.endsWith('.internal')||h.endsWith('.localhost')||/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.startsWith('['))return null;
@@ -923,7 +923,7 @@ async function acsRequest(connection,env,pathname,query='',body=null){
 }
 function tr069IdFromPath(path){return decodeURIComponent(path.split('/')[4]||'')}
 function tr069Status(lastInform){if(!lastInform)return'unknown';const age=Date.now()-Date.parse(lastInform);if(!Number.isFinite(age))return'unknown';return age<=600000?'online':'offline'}
-function redactTr069Tree(value,key=''){
+export function redactTr069Tree(value,key=''){
  if(/password|secret|token|privatekey|pre.?shared|psk/i.test(key))return undefined;
  if(Array.isArray(value))return value.slice(0,100).map(x=>redactTr069Tree(x,key)).filter(x=>x!==undefined);
  if(value&&typeof value==='object'){const out={};for(const[k,v]of Object.entries(value)){const safe=redactTr069Tree(v,k);if(safe!==undefined)out[k]=safe}return out}
