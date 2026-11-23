@@ -72,7 +72,6 @@ function roleHasPermission(role,key){const list=ROLE_PERMISSIONS[role]||[];retur
 function permissionForRoute(path,method){
  const v=String(method||'GET').toUpperCase(),match=base=>path===base||path.startsWith(base+'/');
  if(path==='/api/dashboard/stats')return v==='GET'?'dashboard.read':null;
- if(path==='/api/ai/chat')return v==='POST'?'dashboard.read':null;
  if(match('/api/customers'))return ({GET:'customers.read',POST:'customers.create',PUT:'customers.update',DELETE:'customers.delete'})[v]||null;
  if(match('/api/packages'))return v==='GET'?'packages.read':['POST','PUT','DELETE'].includes(v)?'packages.manage':null;
  if(match('/api/subscriptions'))return v==='GET'?'subscriptions.read':['POST','PUT','DELETE'].includes(v)?'subscriptions.manage':null;
@@ -261,7 +260,6 @@ if(path.startsWith('/api/customers/')&&path.endsWith('/portal-account')&&path.sp
 if(path==='/api/auth/me'&&m==='GET')return await authMe(env,auth);
 if(path==='/api/auth/logout'&&m==='POST'){await env.DB.prepare('UPDATE users SET token_version=COALESCE(token_version,0)+1,updated_at=datetime(\'now\') WHERE id=? AND organization_id=?').bind(userId,orgId).run();return json({success:true})}
 if(path==='/api/dashboard/stats'&&m==='GET')return await dashStats(env,orgId);
-if(path==='/api/ai/chat'&&m==='POST')return await aiChat(request,env,userId);
 if(path==='/api/customers'&&m==='GET')return await listCust(env,url,orgId);
 if(path==='/api/customers'&&m==='POST')return await createCust(request,env,orgId,userId,ip);
 if(path.match(/^\/api\/customers\/[^/]+$/)&&m==='GET')return await getCust(env,path,orgId);
@@ -327,42 +325,6 @@ if(path==='/api/company'&&m==='GET')return await getCo(env,orgId);
 if(path==='/api/company'&&m==='PUT')return await updCo(request,env,orgId,userId,ip);
 return json({error:'Not Found',path},404)}catch(e){return json({error:'Server Error',message:e.message},500)}}
 
-
-async function aiChat(request,env,userId){
- if(!env.GEMINI_API_KEY)return json({success:false,error:'NEXUS AI is not configured. Add GEMINI_API_KEY as a secret on the production Worker.'},503);
- const body=await parseBody(request),messages=body?.messages;
- if(!Array.isArray(messages)||messages.length<1||messages.length>12)return json({success:false,error:'Send between 1 and 12 recent chat messages.'},400);
- let total=0,previous='model';const contents=[];
- for(const item of messages){
-  if(!item||!['user','model'].includes(item.role)||typeof item.content!=='string')return json({success:false,error:'Invalid chat message.'},400);
-  const value=item.content.trim();total+=value.length;
-  if(!value||value.length>3000||item.role===previous)return json({success:false,error:'Messages must alternate between user and assistant and stay within 3,000 characters each.'},400);
-  previous=item.role;contents.push({role:item.role,parts:[{text:value}]});
- }
- if(previous!=='user'||total>10000)return json({success:false,error:'The latest message must be from you; total chat history is limited to 10,000 characters.'},400);
- const model=typeof env.GEMINI_MODEL==='string'&&/^[a-zA-Z0-9._-]{1,80}$/.test(env.GEMINI_MODEL)?env.GEMINI_MODEL:'gemini-2.5-flash';
- const systemText=[
-  'You are NEXUS AI, the built-in assistant for Nexus ISP Management.',
-  'Help ISP owners and staff with FTTH, PPPoE, MikroTik RouterOS, OLT/ONU, TR-069/ACS, billing concepts, customer support workflows and using NEXUS.',
-  'Reply in the language used by the user. Understand Roman Urdu and Urdu. Give practical beginner-friendly steps.',
-  'You have no access to live customer records, balances, payment details, router credentials, OLTs, ONUs or external systems. Never claim to have checked or changed them.',
-  'Never request passwords, API keys, bearer tokens or payment card details. Never reveal secrets.',
-  'You cannot execute actions, change billing, suspend subscribers, configure routers or provision ONUs. Explain procedures and require an authorized human to perform changes.',
-  'Do not invent live network status, customer balances, prices or completed actions.'
- ].join('\\n');
- try{
-  const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
-   method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},
-   body:JSON.stringify({systemInstruction:{parts:[{text:systemText}]},contents,generationConfig:{temperature:0.4,maxOutputTokens:900}}),
-   signal:AbortSignal.timeout(25000)
-  });
-  const data=await response.json().catch(()=>null);
-  if(!response.ok)return json({success:false,error:response.status===429?'Gemini quota or rate limit reached. Check the Google AI quota and try again later.':'Gemini request failed. Check the server-side key, model access and API quota.'},response.status===429?429:502);
-  const answer=(data?.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('\\n').trim();
-  if(!answer)return json({success:false,error:'Gemini returned an empty response. Please try again.'},502);
-  return json({success:true,answer,model});
- }catch(error){return json({success:false,error:error?.name==='TimeoutError'?'Gemini took too long to respond. Please try again.':'Could not connect to Gemini. Check the Worker internet connection.'},502)}
-}
 
 
 async function portalLogin(r,env,ip){
