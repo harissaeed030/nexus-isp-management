@@ -19,11 +19,13 @@ test("D1 API Worker includes authenticated organization registration and login",
   assert.match(source, /tokenVersion/);
 });
 
-test("dashboard workspace registration URL is normalized to the D1 auth registration handler", () => {
+test("dashboard workspace and first-owner setup URLs are normalized to the D1 auth registration handler", () => {
   assert.equal(normalizeApiPath("/api/v1/tenants/register"), "/api/auth/register");
+  assert.equal(normalizeApiPath("/api/v1/setup"), "/api/auth/register");
   assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
   assert.equal(normalizeApiPath("/api/v1/customers"), "/api/customers");
   assert.match(dashboardSource, /\/api\/v1\/tenants\/register/);
+  assert.match(dashboardSource, /\/api\/v1\/setup/);
 });
 
 test("D1 API Worker includes core ISP billing and customer modules", () => {
