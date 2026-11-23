@@ -1,6 +1,6 @@
 (() => {
 const $=(s,r=document)=>r.querySelector(s),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let api=(()=>{const local=["localhost","127.0.0.1"].includes(location.hostname),saved=(localStorage.getItem("nexus_api")||sessionStorage.getItem("nexus_api"));if(saved&&(local||!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/i.test(saved)))return saved;if(saved&&!local)sessionStorage.removeItem("nexus_api");return location.port==="4000"?location.origin:(local?"http://127.0.0.1:4000":"https://nexus-saas-api.harissaeed030.workers.dev")})();
+let api=(()=>{const local=["localhost","127.0.0.1"].includes(location.hostname),saved=(localStorage.getItem("nexus_api")||sessionStorage.getItem("nexus_api"));if(local&&saved)return saved;if(!local){localStorage.removeItem("nexus_api");sessionStorage.removeItem("nexus_api")}return location.port==="4000"?location.origin:(local?"http://127.0.0.1:4000":"https://nexus-saas-api.harissaeed030.workers.dev")})();
 // Explicit login link: clear any previously remembered browser session once.
 if(new URLSearchParams(location.search).get("login")==="1"){
   localStorage.removeItem("nexus_token");
