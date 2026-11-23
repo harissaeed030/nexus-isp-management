@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateSyncBatch } from "../src/sync-worker.js";
+import { getTenantMapping, validateSyncBatch } from "../src/sync-worker.js";
 
 test("sync batches require a tenant and one to fifty events", () => {
   assert.match(validateSyncBatch("", [{ cursor: 1, operationId: "a" }]), /sourceTenantId/);
@@ -31,7 +31,7 @@ test("sync batches reject missing or repeated idempotency keys", () => {
   ]), /unique operationId/);
 });
 
-test("sync tenant mapping must be explicitly provisioned", async () => {
+test("sync tenant mapping must already be explicitly provisioned", async () => {
   let selected = 0;
   const database = {
     prepare(sql) {
@@ -49,7 +49,20 @@ test("sync tenant mapping must be explicitly provisioned", async () => {
       };
     }
   };
-  const mapping = await database.prepare("SELECT organization_id FROM sync_tenant_mappings WHERE source_tenant_id=? AND active=1").bind("local-tenant-1").first();
-  assert.equal(mapping, null);
+  assert.equal(await getTenantMapping(database, "local-tenant-1"), null);
   assert.equal(selected, 1);
+});
+
+test("sync tenant mapping returns only an active mapping", async () => {
+  const database = {
+    prepare() {
+      return {
+        bind(sourceTenantId) {
+          assert.equal(sourceTenantId, "local-tenant-2");
+          return { async first() { return { organization_id: "vancom-org-id" }; } };
+        }
+      };
+    }
+  };
+  assert.deepEqual(await getTenantMapping(database, "local-tenant-2"), { organization_id: "vancom-org-id" });
 });
