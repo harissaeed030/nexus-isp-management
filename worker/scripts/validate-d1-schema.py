@@ -41,7 +41,7 @@ before.executescript(migration_22)
 assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=22").fetchone()[0] == 1
 before.executescript(migration_23)
 assert before.execute("SELECT COUNT(*) FROM schema_migrations WHERE id=23").fetchone()[0] == 1
-assert "credentials_ciphertext" in {row[1] for row in before.execute("PRAGMA table_info(network_devices)")}
+assert before.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='router_credentials'").fetchone() is not None
 assert before.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_users_email_global'").fetchone() is not None
 
 expected = sqlite3.connect(":memory:")
@@ -106,7 +106,7 @@ fresh_tables = {
 }
 required_fresh_tables = {
     "organizations", "users", "customers", "packages", "subscriptions",
-    "invoices", "payments", "support_tickets", "audit_log", "schema_migrations",
+    "invoices", "payments", "support_tickets", "audit_log", "schema_migrations", "payment_promises", "router_credentials",
 }
 assert required_fresh_tables <= fresh_tables, (
     "Fresh schema is missing tables: " + repr(sorted(required_fresh_tables - fresh_tables))
@@ -207,4 +207,18 @@ except sqlite3.IntegrityError as exc:
     assert "payment promise updater" in str(exc)
 else:
     raise AssertionError("Cross-tenant payment promise updater was not rejected")
-print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0023, required indexes and foreign keys, payment-promise tenant guards and encrypted router credential column.")
+
+fresh.execute("INSERT INTO network_devices(id,organization_id,name,device_type) VALUES('router-a','promise-a','Router A','mikrotik'),('router-b','promise-b','Router B','mikrotik')")
+fresh.execute("INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES('router-secret-a','promise-a','router-a','enc:v1:fake','promise-user-a','promise-user-a')")
+for statement in [
+    "INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES('router-cross-device','promise-a','router-b','enc:v1:fake','promise-user-a','promise-user-a')",
+    "INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES('router-cross-actor','promise-a','router-a','enc:v1:fake','promise-user-b','promise-user-a')",
+]:
+    try:
+        fresh.execute(statement)
+    except sqlite3.IntegrityError as exc:
+        assert "router credential" in str(exc)
+    else:
+        raise AssertionError("Cross-tenant router credential write was not rejected")
+fresh.close()
+print("Fresh D1 bootstrap validation passed: canonical snapshot, migration ledger 0023, required indexes and foreign keys, payment-promise and router-credential tenant guards.")
