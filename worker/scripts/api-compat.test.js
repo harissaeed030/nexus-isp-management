@@ -22,6 +22,8 @@ test("normalizes supported PATCH updates to the D1 worker PUT contract", () => {
   assert.equal(normalizeApiMethod("/api/customers/customer-1", "PATCH"), "PUT");
   assert.equal(normalizeApiMethod("/api/complaints/ticket-1", "PATCH"), "PUT");
   assert.equal(normalizeApiMethod("/api/operations/payment-promises/promise-1", "PATCH"), "PUT");
+  assert.equal(normalizeApiMethod("/api/packages/package-1", "PATCH"), "PUT");
+  assert.equal(normalizeApiMethod("/api/subscriptions/subscription-1", "PATCH"), "PUT");
   assert.equal(normalizeApiMethod("/api/customers", "PATCH"), "PATCH");
   assert.equal(normalizeApiMethod("/api/customers/customer-1", "GET"), "GET");
 });
