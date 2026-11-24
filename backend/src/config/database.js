@@ -246,6 +246,21 @@ if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(res
   }
 }
 
+
+const collectionReminderMigrationVersion = "016_collection_reminder_idempotency";
+if (!db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(collectionReminderMigrationVersion)) {
+  const migrationSql = readFileSync(new URL("../../migrations/016_collection_reminder_idempotency.sql", import.meta.url), "utf8");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(migrationSql);
+    db.prepare("INSERT INTO schema_migrations(version) VALUES(?)").run(collectionReminderMigrationVersion);
+    db.exec("COMMIT");
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve migration failure */ }
+    throw new Error(`Database migration ${collectionReminderMigrationVersion} failed: ${error.message}`);
+  }
+}
+
 export function getDatabaseStatus(){return "connected";}
 
 // Shared async repository contract; existing synchronous db access remains supported during migration.
