@@ -28,6 +28,33 @@ async function request(path, { method = "GET", token, body, expected = 200 } = {
   return data;
 }
 
+async function cleanupKnownStaleTenant(runId, label) {
+  const slug = "nexus-stage-" + runId + "-1-" + label;
+  const email = "owner-" + runId + "-1-" + label + "@e2e.invalid";
+  const response = await fetch(base + "/api/auth/login", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      password: "NexusE2E-" + runId + "-1-Owner!",
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const raw = await response.text();
+  let login = {};
+  try { login = raw ? JSON.parse(raw) : {}; } catch {}
+  assert.equal(response.status, 200, "Stale synthetic tenant owner login failed for " + slug + "; body=" + raw.slice(0, 300));
+  assert.ok(login.token, "Stale synthetic tenant login must return an owner token");
+  const deleted = await request("/api/e2e/tenant", {
+    method: "DELETE",
+    token: login.token,
+    body: { slug },
+    expected: 200,
+  });
+  assert.equal(deleted.success, true);
+  console.log("Cleaned previously failed synthetic staging tenant: " + slug);
+}
+
 async function createTenant(label) {
   const slug = "nexus-stage-" + runId + "-" + attempt + "-" + label;
   const email = "owner-" + runId + "-" + attempt + "-" + label + "@e2e.invalid";
@@ -69,6 +96,10 @@ async function createCustomer(tenant, label) {
 }
 
 try {
+  // One-time cleanup for two synthetic workspaces left by an earlier failed CI attempt.
+  await cleanupKnownStaleTenant("45363367260", "a");
+  await cleanupKnownStaleTenant("45363367260", "b");
+
   const tenantA = await createTenant("a");
   const tenantB = await createTenant("b");
   const customerA = await createCustomer(tenantA, "a");
