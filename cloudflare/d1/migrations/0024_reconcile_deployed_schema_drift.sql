@@ -39,6 +39,9 @@ CREATE INDEX idx_sync_records_tenant_table
 DROP INDEX IF EXISTS idx_sync_records_unique;
 CREATE UNIQUE INDEX idx_sync_records_unique
   ON sync_records(tenant_id,table_name,record_id);
+DROP INDEX IF EXISTS idx_sync_worker_failures_sync;
+CREATE INDEX idx_sync_worker_failures_sync
+  ON sync_worker_failures(tenant_id,sync_id);
 
 -- Production already has this table; staging receives the same empty cursor table.
 CREATE TABLE IF NOT EXISTS sync_state (
