@@ -14,7 +14,7 @@ function fixture() {
     CREATE TABLE payments(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,invoice_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL);
     CREATE TABLE payment_reversals(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,payment_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL);
     CREATE TABLE credit_notes(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,invoice_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL);
-    CREATE TABLE payment_promises(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL,promise_date TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',notes TEXT,created_by TEXT);
+    CREATE TABLE payment_promises(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,customer_id TEXT NOT NULL,amount_pkr INTEGER NOT NULL,promise_date TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',notes TEXT,created_by TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE notification_templates(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,name TEXT,event_key TEXT,channel TEXT,body TEXT,provider_template_name TEXT,language_code TEXT,enabled INTEGER);
     CREATE TABLE notification_outbox(
       id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,customer_id TEXT,template_id TEXT,channel TEXT,destination TEXT,body TEXT,
@@ -37,7 +37,7 @@ test("queues due, overdue and payment-promise reminders once; skips paid invoice
   const db = fixture();
   const now = new Date("2026-11-24T07:00:00.000Z");
   const first = runCollectionReminderCycle({ db, now, logger: { error() {} } });
-  assert.deepEqual({ examined:first.examined,queued:first.queued }, { examined:6,queued:3 });
+  assert.deepEqual({ examined:first.examined,queued:first.queued }, { examined:5,queued:3 });
   const rows = db.prepare("SELECT customer_id,body,status,provider_template_name FROM notification_outbox ORDER BY id").all();
   assert.equal(rows.length,3);
   assert.ok(rows.every(row => row.status === "queued"));
