@@ -25,7 +25,7 @@ function s(v){return typeof v==='string'?v.trim():v}
 function pg(url,d=20){const page=Math.max(1,parseInt(url.searchParams.get('page')||'1'));const pp=Math.min(100,Math.max(1,parseInt(url.searchParams.get('per_page')||url.searchParams.get('pageSize')||String(d))));return{page,pp,pageSize:pp,off:(page-1)*pp}}
 
 
-function corsHeaders(request,env){
+export function corsHeaders(request,env){
  const origin=request.headers.get('Origin'),allowed=(env.ALLOWED_ORIGINS||'').split(',').map(v=>v.trim()).filter(Boolean),h=new Headers(CORS);
  h.set('Access-Control-Max-Age','86400');
  let trustedPagesOrigin=false;
