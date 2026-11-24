@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask, encryptRouterSecret, decryptRouterSecret, hashPw, verifyPw } from "../src/production-worker.js";
+import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask, encryptRouterSecret, decryptRouterSecret, hashPw, verifyPw, corsHeaders } from "../src/production-worker.js";
 
 test("normalizes versioned API paths to D1 routes", () => {
   assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
@@ -136,4 +136,20 @@ test("password verification rejects unsalted/plaintext credentials and uses fixe
     assert.doesNotMatch(source, /if\(!salt\)return pw===h/);
     assert.match(source, /safeHashEqual\(hash,h\.toLowerCase\(\)\)/);
   }
+});
+
+
+test("allows the exact Android WebView localhost origin without allowing arbitrary origins", () => {
+  const androidRequest = new Request("https://api.example.test/api/v1/auth/login", {
+    headers: { Origin: "https://localhost" }
+  });
+  const allowed = corsHeaders(androidRequest, {});
+  assert.equal(allowed.get("Access-Control-Allow-Origin"), "https://localhost");
+
+  const untrustedRequest = new Request("https://api.example.test/api/v1/auth/login", {
+    headers: { Origin: "https://attacker.example" }
+  });
+  const rejected = corsHeaders(untrustedRequest, {});
+  assert.equal(rejected.get("Access-Control-Allow-Origin"), null);
+
 });
