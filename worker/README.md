@@ -38,6 +38,30 @@ The RouterOS and HSGQ adapters must be treated according to their documented cap
 - The browser never receives the OpenAI API key. The assistant does not access or mutate customer, billing, router or ONU records.
 - Never add API key values to Git, Wrangler configuration, logs, or frontend code.
 
+
+## Hosted D1 owner password recovery
+
+The production and staging D1 Workers expose a secure, email-delivered password reset flow:
+- Request: `POST /api/v1/auth/password-reset/request` with `email` and optional `workspaceSlug`.
+- Consume: `POST /api/v1/auth/reset-password` with the emailed `token` and a new password (10–256 characters).
+- Public request responses are identical for existing and unknown email addresses. Requests are throttled by source IP and normalized email.
+- Reset tokens are cryptographically random, valid for 30 minutes, single-use, and stored only as SHA-256 digests in the legacy `password_resets.token` column. The raw token is delivered only by email and is placed in the URL fragment (`#reset=...`) so browsers do not send it in HTTP requests or referrer headers.
+- A successful reset atomically consumes the token, updates the PBKDF2 password hash/salt, increments the user's token version (invalidating existing sessions), and records an audit event.
+- If email delivery fails, the pending token is invalidated. Provider errors and tokens are not returned to callers or written to logs.
+
+Configure these Worker settings before enabling the flow:
+- `RESEND_API_KEY`: Resend API key, stored as a Worker secret.
+- `PASSWORD_RESET_FROM`: sender address verified in the Resend account.
+- `PASSWORD_RESET_URL`: HTTPS URL of the hosted NEXUS login page (for example, the Pages app URL). The Worker adds the reset token as a URL fragment.
+
+Example commands, run separately against the intended environment after confirming the Wrangler config:
+```sh
+npx wrangler secret put RESEND_API_KEY --config wrangler.production.toml
+npx wrangler secret put PASSWORD_RESET_FROM --config wrangler.production.toml
+npx wrangler secret put PASSWORD_RESET_URL --config wrangler.production.toml
+```
+Use `wrangler.toml` instead for staging. Do not put secret values in `wrangler.toml`, source files, browser code or Git. The feature sends no email until all three settings are configured. This source change has not been deployed and no production/staging secrets or D1 rows were changed.
+
 ## Schema
 
 - `schema.sql` is a canonical schema snapshot at migration 0009. Use it only for a new, empty D1 database.
