@@ -13,7 +13,7 @@ The `build/nexus-isp-core` branch contains the first local API foundation:
 - Customer profile views with subscription, invoice, payment, complaint, connection and subscription history.
 - Subscription assignment, package changes, start/expiry dates, renewal, suspension/resume/cancellation history and automatic expiry transition when subscription lists or customer profiles are read.
 - Package management, invoices, payment ledger, support tickets, dashboard totals and audit log endpoints.
-- Staff account management with role defaults and per-user module permission overrides, encrypted MikroTik router credentials, RouterOS API-SSL operations, OLT/ONU inventory, GenieACS/TR-069 adapter endpoints, idempotent monthly invoice generation and financial summary reports.
+- Staff account management with role defaults and per-user module permission overrides, encrypted MikroTik router credentials, RouterOS API-SSL operations, OLT/ONU inventory, GenieACS/TR-069 adapter endpoints, idempotent monthly invoice generation, opt-in invoice due/overdue reminder scheduling and financial summary reports.
 - ISP business operations APIs for coverage areas, connection applications, dealers/partners, recovery officers, cash collections, customer ledger entries and stock/inventory movements.
 - Dashboard screens for HSGQ-G04R OLT and ONU inventory, coverage areas, new connection queries, dealers, recovery officers, collections and equipment stock.
 - Mobile-friendly dashboard served by the same local API, with owner sign-in/initial setup and forms for the core ISP records.
@@ -54,6 +54,18 @@ npm run verify
 
 Backups use SQLite's online-consistent `VACUUM INTO` operation, are written with owner-only file permissions where supported, and are checked with `PRAGMA integrity_check` and `PRAGMA foreign_key_check`. Restore refuses invalid backups, retains a validated pre-restore safety backup, and validates the restored file before replacing the live database. **Stop the Nexus server before restore**; restart it afterward so pending migrations can run. Keep backup files private and outside Git.
 
+
+
+### Automatic invoice collection reminders
+
+Invoice due-today and overdue reminders can be queued from enabled WhatsApp templates with event keys `invoice_due` and `invoice_overdue`. Supported placeholders are `{{name}}`, `{{accountNumber}}`, `{{phone}}`, `{{email}}`, `{{invoiceNumber}}`, `{{amount}}` (outstanding PKR) and `{{dueDate}}`. A tenant/invoice/event reminder is queued only once; fully paid invoices and customers without a phone number are skipped.
+
+This feature is opt-in and does not send anything by itself:
+- Set `AUTO_COLLECTION_REMINDERS_ENABLED=true` to queue due/overdue reminders.
+- Set `AUTO_NOTIFICATIONS_ENABLED=true` to run the WhatsApp delivery worker.
+- Configure `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` in the server secret store and create enabled templates with Meta-approved template names where required.
+
+Both flags default to false. Test with a disposable database and a controlled recipient before enabling. Provider acceptance is not proof of delivery; delivery status is updated by the signed WhatsApp webhook. Reminder history prevents duplicate queueing for the same invoice/event, but does not replace billing reconciliation or customer consent requirements.
 
 ## NEXUS AI Assistant (Gemini)
 
