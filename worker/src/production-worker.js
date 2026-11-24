@@ -1,3 +1,4 @@
+import { requestPasswordReset, consumePasswordReset } from "./password-reset.js";
 // Production build: verified customer portal API; staging-only synthetic tenant cleanup endpoint is excluded.
 const FRONTEND_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NEXUS ISP</title><style>body{background:#0a1628;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}h1{color:#00c853}p{color:#8a9bb0}</style></head><body><div><h1>NEXUS ISP Management</h1><p>API is running. Frontend deployment in progress.</p><p>API base: <a href="/api/health" style="color:#00e676">/api/health</a></p></div></body></html>';
 
@@ -289,6 +290,8 @@ return new Response(FRONTEND_HTML,{headers:{'Content-Type':'text/html;charset=ut
 }
 
 async function handleApi(request,env,url,path,m){if(path.startsWith('/api/customer-portal/')){path='/api/portal'+path.slice('/api/customer-portal'.length);if(path==='/api/portal/login')path='/api/portal/auth/login';if(path==='/api/portal/logout')path='/api/portal/auth/logout';if(path==='/api/portal/complaints')path='/api/portal/tickets';}const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
+if(path==='/api/auth/password-reset/request'&&m==='POST')return await requestPasswordReset(request,env,ip);
+if(path==='/api/auth/reset-password'&&m==='POST')return await consumePasswordReset(request,env,ip);
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
 if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
