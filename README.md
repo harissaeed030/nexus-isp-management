@@ -58,7 +58,7 @@ Backups use SQLite's online-consistent `VACUUM INTO` operation, are written with
 
 ### Automatic invoice collection reminders
 
-Invoice due-today and overdue reminders can be queued from enabled WhatsApp templates with event keys `invoice_due` and `invoice_overdue`. Supported placeholders are `{{name}}`, `{{accountNumber}}`, `{{phone}}`, `{{email}}`, `{{invoiceNumber}}`, `{{amount}}` (outstanding PKR) and `{{dueDate}}`. A tenant/invoice/event reminder is queued only once; fully paid invoices and customers without a phone number are skipped.
+Invoice due-today, overdue and open payment-promise reminders can be queued from enabled WhatsApp templates with event keys `invoice_due`, `invoice_overdue` and `payment_promise_due`. Supported placeholders are `{{name}}`, `{{accountNumber}}`, `{{phone}}`, `{{email}}`, `{{invoiceNumber}}`, `{{amount}}` (outstanding PKR) and `{{dueDate}}`. A tenant/invoice/event or tenant/payment-promise reminder is queued only once; fully paid invoices, closed/kept payment promises and customers without a phone number are skipped.
 
 This feature is opt-in and does not send anything by itself:
 - Set `AUTO_COLLECTION_REMINDERS_ENABLED=true` to queue due/overdue reminders.

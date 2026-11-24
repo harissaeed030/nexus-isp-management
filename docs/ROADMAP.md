@@ -24,7 +24,7 @@
 - [x] Geographic country/city/locality hierarchy and field technician assignments.
 - [x] Equipment inventory, stock-in/out, assignment and adjustment movements.
 - [x] Opt-in scheduled recurring invoice generation (05:15 Asia/Karachi on day 1; tenant-period idempotency and downtime catch-up).
-- [x] Opt-in invoice due/overdue collection reminders with tenant-scoped idempotency and a scheduled WhatsApp outbox delivery worker (both disabled by default; live provider acceptance remains pending).
+- [x] Opt-in invoice due/overdue and open payment-promise reminders with tenant-scoped idempotency and a scheduled WhatsApp outbox delivery worker (both disabled by default; live provider acceptance remains pending).
 - [x] Tenant-scoped CSV exports for customers, invoices, payments and support tickets.
 - [x] Print-ready invoice and receipt views (browser Print / Save as PDF; no server-side PDF binary).
 
