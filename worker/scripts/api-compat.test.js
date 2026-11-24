@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask, encryptRouterSecret, decryptRouterSecret } from "../src/production-worker.js";
+import { normalizeApiMethod, normalizeApiPath, validateAcsUrl, redactTr069Tree, encryptAcsSecret, decryptAcsSecret, tr069Status, buildGenieAcsTask, encryptRouterSecret, decryptRouterSecret, hashPw, verifyPw } from "../src/production-worker.js";
 
 test("normalizes versioned API paths to D1 routes", () => {
   assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
@@ -116,4 +116,24 @@ test("documents the required outbound-only, read-only MikroTik connector safety 
   assert.match(doc, /read-only commands only/i);
   assert.match(doc, /Do not expose RouterOS API/i);
   assert.match(doc, /Do not deploy an untested connector/i);
+});
+
+
+test("password verification rejects unsalted/plaintext credentials and uses fixed-length comparison", async () => {
+  const credentials = await hashPw("Nexus-Test-Password-2026!");
+  assert.match(credentials.hash, /^[a-f0-9]{64}$/);
+  assert.match(credentials.salt, /^[a-f0-9]{32}$/);
+  assert.equal(await verifyPw("Nexus-Test-Password-2026!", credentials.hash, credentials.salt), true);
+  assert.equal(await verifyPw("wrong-password", credentials.hash, credentials.salt), false);
+  assert.equal(await verifyPw("plaintext", "plaintext", null), false);
+  assert.equal(await verifyPw("Nexus-Test-Password-2026!", credentials.hash, null), false);
+  assert.equal(await verifyPw("Nexus-Test-Password-2026!", credentials.hash, "bad-salt"), false);
+
+  const { readFile } = await import("node:fs/promises");
+  const indexSource = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
+  const productionSource = await readFile(new URL("../src/production-worker.js", import.meta.url), "utf8");
+  for (const source of [indexSource, productionSource]) {
+    assert.doesNotMatch(source, /if\(!salt\)return pw===h/);
+    assert.match(source, /safeHashEqual\(hash,h\.toLowerCase\(\)\)/);
+  }
 });
