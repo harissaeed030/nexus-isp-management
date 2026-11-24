@@ -14,19 +14,17 @@ NEXUS is a multi-tenant ISP management system covering organization/user access,
 
 The production and staging Workers are separate and each binds only to its matching D1 database. Do not point staging at production data.
 
-## Verified deployment snapshot — 15 November 2026
+## Verified deployment snapshot — 24 November 2026
 
-- Production Worker: `nexus-saas-api`; Cloudflare reports it deployed and active.
-- Staging Worker: `nexus-saas-api-staging`; Cloudflare reports it deployed and active.
-- Production D1 schema ledger: migrations `0001` through `0007`.
-- Staging D1 schema ledger: migrations `0001` through `0007`.
-- Migration 0007 adds customer portal accounts and insert/update tenant-consistency triggers.
-- Production Worker bindings include D1 (`DB`) and server-side secrets (`JWT_SECRET`, `ALLOWED_ORIGINS`, `TURNSTILE_SECRET_KEY`). Secret values are never stored in this repository.
-- Cloudflare's release record reports production Worker version 25 at 100% traffic (security logging redaction deployed 2026-11-15).
-- The production D1 release record reports one organization and one owner, with no customer, invoice, payment or customer-portal-account rows at the time of verification.
+- Production Worker `nexus-saas-api`: version 36 deployed at 100% traffic on 2026-11-24; bound to production D1 database `nexus-saas-db`.
+- Staging Worker `nexus-saas-api-staging`: version 38 deployed at 100% traffic on 2026-11-24; bound only to staging D1 database `nexus-saas-staging-db`.
+- Both Workers have observability logs and traces enabled. The production and staging database bindings were independently checked against their expected database IDs.
+- Both D1 databases contain the hosted application tables, including tenant/user, customer, billing, support, sync and network/TR-069 inventory tables.
+- The D1 migration ledgers are not identical: production has an additional ID 101 entry, and the recorded name for ID 11 differs between environments. Do not fabricate ledger rows or rerun historical migrations; see the live recheck in [the completion report](docs/COMPLETION-STATUS-2026-11-24.md).
+- The production network connector remains disabled. Inventory does not mean a live MikroTik, OLT, ONU or ACS integration is active.
+- R2 backup-object verification and an isolated restore drill remain outstanding because the current Cloudflare API session reports that R2 must be enabled before its bucket list can be read.
 
-This is evidence of deployed infrastructure and schema state, **not certification that every business workflow is production-ready**. Confirm live health, browser flows, backup recovery and tenant isolation before using NEXUS as the sole system of record for real customers.
-
+This snapshot records infrastructure state, **not full ISP production certification**. Complete the Android browser acceptance, real-device/ACS tests, payment-provider setup, independent security review and backup restore drill before relying on NEXUS as the sole system of record for live customers.
 ## Implemented application areas
 
 The Cloudflare Worker source includes:
