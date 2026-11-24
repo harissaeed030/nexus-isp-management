@@ -153,3 +153,20 @@ test("allows the exact Android WebView localhost origin without allowing arbitra
   assert.equal(rejected.get("Access-Control-Allow-Origin"), null);
 
 });
+
+test("hosted login exposes password recovery and both D1 Worker entry points route the reset endpoints", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const indexSource = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
+  const productionSource = await readFile(new URL("../src/production-worker.js", import.meta.url), "utf8");
+  const dashboard = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
+  for (const source of [indexSource, productionSource]) {
+    assert.match(source, /path==='\/api\/auth\/password-reset\/request'&&m==='POST'/);
+    assert.match(source, /path==='\/api\/auth\/reset-password'&&m==='POST'/);
+    assert.match(source, /from "\.\/password-reset\.js"/);
+  }
+  assert.match(dashboard, /Forgot password\?/);
+  assert.match(dashboard, /call\("\/api\/v1\/auth\/password-reset\/request"/);
+  assert.match(dashboard, /call\("\/api\/v1\/auth\/reset-password"/);
+  assert.match(dashboard, /location\.hash\.slice\(1\)/);
+  assert.match(dashboard, /name="workspace"/);
+});
