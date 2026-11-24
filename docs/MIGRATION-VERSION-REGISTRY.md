@@ -18,6 +18,7 @@ The SQLite migration history for the local/backend runtime uses the complete des
 | 014 | `014_tenant_plan_branding.sql` | SaaS plan, customer limit and workspace branding settings |
 | 015 | `015_password_resets.sql` | One-time, expiring password reset tokens stored as SHA-256 hashes |
 | 016 | `016_collection_reminder_idempotency.sql` | Tenant-scoped, duplicate-safe invoice due/overdue reminder history |
+| 017 | `017_payment_promise_reminder_idempotency.sql` | Tenant-scoped, duplicate-safe open payment-promise reminder history |
 
 ## Conflict resolution
 
@@ -26,7 +27,7 @@ Two independent feature branches reused numeric prefixes:
 - Task 10 introduced `005_isp_business_modules.sql`, while the core line already uses version 005 for TR-069.
 - Financial management introduced `002_financial_management.sql`, while the core line already uses version 002 for customer/subscription management.
 
-Those migrations are retained, but assigned the next unused versions 007 and 008. Session hardening is assigned 009. Payment promises are assigned 010. Collection reminder idempotency is assigned 016. Existing 001–006 migration IDs and SQL files are not renamed or rewritten.
+Those migrations are retained, but assigned the next unused versions 007 and 008. Session hardening is assigned 009. Payment promises are assigned 010. Collection reminder idempotency is assigned 016; payment-promise reminder idempotency is assigned 017. Existing 001–006 migration IDs and SQL files are not renamed or rewritten.
 
 ## Safety rules
 
