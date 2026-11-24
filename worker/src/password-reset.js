@@ -71,8 +71,12 @@ export async function requestPasswordReset(request, env, ip = "unknown") {
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   const workspace = typeof body?.workspaceSlug === "string" ? body.workspaceSlug.trim().toLowerCase() : "";
   const rateKey = email.slice(0, 254) || "invalid";
-  if (await rateLimited(env.DB, ip, rateKey)) return json({ success: true, message: GENERIC_MESSAGE });
-  await recordAttempt(env.DB, ip, rateKey);
+  // Keep password-reset traffic in its own namespace so anonymous reset requests
+  // cannot exhaust the normal login throttle for a user's email or shared IP.
+  const rateIp = "password-reset:" + ip;
+  const rateEmail = "password-reset:" + rateKey;
+  if (await rateLimited(env.DB, rateIp, rateEmail)) return json({ success: true, message: GENERIC_MESSAGE });
+  await recordAttempt(env.DB, rateIp, rateEmail);
   const validWorkspace = !workspace || /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(workspace);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !validWorkspace) {
     return json({ success: true, message: GENERIC_MESSAGE });
@@ -117,8 +121,10 @@ export async function consumePasswordReset(request, env, ip = "unknown") {
     ? await env.DB.prepare("SELECT u.email FROM password_resets p JOIN users u ON u.id=p.user_id WHERE p.token=? AND p.used=0 AND julianday(p.expires_at)>julianday('now') AND u.status='active'").bind(tokenHash).first()
     : null;
   const rateKey = typeof candidate?.email === "string" ? candidate.email.toLowerCase() : "invalid";
-  if (await rateLimited(env.DB, ip, rateKey)) return json({ error: "Reset token is invalid or expired." }, 400);
-  await recordAttempt(env.DB, ip, rateKey);
+  const rateIp = "password-reset:" + ip;
+  const rateEmail = "password-reset:" + rateKey;
+  if (await rateLimited(env.DB, rateIp, rateEmail)) return json({ error: "Reset token is invalid or expired." }, 400);
+  await recordAttempt(env.DB, rateIp, rateEmail);
   if (!wellFormed || password.length < 10 || password.length > 256) {
     return json({ error: "Reset token is invalid or expired, or the new password does not meet the requirements." }, 400);
   }
