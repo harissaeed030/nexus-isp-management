@@ -39,6 +39,8 @@ jobs:
         run: python3 worker/scripts/validate-d1-schema.py
       - name: Test staging users schema-parity migration with foreign keys enabled
         run: bash worker/scripts/test-d1-users-strict-schema-parity.sh
+      - name: Rehearse deployed D1 schema reconciliation migrations
+        run: python3 worker/scripts/test-d1-schema-reconciliation.py
 
   live-smoke:
     name: Verify production and staging endpoints
