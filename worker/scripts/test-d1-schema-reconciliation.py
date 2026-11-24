@@ -56,7 +56,11 @@ def make_fixture(environment: str) -> sqlite3.Connection:
     db.execute("CREATE UNIQUE INDEX idx_users_org_email_ci ON users(organization_id, lower(email))")
     db.execute("INSERT INTO organizations(id) VALUES ('org-a'),('org-b')")
     db.execute("INSERT INTO users(id,organization_id,email,password_hash) VALUES ('u-a','org-a','owner@example.test','hash-a')")
-    db.execute("INSERT INTO users(id,organization_id,email,password_hash) VALUES ('u-b','org-b','owner@example.test','hash-b')")
+    second_email = "owner-b@example.test" if environment == "production" else "owner@example.test"
+    db.execute(
+        "INSERT INTO users(id,organization_id,email,password_hash) VALUES ('u-b','org-b',?,'hash-b')",
+        (second_email,),
+    )
     db.execute("INSERT INTO customers(id,organization_id) VALUES ('c-a','org-a'),('c-b','org-b')")
     db.execute("INSERT INTO network_devices(id,organization_id,device_type) VALUES ('router-a','org-a','mikrotik')")
     if environment == "production":
