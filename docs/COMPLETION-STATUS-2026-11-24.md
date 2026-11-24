@@ -58,3 +58,16 @@ This status separates code/Cloudflare work that has passed from real-world integ
 ## Final status
 
 The hosted NEXUS core, database schema reconciliation, staging/production smoke checks and Pages deployment are in a healthy verified state. The complete ISP service is **not yet fully production-certified** until the real device connector, ACS/OLT verification, payment gateway, Android acceptance, security review and restore drill are completed.
+
+
+## Additional live recheck — 2026-11-24 (read-only)
+
+A follow-up check of the Cloudflare account was performed after the completion report above was written:
+
+- Production Worker `nexus-saas-api`: deployment version 36 is serving 100% traffic (deployed 2026-11-24 08:53 UTC). Its D1 binding points to the production database ID recorded in this report. Worker logs and traces are enabled.
+- Staging Worker `nexus-saas-api-staging`: deployment version 38 is serving 100% traffic (deployed 2026-11-24 09:11 UTC). Its D1 binding points to the staging database ID recorded in this report. Worker logs and traces are enabled.
+- Read-only `sqlite_master` checks confirmed both databases contain the expected hosted application tables, including `sync_state`, `payment_promises`, `router_credentials`-related inventory tables, and TR-069 inventory tables. No rows were written by these checks.
+- The live migration ledgers are **not byte-for-byte identical**: production includes ID 101 (`2026-11-17-staging-schema-additive-reconcile`) while staging does not; both contain IDs 1–22, 24, 25 and 100, but the recorded name for ID 11 differs. This is a ledger-history discrepancy, not evidence that a new migration should be applied. Do not fabricate ledger entries or rerun historical migrations to make the lists look identical; reconcile the naming/history through a reviewed forward-only plan.
+- Cloudflare's R2 bucket-list API returned error 10042 (“Please enable R2 through the Cloudflare Dashboard”). Therefore this session could not independently list/verify the previously reported backup objects or complete an isolated restore drill. The restore drill remains open; no backup was deleted or overwritten.
+
+This recheck was read-only. It did not deploy Workers, mutate D1, change secrets, or contact ISP network devices.
