@@ -103,10 +103,17 @@ export async function consumePasswordReset(request, env, ip = "unknown") {
   const body = await parseBody(request);
   const token = typeof body?.token === "string" ? body.token : "";
   const password = typeof body?.newPassword === "string" ? body.newPassword : "";
-  if (!/^[A-Za-z0-9_-]{43}$/.test(token) || password.length < 10 || password.length > 256) {
+  const tokenIsWellFormed = /^[A-Za-z0-9_-]{43}$/.test(token);
+  const tokenHash = tokenIsWellFormed ? await sha256Hex(token) : "";
+  const candidate = tokenIsWellFormed
+    ? await env.DB.prepare("SELECT u.email FROM password_resets p JOIN users u ON u.id=p.user_id WHERE p.token=? AND p.used=0 AND p.expires_at>datetime('now') AND COALESCE(u.status,'active')='active'").bind(tokenHash).first()
+    : null;
+  const rateKey = typeof candidate?.email === "string" ? candidate.email.toLowerCase() : "invalid";
+  if (await loginRateLimited(env.DB, ip, rateKey)) return json({ error: "Reset token is invalid or expired." }, 400);
+  await recordAttempt(env.DB, ip, rateKey);
+  if (!tokenIsWellFormed || password.length < 10 || password.length > 256) {
     return json({ error: "Reset token is invalid or expired, or the new password does not meet the requirements." }, 400);
   }
-  const tokenHash = await sha256Hex(token);
   const credentials = await hashPassword(password);
   let results;
   try {
