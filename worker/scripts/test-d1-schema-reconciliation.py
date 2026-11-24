@@ -6,6 +6,7 @@ import sqlite3
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = ROOT / "cloudflare" / "d1" / "migrations"
 ORDER = [
+    "0020_allow_workspace_scoped_user_emails.sql",
     "0022_payment_promises.sql",
     "0023_router_credentials_ciphertext.sql",
     "0024_reconcile_deployed_schema_drift.sql",
@@ -106,6 +107,16 @@ def verify(environment: str) -> None:
     assert "idx_network_devices_org_type" in index_names
     assert "idx_router_customer_mappings_org_customer" in index_names
     assert "idx_router_customer_mappings_org_online" in index_names
+    for required_index in (
+        "idx_login_attempts_email",
+        "idx_login_attempts_ip",
+        "idx_network_connectors_org_status",
+        "idx_network_jobs_connector_queue",
+        "idx_network_jobs_org_created",
+        "idx_tr069_devices_connection",
+        "idx_sync_worker_failures_sync",
+    ):
+        assert required_index in index_names, f"Missing reconciled index: {required_index}"
 
     tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "router_credentials" in tables
