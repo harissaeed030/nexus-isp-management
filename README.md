@@ -16,15 +16,16 @@ The production and staging Workers are separate and each binds only to its match
 
 ## Verified deployment snapshot — 24 November 2026
 
-- Production Worker `nexus-saas-api`: version 36 deployed at 100% traffic on 2026-11-24; bound to production D1 database `nexus-saas-db`.
-- Staging Worker `nexus-saas-api-staging`: version 38 deployed at 100% traffic on 2026-11-24; bound only to staging D1 database `nexus-saas-staging-db`.
-- Both Workers have observability logs and traces enabled. The production and staging database bindings were independently checked against their expected database IDs.
-- Both D1 databases contain the hosted application tables, including tenant/user, customer, billing, support, sync and network/TR-069 inventory tables.
-- The D1 migration ledgers are not identical: production has an additional ID 101 entry, and the recorded name for ID 11 differs between environments. Do not fabricate ledger rows or rerun historical migrations; see the live recheck in [the completion report](docs/COMPLETION-STATUS-2026-11-24.md).
+- Production Worker `nexus-saas-api`: version 41 deployed at 100% traffic; bound to production D1 database `nexus-saas-db`.
+- Staging Worker `nexus-saas-api-staging`: version 41 deployed at 100% traffic; bound only to staging D1 database `nexus-saas-staging-db`.
+- Existing Worker secret-text, D1 and plain-text bindings were preserved through both code deployments. Logs and traces remain enabled.
+- Hosted owner/staff password recovery (PR #109) and the follow-up rate-limit isolation fix (PR #112) are merged and deployed to both Workers. Password-reset email delivery remains disabled until a valid Resend API key and verified sender address are configured; no secrets are stored in Git.
+- Cloudflare Pages production deployment for the latest code and documentation updates is successful.
+- Production and staging D1 migration ledgers and some table/index definitions are not identical. The staging users password-hash triggers are a documented compatibility mechanism for its older nullable column; do not rebuild tables or fabricate ledger rows. See [the completion report](docs/COMPLETION-STATUS-2026-11-24.md) for the read-only comparison.
 - The production network connector remains disabled. Inventory does not mean a live MikroTik, OLT, ONU or ACS integration is active.
-- R2 backup-object verification and an isolated restore drill remain outstanding because the current Cloudflare API session reports that R2 must be enabled before its bucket list can be read.
+- R2 backup-object verification and an isolated restore drill remain outstanding because R2 is not enabled for this account/API session.
 
-This snapshot records infrastructure state, **not full ISP production certification**. Complete the Android browser acceptance, real-device/ACS tests, payment-provider setup, independent security review and backup restore drill before relying on NEXUS as the sole system of record for live customers.
+This snapshot records hosted deployment state, **not full ISP production certification**. Real-device/ACS tests, payment-provider setup, Android owner/staff/customer acceptance, independent security review, schema-parity review and the backup restore drill remain release gates before relying on NEXUS as the sole system of record for live customers.
 ## Implemented application areas
 
 The Cloudflare Worker source includes:
