@@ -36,6 +36,7 @@ CREATE TABLE sync_records(
  record_id TEXT NOT NULL, data TEXT NOT NULL DEFAULT '{}', updated_at TEXT NOT NULL,
  synced_at TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE sync_worker_failures(id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, sync_id TEXT NOT NULL, retry_count INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE schema_migrations(id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);
 CREATE TABLE payment_promises(
  id TEXT PRIMARY KEY, organization_id TEXT NOT NULL, customer_id TEXT NOT NULL,
@@ -68,6 +69,7 @@ def make_fixture(environment: str) -> sqlite3.Connection:
         db.execute("CREATE INDEX idx_sync_records_synced_at ON sync_records(tenant_id,table_name,synced_at)")
         db.execute("CREATE INDEX idx_sync_records_tenant_table ON sync_records(tenant_id,table_name,deleted)")
         db.execute("CREATE UNIQUE INDEX idx_sync_records_unique ON sync_records(tenant_id,table_name,record_id)")
+        db.execute("CREATE INDEX idx_sync_worker_failures_sync ON sync_worker_failures(tenant_id,sync_id)")
         db.execute("CREATE TABLE sync_state(tenant_id TEXT PRIMARY KEY,last_pull_since TEXT,updated_at TEXT NOT NULL)")
         db.execute("CREATE INDEX idx_login_attempts_email ON login_attempts(email)")
         db.execute("CREATE INDEX idx_login_attempts_ip ON login_attempts(ip_address)")
@@ -75,6 +77,7 @@ def make_fixture(environment: str) -> sqlite3.Connection:
         db.execute("CREATE INDEX idx_sync_records_synced_at ON sync_records(synced_at)")
         db.execute("CREATE INDEX idx_sync_records_tenant_table ON sync_records(tenant_id,table_name)")
         db.execute("CREATE INDEX idx_sync_records_unique ON sync_records(tenant_id,table_name,record_id)")
+        db.execute("CREATE INDEX idx_sync_worker_failures_sync ON sync_worker_failures(sync_id)")
     return db
 
 def apply_migrations(db: sqlite3.Connection) -> None:
@@ -98,6 +101,8 @@ def verify(environment: str) -> None:
     assert "idx_sync_records_synced_at" in index_names
     assert "idx_sync_records_tenant_table" in index_names
     assert "idx_sync_records_unique" in index_names
+    sync_failure_index = db.execute("SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_sync_worker_failures_sync'").fetchone()[0]
+    assert "tenant_id,sync_id" in sync_failure_index.replace(" ", "")
     assert "idx_network_devices_org_type" in index_names
     assert "idx_router_customer_mappings_org_customer" in index_names
     assert "idx_router_customer_mappings_org_online" in index_names
