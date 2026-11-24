@@ -6,7 +6,8 @@ function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
-export async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
+export // Keep PBKDF2 at 100,000 iterations until the deployed Workers CPU budget is measured; missing salts must always fail closed.
+async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
 export async function verifyPw(pw,h,salt){if(typeof pw!=='string'||typeof h!=='string'||typeof salt!=='string'||!/^[a-f0-9]{64}$/i.test(h)||!/^[a-f0-9]{32}$/i.test(salt))return false;try{const{hash}=await hashPw(pw,salt);return safeHashEqual(hash,h.toLowerCase())}catch{return false}}
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
