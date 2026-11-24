@@ -44,7 +44,7 @@ The RouterOS and HSGQ adapters must be treated according to their documented cap
 The production and staging D1 Workers expose a secure, email-delivered password reset flow:
 - Request: `POST /api/v1/auth/password-reset/request` with `email` and optional `workspaceSlug`.
 - Consume: `POST /api/v1/auth/reset-password` with the emailed `token` and a new password (10–256 characters).
-- Public request responses are identical for existing and unknown email addresses. Requests are throttled by source IP and normalized email.
+- Public request responses are identical for existing and unknown email addresses. Both reset requests and token-consumption attempts are throttled by source IP and normalized email.
 - Reset tokens are cryptographically random, valid for 30 minutes, single-use, and stored only as SHA-256 digests in the legacy `password_resets.token` column. The raw token is delivered only by email and is placed in the URL fragment (`#reset=...`) so browsers do not send it in HTTP requests or referrer headers.
 - A successful reset atomically consumes the token, updates the PBKDF2 password hash/salt, increments the user's token version (invalidating existing sessions), and records an audit event.
 - If email delivery fails, the pending token is invalidated. Provider errors and tokens are not returned to callers or written to logs.
