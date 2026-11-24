@@ -28,6 +28,8 @@ jobs:
       - name: Verify backend and dashboard
         working-directory: backend
         run: npm run verify
+      - name: Verify secure D1 password reset lifecycle
+        run: node --test worker/scripts/password-reset.test.js
       - name: Verify shared frontend and D1 API route compatibility
         run: node --test worker/scripts/api-compat.test.js
       - name: Verify production Worker source and staging-only route isolation
