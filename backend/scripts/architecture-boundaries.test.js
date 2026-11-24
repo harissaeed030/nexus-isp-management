@@ -40,12 +40,14 @@ test("SQLite and Cloudflare D1 remain separate runtimes", () => {
 });
 
 
-test("Hosted dashboard signup targets the D1 tenant registration route and password reset is not falsely advertised", () => {
+test("Hosted dashboard signup targets the D1 tenant registration route and local-only reset UX does not claim hosted support", () => {
   assert.match(dashboardSource, /call\(setup\?"\/api\/v1\/tenants\/register":"\/api\/v1\/auth\/login"/);
   assert.match(d1WorkerSource, /path==='\/api\/tenants\/register'\?'\/api\/auth\/register'/);
   assert.match(d1WorkerSource, /if\(path==='\/api\/auth\/register'&&m==='POST'\)return await authReg/);
   assert.match(dashboardSource, /Password reset is not enabled on the hosted API yet/);
-  assert.doesNotMatch(dashboardSource, /call\("\/api\/v1\/auth\/reset-password"/);
+  assert.match(dashboardSource, /const localApi=\(\(\)=>/);
+  assert.match(dashboardSource, /if\(!localApi\)/);
+  assert.match(dashboardSource, /call\("\/api\/v1\/auth\/reset-password"/);
 });
 
 
