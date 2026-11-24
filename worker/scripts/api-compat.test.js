@@ -153,3 +153,18 @@ test("allows the exact Android WebView localhost origin without allowing arbitra
   assert.equal(rejected.get("Access-Control-Allow-Origin"), null);
 
 });
+
+
+test("staging Worker mirrors production modules while keeping E2E cleanup staging-only", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const stagingSource = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
+  const productionSource = await readFile(new URL("../src/production-worker.js", import.meta.url), "utf8");
+
+  for (const feature of ["payment_promises", "credential_password_cipher", "tr069_devices", "refunds"]) {
+    assert.ok(stagingSource.includes(feature), `staging Worker missing production feature: ${feature}`);
+    assert.ok(productionSource.includes(feature), `production Worker missing feature: ${feature}`);
+  }
+  assert.ok(stagingSource.includes("/api/e2e/tenant"));
+  assert.ok(stagingSource.includes("nexus-saas-api-staging.harissaeed030.workers.dev"));
+  assert.ok(!productionSource.includes("/api/e2e/tenant"));
+});
