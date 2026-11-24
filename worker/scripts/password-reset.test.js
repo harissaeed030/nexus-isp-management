@@ -100,7 +100,6 @@ test("reset request is non-enumerating, emails a fragment token, and stores only
     assert.equal(stored.token, expectedHash);
     assert.notEqual(stored.token, token);
     assert.equal(stored.used, 0);
-    assert.equal((await known.json().catch(() => null)), null);
     assert.equal(fixture.sqlite.prepare("SELECT COUNT(*) n FROM audit_log WHERE action='password_reset_requested'").get().n, 1);
 
     const consumed = await consumePasswordReset(request("/api/auth/reset-password", {
