@@ -63,8 +63,9 @@ async function createCustomer(tenant, label) {
       status: "active",
     },
   });
-  assert.ok(customer.id, "Customer creation must return an ID");
-  return { ...customer, email };
+  const record = customer.data ?? customer;
+  assert.ok(record.id, "Customer creation must return an ID");
+  return { ...record, email };
 }
 
 try {
