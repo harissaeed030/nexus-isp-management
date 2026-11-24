@@ -38,6 +38,30 @@ The RouterOS and HSGQ adapters must be treated according to their documented cap
 - The browser never receives the OpenAI API key. The assistant does not access or mutate customer, billing, router or ONU records.
 - Never add API key values to Git, Wrangler configuration, logs, or frontend code.
 
+
+## Hosted owner/staff password recovery
+
+The staging and production Worker source includes an opt-in, email-delivered password recovery flow:
+- Request: \`POST /api/v1/auth/password-reset/request\` with \`email\` and optional \`workspaceSlug\`.
+- Consume: \`POST /api/v1/auth/reset-password\` with the emailed \`token\` and a new password (10–256 characters).
+- Public request responses are identical for existing and unknown accounts; requests and token consumption are throttled by source IP and normalized email.
+- Tokens are cryptographically random, valid for 30 minutes, single-use, and stored only as SHA-256 digests in the existing \`password_resets.token\` column. The raw token is delivered only by email in the URL fragment (\`#reset=...\`).
+- A successful reset atomically consumes the token, updates the PBKDF2 password hash/salt, increments \`users.token_version\` to invalidate existing sessions, and records an audit event.
+- If email delivery fails, the pending token is invalidated. Provider errors and bearer tokens are not returned to callers or logged.
+
+Before the feature can send mail, configure these Worker secrets in the intended environment:
+- \`RESEND_API_KEY\`: Resend API key.
+- \`PASSWORD_RESET_FROM\`: sender address verified by Resend.
+- \`PASSWORD_RESET_URL\`: HTTPS URL of the NEXUS login page.
+
+For staging, use \`wrangler.toml\`; for production, use \`wrangler.production.toml\`. Example commands (run one at a time after confirming the target account):
+\`\`\`sh
+npx wrangler secret put RESEND_API_KEY --config wrangler.toml
+npx wrangler secret put PASSWORD_RESET_FROM --config wrangler.toml
+npx wrangler secret put PASSWORD_RESET_URL --config wrangler.toml
+\`\`\`
+The production config filename may be substituted for staging only after explicit target verification. Never place secret values in Wrangler files, source code, browser code, or Git. If any setting is absent, the endpoint returns a generic response and sends no email. This PR does not deploy either Worker, change D1 data, or set any secrets.
+
 ## Schema
 
 - `schema.sql` is a canonical schema snapshot at migration 0009. Use it only for a new, empty D1 database.

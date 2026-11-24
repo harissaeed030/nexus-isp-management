@@ -168,3 +168,24 @@ test("staging Worker mirrors production modules while keeping E2E cleanup stagin
   assert.ok(stagingSource.includes("nexus-saas-api-staging.harissaeed030.workers.dev"));
   assert.ok(!productionSource.includes("/api/e2e/tenant"));
 });
+
+
+test("password recovery routes are wired in staging and production and exposed by the login UI", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const staging = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
+  const production = await readFile(new URL("../src/production-worker.js", import.meta.url), "utf8");
+  const dashboard = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
+  const service = await readFile(new URL("../src/password-reset.js", import.meta.url), "utf8");
+  for (const source of [staging, production]) {
+    assert.match(source, /from "\.\/password-reset\.js"/);
+    assert.match(source, /path==='\/api\/auth\/password-reset\/request'&&m==='POST'/);
+    assert.match(source, /path==='\/api\/auth\/reset-password'&&m==='POST'/);
+  }
+  assert.equal(normalizeApiPath("/api/v1/auth/password-reset/request"), "/api/auth/password-reset/request");
+  assert.equal(normalizeApiPath("/api/v1/auth/reset-password"), "/api/auth/reset-password");
+  assert.match(dashboard, /Forgot password\?/);
+  assert.match(dashboard, /call\("\/api\/v1\/auth\/password-reset\/request"/);
+  assert.match(dashboard, /call\("\/api\/v1\/auth\/reset-password"/);
+  assert.match(dashboard, /new URLSearchParams\(location\.hash\.slice\(1\)\)\.has\("reset"\)/);
+  assert.match(service, /julianday\(expires_at\)>julianday\('now'\)/);
+});
