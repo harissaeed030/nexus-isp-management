@@ -78,3 +78,19 @@ This recheck was read-only. It did not deploy Workers, mutate D1, change secrets
 - The two final read-only D1 checks again returned 0 foreign-key violations and 0 duplicate case-insensitive user emails within an organization in both production and staging.
 - Both databases returned 0 synthetic `nexus-stage-%` organizations.
 - The Pages production deployment for the README/report refresh (commit `ab77544d76ec0c05885e06808cc50bdc1ef4f7fe`) completed successfully. Production URL remains https://nexus-isp-management.pages.dev.
+
+
+## Password recovery rollout and follow-up hardening — 2026-11-24
+
+- PR #109 (`b12a3e96a94ab3b9496ecfd33233cf071e3f72be`) merged the hosted owner/staff password-recovery flow. Its eight CI checks passed.
+- The merged recovery flow is deployed to both Workers: staging version 39 and production version 40, each serving 100% traffic at the time of rollout. Existing D1 and secret bindings were preserved.
+- A code review then found that reset attempts shared the normal login throttle bucket. PR #112 isolated both reset-request and token-consumption rate-limit keys from login rate limits, with regression coverage. All seven PR checks passed; the fix merged as `750ba9e28281e51f6a12f62d5b7e4045d87bf817`.
+- Latest Workers after PR #112: staging version 41 and production version 41, each verified at 100% traffic. Production remains bound to production D1; staging remains bound to staging D1. All pre-existing secret-text, D1 and plain-text binding names remain present.
+- Cloudflare Pages production deployment for merge commit `750ba9e28281e51f6a12f62d5b7e4045d87bf817` completed successfully.
+- Password recovery is deployed but email sending remains **disabled** until a valid `RESEND_API_KEY` and verified `PASSWORD_RESET_FROM` sender are configured in both intended environments. The `PASSWORD_RESET_URL` secret binding is present in both Workers; its secret value was not read or changed. No API key or sender identity was invented.
+
+### Additional D1 schema inspection
+
+A read-only comparison of `sqlite_master` found that the production and staging databases have some differing table/index SQL definitions and four staging-only triggers (network connector/job tenant guards and two users password-hash guards). The `users` table also differs: production has `password_hash NOT NULL` and role default `staff`; staging has a nullable legacy column plus triggers rejecting empty hashes, and role default `member`. The staging password-hash trigger difference is explicitly documented by migration 0017 as a compatibility mechanism because production already has the stricter constraint. Do not attempt a blind schema rebuild or force ledger parity. A reviewed schema-by-schema parity plan remains open for the remaining DDL/index differences.
+
+This rollout changed Worker code only. It did not alter customer, invoice or payment records, activate the network connector, or send commands to any MikroTik, OLT, ONU or ACS device.
