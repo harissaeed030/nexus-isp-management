@@ -57,8 +57,8 @@ test("Hosted dashboard staff role choices are accepted by the D1 Worker", () => 
 
 
 test("Cloudflare Pages routes API traffic to the environment-specific Worker without invoking Functions for static assets", () => {
-  assert.match(dashboardSource, /const local=\["localhost","127\\.0\\.0\\.1"\]\\.includes\\(location\\.hostname\\)/);
-  assert.match(dashboardSource, /if\\(local\\)return location\\.port==="4000"\\?location\\.origin:"http:\\/\\/127\\.0\\.0\\.1:4000"/);
+  assert.ok(dashboardSource.includes('const local=["localhost","127.0.0.1"].includes(location.hostname)'));
+  assert.ok(dashboardSource.includes('if(local)return location.port==="4000"?location.origin:"http://127.0.0.1:4000"'));
   assert.match(dashboardSource, /if\(pages\)sessionStorage\.removeItem\("nexus_api"\)/);
   assert.doesNotMatch(dashboardSource, /https:\/\/nexus-saas-api\.harissaeed030\.workers\.dev/);
   assert.match(pagesProxy, /env\.API_URL\s*\|\|\s*env\.VITE_API_URL/);
