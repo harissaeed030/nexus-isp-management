@@ -71,3 +71,10 @@ A follow-up check of the Cloudflare account was performed after the completion r
 - Cloudflare's R2 bucket-list API returned error 10042 (“Please enable R2 through the Cloudflare Dashboard”). Therefore this session could not independently list/verify the previously reported backup objects or complete an isolated restore drill. The restore drill remains open; no backup was deleted or overwritten.
 
 This recheck was read-only. It did not deploy Workers, mutate D1, change secrets, or contact ISP network devices.
+
+
+### Final verification after documentation deployment
+
+- The two final read-only D1 checks again returned 0 foreign-key violations and 0 duplicate case-insensitive user emails within an organization in both production and staging.
+- Both databases returned 0 synthetic `nexus-stage-%` organizations.
+- The Pages production deployment for the README/report refresh (commit `ab77544d76ec0c05885e06808cc50bdc1ef4f7fe`) completed successfully. Production URL remains https://nexus-isp-management.pages.dev.
