@@ -218,11 +218,11 @@ try{
  assert.equal((await request("/api/v1/routers","POST",{name:"Blocked Router",host:"192.0.2.2"},techLogin.data.token)).status,403);
 
  // Password reset tokens are random, stored only as hashes, single-use and revoke old sessions.
- const issuedReset=await request("/api/v1/staff/"+tech.data.data.id+"/password-reset","POST",{},token);
+ const issuedReset=await request("/api/v1/staff/"+technician.data.data.id+"/password-reset","POST",{},token);
  assert.equal(issuedReset.status,201);
  const rawResetToken=issuedReset.data.resetToken;
  assert.equal(typeof rawResetToken,"string");
- const storedReset=db.prepare("SELECT token_hash,expires_at,used_at FROM password_resets WHERE user_id=?").get(tech.data.data.id);
+ const storedReset=db.prepare("SELECT token_hash,expires_at,used_at FROM password_resets WHERE user_id=?").get(technician.data.data.id);
  assert.equal(storedReset.token_hash,createHash("sha256").update(rawResetToken).digest("hex"));
  assert.notEqual(storedReset.token_hash,rawResetToken);
  const consumedReset=await request("/api/v1/auth/reset-password","POST",{token:rawResetToken,newPassword:"Technician-New-Password-456"});
