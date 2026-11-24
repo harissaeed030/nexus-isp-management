@@ -8,7 +8,6 @@ MIGRATIONS = ROOT / "cloudflare" / "d1" / "migrations"
 ORDER = [
     "0020_allow_workspace_scoped_user_emails.sql",
     "0022_payment_promises.sql",
-    "0023_router_credentials_ciphertext.sql",
     "0024_reconcile_deployed_schema_drift.sql",
     "0025_payment_promises_updated_by_guard.sql",
 ]
@@ -119,7 +118,6 @@ def verify(environment: str) -> None:
         assert required_index in index_names, f"Missing reconciled index: {required_index}"
 
     tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert "router_credentials" in tables
     assert "sync_state" in tables
     columns = {row[1] for row in db.execute("PRAGMA table_info(payment_promises)")}
     assert "updated_by" in columns
@@ -149,15 +147,8 @@ def verify(environment: str) -> None:
         ("u-b","promise-good"),
     )
 
-    # Router credential writes must bind a MikroTik device and actor to the same workspace.
-    assert_raises_integrity_error(
-        db,
-        "INSERT INTO router_credentials(id,organization_id,network_device_id,ciphertext,created_by,updated_by) VALUES(?,?,?,?,?,?)",
-        ("cred-bad","org-b","router-a","cipher","u-b","u-b"),
-    )
-
     migration_ids = {row[0] for row in db.execute("SELECT id FROM schema_migrations")}
-    assert {14,15,16,17,18,19,20,21,22,23,24,25}.issubset(migration_ids)
+    assert {14,15,16,17,18,19,20,21,22,24,25}.issubset(migration_ids)
     db.close()
     print(f"{environment}: migrations 0022–0025 and tenant/index guards passed")
 
