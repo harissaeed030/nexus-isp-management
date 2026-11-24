@@ -49,3 +49,7 @@ The 2026-11-24 read-only audit returned zero duplicates in both databases. The s
 - Never apply these migrations to production before the staging rehearsal, backup verification, and full CI/live-smoke checks pass.
 - Do not enable `NETWORK_CONNECTOR_ENABLED` as part of schema work.
 - Do not run RouterOS writes, PPPoE changes, OLT writes, or ONU configuration as part of this release.
+
+## Operational sequencing
+
+D1 SQL exports can temporarily make the database reject Worker queries with `Currently processing a long-running export`. Finish and poll exports to `complete` before starting staging E2E or live-smoke workflows; otherwise tests can fail for a transient maintenance lock and leave synthetic tenants to clean up.
