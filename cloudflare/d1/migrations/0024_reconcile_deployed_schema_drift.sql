@@ -12,6 +12,8 @@
 DROP INDEX IF EXISTS idx_users_email_global;
 
 -- Bring the network/field indexes into parity on both databases.
+CREATE INDEX IF NOT EXISTS idx_login_attempts_email ON login_attempts(email);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
 CREATE INDEX IF NOT EXISTS idx_network_connectors_org_status
   ON network_connectors(organization_id,status);
 CREATE INDEX IF NOT EXISTS idx_network_devices_org_type
