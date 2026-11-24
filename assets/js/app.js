@@ -322,5 +322,5 @@ $("#nxPay")?.addEventListener("submit",async e=>{e.preventDefault();let b=Object
  initAiAssistant();
 
 document.querySelectorAll(".nav-item").forEach(a=>a.addEventListener("click",e=>{let v=(a.getAttribute("href")||"#").slice(1)||"dashboard";if(v==="support")v="tickets";if(["dashboard","customers","subscriptions","billing","tickets","packages","routers","staff","reports","audit","tr069"].includes(v)){e.preventDefault();load(v);$("#sidebar")?.classList.remove("open")}}));
-if(token){if(shell)shell.style.display="";load("dashboard")}else auth(false);
+if(token){if(shell)shell.style.display="";load("dashboard")}else{auth(false);if(new URLSearchParams(location.hash.slice(1)).has("reset"))resetForm()}
 })();
