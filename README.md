@@ -71,6 +71,11 @@ Both flags default to false. Test with a disposable database and a controlled re
 
 The dashboard includes a mobile-friendly AI chat panel. The backend calls the Gemini API; the browser never receives the API key. Configure `GEMINI_API_KEY` in `backend/.env` or the server secret store, optionally set `GEMINI_MODEL` (default `gemini-2.5-flash`), and restart the API. The endpoint is `POST /api/v1/ai/chat`, requires the `ai.chat` permission, limits requests and message history, and sends no customer records, payment information, router credentials or ONU data to Gemini. The assistant gives guidance only and cannot execute ISP operations. Without a key it returns a clear 503 response and the rest of NEXUS continues to work.
 
+
+### Local staff password recovery
+
+For the local SQLite runtime, an owner/admin can issue a one-time reset token for an active staff account through the Staff screen. Give that token to the staff member privately; on the local login screen choose **Password reset help**, paste the token and set a new password. Tokens expire after 30 minutes, are stored only as SHA-256 hashes, can be used once, and a successful reset revokes the user's existing sessions. The hosted Cloudflare D1 login does not currently support this reset flow; its help screen intentionally directs users to their workspace owner/admin instead. Never send reset tokens in public chats or commit them to files.
+
 ## First owner setup
 
 Send a POST request to `/api/v1/setup` with JSON:

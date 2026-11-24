@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 
 const dir=mkdtempSync(join(tmpdir(),"nexus-smoke-"));
@@ -215,6 +216,23 @@ try{
  assert.equal(techLogin.status,200);
  assert.equal((await request("/api/v1/routers","GET",undefined,techLogin.data.token)).status,200);
  assert.equal((await request("/api/v1/routers","POST",{name:"Blocked Router",host:"192.0.2.2"},techLogin.data.token)).status,403);
+
+ // Password reset tokens are random, stored only as hashes, single-use and revoke old sessions.
+ const issuedReset=await request("/api/v1/staff/"+technician.data.data.id+"/password-reset","POST",{},token);
+ assert.equal(issuedReset.status,201);
+ const rawResetToken=issuedReset.data.resetToken;
+ assert.equal(typeof rawResetToken,"string");
+ const storedReset=db.prepare("SELECT token_hash,expires_at,used_at FROM password_resets WHERE user_id=?").get(technician.data.data.id);
+ assert.equal(storedReset.token_hash,createHash("sha256").update(rawResetToken).digest("hex"));
+ assert.notEqual(storedReset.token_hash,rawResetToken);
+ const consumedReset=await request("/api/v1/auth/reset-password","POST",{token:rawResetToken,newPassword:"Technician-New-Password-456"});
+ assert.equal(consumedReset.status,200);
+ assert.equal((await request("/api/v1/routers","GET",undefined,techLogin.data.token)).status,401);
+ assert.equal((await request("/api/v1/auth/login","POST",{email:"tech@nexus.test",password:"Technician-Password-123"})).status,401);
+ const newTechLogin=await request("/api/v1/auth/login","POST",{email:"tech@nexus.test",password:"Technician-New-Password-456"});
+ assert.equal(newTechLogin.status,200);
+ assert.equal((await request("/api/v1/auth/reset-password","POST",{token:rawResetToken,newPassword:"Technician-Another-Password-789"})).status,400);
+
  const reports=await request("/api/v1/reports/summary","GET",undefined,token);
  assert.equal(reports.status,200);
  console.log("Nexus smoke tests passed: core CRUD, atomic setup/payment rollback, concurrent monthly billing, role permissions, staff controls and router access.");
