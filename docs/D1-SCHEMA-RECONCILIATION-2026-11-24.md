@@ -15,9 +15,8 @@ Staging's migration ledger uses the legacy label `0011_sync_staging_with_product
 After a fresh SQL export of both databases and successful preflight checks, apply these migrations in order:
 
 1. `0022_payment_promises.sql` — compatible base definition and tenant-safe insert trigger. It intentionally does not add `updated_by`.
-2. `0023_router_credentials_ciphertext.sql` — creates the encrypted RouterOS credential table and tenant guards. It does not enable live router commands.
-3. `0024_reconcile_deployed_schema_drift.sql` — aligns sync/network indexes, adds the missing `sync_state` table to staging, and removes the global users-email unique index. Per-organization case-insensitive uniqueness remains enforced.
-4. `0025_payment_promises_updated_by_guard.sql` — adds `updated_by` and the payment-promise update tenant guard.
+2. `0024_reconcile_deployed_schema_drift.sql` — aligns sync/network indexes, adds the missing `sync_state` table to staging, and removes the global users-email unique index. Per-organization case-insensitive uniqueness remains enforced.
+3. `0025_payment_promises_updated_by_guard.sql` — adds `updated_by` and the payment-promise update tenant guard.
 
 ## Required preflight
 
@@ -42,7 +41,7 @@ The 2026-11-24 read-only audit returned zero duplicates in both databases. The s
 - Production `users.password_hash` is NOT NULL; staging has an insert/update trigger that rejects empty hashes. Do not rebuild either populated users table as part of this reconciliation.
 - Production and staging have different default values for `users.role` and `users.id`; the application supplies these values explicitly during owner/staff creation. This needs a separate schema-normalization plan.
 - Existing `payment_promises` tables are present in both databases but predate the new `updated_by` column; migrations 0022 and 0025 deliberately handle this in two steps.
-- The separate `router_credentials` table is not yet present in either database. Migration 0023 creates it; network connector execution remains disabled until real device integration is separately tested.
+- The current production Worker stores router inventory credentials encrypted in `network_devices.credential_password_cipher`, using the Worker `JWT_SECRET` for key derivation. The alternative `router_credentials` table from the abandoned feature branch is intentionally not included in this release. Live router operations remain disabled until a separate connector is deployed and tested.
 
 ## Safety boundaries
 
