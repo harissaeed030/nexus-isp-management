@@ -73,6 +73,51 @@ try {
   const customerA = await createCustomer(tenantA, "a");
   const customerB = await createCustomer(tenantB, "b");
 
+  const paymentPromise = await request("/api/operations/payment-promises", {
+    method: "POST",
+    token: tenantA.token,
+    expected: 201,
+    body: {
+      customerId: customerA.id,
+      amountPkr: 1200,
+      promiseDate: "2026-12-01",
+      notes: "Temporary NEXUS staging E2E payment promise",
+    },
+  });
+  assert.ok(paymentPromise.data?.id, "Payment promise creation must return an ID");
+  const promisesA = await request("/api/operations/payment-promises", { token: tenantA.token });
+  assert.ok(Array.isArray(promisesA.data));
+  assert.ok(promisesA.data.some((item) => item.id === paymentPromise.data.id));
+  const promisesB = await request("/api/operations/payment-promises", { token: tenantB.token });
+  assert.equal(promisesB.data.length, 0, "Payment promises must be tenant-isolated");
+  await request("/api/operations/payment-promises", {
+    method: "POST",
+    token: tenantA.token,
+    expected: 404,
+    body: { customerId: customerB.id, amountPkr: 500, promiseDate: "2026-12-01" },
+  });
+
+  const routerInventory = await request("/api/network/devices", {
+    method: "POST",
+    token: tenantA.token,
+    expected: 201,
+    body: {
+      name: "E2E fake MikroTik inventory",
+      device_type: "mikrotik",
+      host: "192.0.2.1",
+      port: 8729,
+      username: "e2e-only",
+      password: "E2E-Temporary-Not-Real-Password-123!",
+    },
+  });
+  assert.ok(routerInventory.data?.id, "Router inventory creation must return an ID");
+  assert.equal(routerInventory.data.liveSupported, false, "Inventory must not claim live router support");
+  assert.equal("credential_password_cipher" in routerInventory.data, false, "Encrypted router credentials must never be returned");
+  const networkDevices = await request("/api/network/devices", { token: tenantA.token });
+  assert.ok(networkDevices.data.some((item) => item.id === routerInventory.data.id));
+  const networkStatus = await request("/api/network/status", { token: tenantA.token });
+  assert.equal(networkStatus.connection_tested, false, "E2E must not attempt live network connections");
+
   const isolatedRead = await request("/api/customers/" + encodeURIComponent(customerB.id), {
     token: tenantA.token,
     expected: 404,
@@ -146,7 +191,7 @@ try {
   assert.equal(emailMe.customer?.id, customerA.id);
   await request("/api/portal/auth/logout", { method: "POST", token: legacyEmailLogin.token });
 
-  console.log("Staging portal E2E passed: tenant isolation, portal provisioning, login, profile, dashboard, tickets and logout.");
+  console.log("Staging E2E passed: tenant isolation, payment promises, encrypted router inventory, customer portal, login, dashboard, tickets and logout.");
 } finally {
   const cleanupErrors = [];
   for (const tenant of tenants.reverse()) {
