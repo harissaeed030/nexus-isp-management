@@ -6,10 +6,12 @@ function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{
 const CORS={'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,Idempotency-Key'};
 const SEC_HDRS={'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
 async function parseBody(r){try{return await r.json()}catch{return null}}
+// Keep PBKDF2 at 100,000 iterations until the deployed Workers CPU budget is measured; missing salts must always fail closed.
 async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(new Uint8Array(16));const enc=new TextEncoder();const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},km,256);return{hash:b2h(new Uint8Array(bits)),salt:b2h(s)}}
-async function verifyPw(pw,h,salt){if(!h)return false;if(!salt)return pw===h;const{hash}=await hashPw(pw,salt);return hash===h}
+async function verifyPw(pw,h,salt){if(typeof pw!=='string'||typeof h!=='string'||typeof salt!=='string'||!/^[a-f0-9]{64}$/i.test(h)||!/^[a-f0-9]{32}$/i.test(salt))return false;try{const{hash}=await hashPw(pw,salt);return safeHashEqual(hash,h.toLowerCase())}catch{return false}}
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
+function safeHashEqual(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==64||b.length!==64)return false;let diff=0;for(let i=0;i<64;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0}
 async function signJWT(p,sec){const e=new TextEncoder();const h=b64u(e.encode(JSON.stringify({alg:'HS256',typ:'JWT'})));const p64=b64u(e.encode(JSON.stringify(p)));const d=h+'.'+p64;const k=await crypto.subtle.importKey('raw',e.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=await crypto.subtle.sign('HMAC',k,e.encode(d));return d+'.'+b64u(new Uint8Array(sig))}
 async function verifyJWT(t,sec){try{const ps=t.split('.');if(ps.length!==3)return null;const d=ps[0]+'.'+ps[1];const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(sec),{name:'HMAC',hash:'SHA-256'},false,['verify']);if(!await crypto.subtle.verify('HMAC',k,b64uDec(ps[2]),new TextEncoder().encode(d)))return null;const pl=JSON.parse(new TextDecoder().decode(b64uDec(ps[1])));if(!Number.isSafeInteger(pl.exp)||pl.exp<=Date.now())return null;return pl}catch{return null}}
 function b64u(b){return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
@@ -28,7 +30,7 @@ function corsHeaders(request,env){
  h.set('Access-Control-Max-Age','86400');
  let trustedPagesOrigin=false;
  try{const u=new URL(origin||'');trustedPagesOrigin=u.protocol==='https:'&&u.hostname==='nexus-isp-management.pages.dev'}catch{}
- if(origin&&(allowed.includes(origin)||trustedPagesOrigin)){h.set('Access-Control-Allow-Origin',origin);h.set('Vary','Origin')}
+ if(origin&&(allowed.includes(origin)||trustedPagesOrigin||origin==='https://localhost')){h.set('Access-Control-Allow-Origin',origin);h.set('Vary','Origin')}
  return h
 }
 function withCors(response,request,env){for(const [k,v] of corsHeaders(request,env))response.headers.set(k,v);for(const[k,v]of Object.entries(SEC_HDRS))response.headers.set(k,v);return response}
