@@ -94,3 +94,11 @@ This recheck was read-only. It did not deploy Workers, mutate D1, change secrets
 A read-only comparison of `sqlite_master` found that the production and staging databases have some differing table/index SQL definitions and four staging-only triggers (network connector/job tenant guards and two users password-hash guards). The `users` table also differs: production has `password_hash NOT NULL` and role default `staff`; staging has a nullable legacy column plus triggers rejecting empty hashes, and role default `member`. The staging password-hash trigger difference is explicitly documented by migration 0017 as a compatibility mechanism because production already has the stricter constraint. Do not attempt a blind schema rebuild or force ledger parity. A reviewed schema-by-schema parity plan remains open for the remaining DDL/index differences.
 
 This rollout changed Worker code only. It did not alter customer, invoice or payment records, activate the network connector, or send commands to any MikroTik, OLT, ONU or ACS device.
+
+
+### Final post-CI verification — 2026-11-24
+
+- PR #112's staging E2E run briefly created four synthetic `nexus-stage-%` organizations while the tests were active. The test cleanup completed; a later read-only check confirmed 0 synthetic organizations in both production and staging.
+- Final read-only D1 checks: 0 foreign-key violations and 0 duplicate case-insensitive user emails within an organization in both environments.
+- Latest Worker deployments remain production v41 and staging v41 at 100% traffic with the expected isolated D1 bindings.
+- The README/completion-report Pages deployment is being refreshed from the latest main-branch documentation commit; the application deployment from PR #112 is already successful.
