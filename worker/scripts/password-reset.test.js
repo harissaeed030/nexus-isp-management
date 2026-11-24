@@ -175,3 +175,34 @@ test("expired and malformed reset tokens cannot change a password", async () => 
     assert.equal(fixture.sqlite.prepare("SELECT password_hash FROM users WHERE id='user-1'").get().password_hash, "old-hash");
   } finally { fixture.close(); }
 });
+
+
+test("password reset throttling is isolated from login throttling", async () => {
+  const fixture = new D1Fixture(), originalFetch = globalThis.fetch;
+  let sends = 0;
+  globalThis.fetch = async () => { sends++; return new Response("{}", { status: 200 }); };
+  try {
+    const env = envFor(fixture);
+    // Simulate a full normal-login email/IP throttle window.
+    for (let i = 0; i < 10; i++) {
+      fixture.sqlite.prepare("INSERT INTO login_attempts(id,ip_address,email) VALUES(?,?,?)")
+        .run("login-" + i, "203.0.113.50", "owner@vancom.test");
+    }
+    const response = await requestPasswordReset(
+      request({ email: "owner@vancom.test" }), env, "203.0.113.50"
+    );
+    assert.equal(response.status, 200);
+    assert.equal(sends, 1, "login attempts must not block password recovery");
+    assert.equal(
+      fixture.sqlite.prepare("SELECT COUNT(*) n FROM login_attempts WHERE ip_address=? AND email=?")
+        .get("203.0.113.50", "owner@vancom.test").n,
+      10,
+      "password reset must not append to the normal login throttle bucket"
+    );
+    assert.equal(
+      fixture.sqlite.prepare("SELECT COUNT(*) n FROM login_attempts WHERE ip_address=? AND email=?")
+        .get("password-reset:203.0.113.50", "password-reset:owner@vancom.test").n,
+      1
+    );
+  } finally { globalThis.fetch = originalFetch; fixture.close(); }
+});
