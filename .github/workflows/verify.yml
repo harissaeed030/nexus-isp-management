@@ -43,6 +43,8 @@ jobs:
         run: bash worker/scripts/test-d1-users-strict-schema-parity.sh
       - name: Rehearse deployed D1 schema reconciliation migrations
         run: python3 worker/scripts/test-d1-schema-reconciliation.py
+      - name: Test network tenant and password guard migration parity
+        run: python3 worker/scripts/test-d1-network-trigger-parity.py
 
   live-smoke:
     name: Verify production and staging endpoints
