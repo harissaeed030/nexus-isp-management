@@ -14,5 +14,15 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_org_user
   ON password_reset_tokens(organization_id, user_id, expires_at);
+CREATE TRIGGER IF NOT EXISTS trg_password_reset_tokens_tenant_guard
+BEFORE INSERT ON password_reset_tokens
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM users WHERE id = NEW.user_id AND organization_id = NEW.organization_id
+  ) THEN RAISE(ABORT, 'password reset user tenant mismatch') END;
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM users WHERE id = NEW.created_by AND organization_id = NEW.organization_id
+  ) THEN RAISE(ABORT, 'password reset actor tenant mismatch') END;
+END;
 INSERT OR IGNORE INTO schema_migrations(id, name, applied_at)
 VALUES (22, '0022_password_reset_tokens', datetime('now'));
