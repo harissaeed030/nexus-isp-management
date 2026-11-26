@@ -7,6 +7,8 @@ const database = read("../src/config/database.js");
 const workerReadme = read("../../worker/README.md");
 const workerSource = read("../../worker/src/index.js");
 const d1WorkerSource = read("../../worker/src/d1-api-worker.js");
+const localAppSource = read("../src/app.js");
+const userProfilePhoneMigration = read("../migrations/018_user_profile_phone.sql");
 const dashboardSource = read("../../assets/js/app.js");
 const pagesProxy = read("../../functions/api/[[path]].js");
 const pagesRoutes = JSON.parse(read("../../_routes.json"));
@@ -69,4 +71,18 @@ test("Cloudflare Pages routes API traffic to the environment-specific Worker wit
   assert.match(pagesProxy, /incoming\.pathname\.startsWith\("\/api\/"\)/);
   assert.deepEqual(pagesRoutes, { version: 1, include: ["/api/*"], exclude: [] });
   assert.match(portalSource, /fetch\("\/api\/v1\/customer-portal"/);
+});
+
+test("Profile and password settings are wired across local SQLite and hosted D1 APIs", () => {
+  assert.ok(localAppSource.includes('app.get("/api/v1/profile",auth'));
+  assert.ok(localAppSource.includes('app.put("/api/v1/profile",auth'));
+  assert.ok(localAppSource.includes('app.put("/api/v1/profile/password",auth'));
+  assert.ok(localAppSource.includes('req.path==="/api/v1/profile/password"'));
+  assert.ok(localAppSource.includes('DELETE FROM sessions WHERE user_id=?'));
+  assert.ok(d1WorkerSource.includes("if(path==='/api/profile'&&m==='GET')"));
+  assert.ok(d1WorkerSource.includes("if(path==='/api/profile/password'&&m==='PUT')"));
+  assert.ok(dashboardSource.includes('"Change Username / Password":"profile"'));
+  assert.ok(dashboardSource.includes('call("/api/v1/profile/password"'));
+  assert.ok(userProfilePhoneMigration.includes("ALTER TABLE users ADD COLUMN phone TEXT"));
+  assert.ok(database.includes("018_user_profile_phone"));
 });
