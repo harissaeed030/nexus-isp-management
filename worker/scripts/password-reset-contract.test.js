@@ -50,5 +50,8 @@ test("runtime bootstrap and numbered D1 migration both create reset-token storag
   assert.ok(source.indexOf("['users.rebuild','SPECIAL']") < source.indexOf("['password_reset_tokens',\"CREATE TABLE"));
   assert.match(migration, /CREATE TABLE IF NOT EXISTS password_reset_tokens/);
   assert.match(migration, /token_hash TEXT NOT NULL UNIQUE/);
+  assert.ok(source.includes("trg_password_reset_tokens_tenant_guard"));
+  assert.ok(migration.includes("BEFORE INSERT ON password_reset_tokens"));
+  assert.ok(migration.includes("NEW.user_id = NEW.user_id"));
   assert.match(migration, /VALUES \(22, '0022_password_reset_tokens'/);
 });
