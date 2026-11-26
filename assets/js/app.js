@@ -16,12 +16,7 @@ async function downloadCsv(type,from="",to=""){
 }
 function resetForm(){
  let p=$("#nxAuth");if(!p){auth(false);p=$("#nxAuth")}
- const localApi=(()=>{try{return ["localhost","127.0.0.1"].includes(new URL(api).hostname)}catch{return false}})();
- if(!localApi){
-  p.innerHTML='<div class="nx-card"><h1>NEXUS</h1><p>Password reset is not enabled on the hosted API yet.</p><p>For account recovery, contact your ISP workspace owner or administrator. Never share your current password or an OTP with anyone.</p><button id="nxBack" class="nx-btn" type="button">Back to sign in</button></div>';
-  $("#nxBack").onclick=()=>auth(false);return;
- }
- p.innerHTML='<div class="nx-card"><h1>NEXUS</h1><p>Local account recovery</p><p>Owner/admin se mila hua one-time reset token yahan paste karein. Token 30 minutes mein expire hota hai aur sirf ek baar use ho sakta hai.</p><form id="nxResetForm" class="nx-form"><label>One-time reset token<input name="token" required minlength="20" maxlength="200" autocomplete="one-time-code"></label><label>New password<input name="newPassword" type="password" required minlength="10" maxlength="256" autocomplete="new-password"></label><button class="nx-btn">Update password</button></form><p id="nxResetErr" role="status" style="color:#b64e3b"></p><button id="nxBack" class="nx-btn" type="button">Back to sign in</button></div>';
+ p.innerHTML='<div class="nx-card"><h1>NEXUS</h1><p>Account recovery</p><p>Owner/admin se mila hua one-time reset token yahan paste karein. Token 30 minutes mein expire hota hai aur sirf ek baar use ho sakta hai.</p><form id="nxResetForm" class="nx-form"><label>One-time reset token<input name="token" required minlength="20" maxlength="200" autocomplete="one-time-code"></label><label>New password<input name="newPassword" type="password" required minlength="10" maxlength="256" autocomplete="new-password"></label><button class="nx-btn">Update password</button></form><p id="nxResetErr" role="status" style="color:#b64e3b"></p><button id="nxBack" class="nx-btn" type="button">Back to sign in</button></div>';
  $("#nxBack").onclick=()=>auth(false);
  $("#nxResetForm").onsubmit=async e=>{
   e.preventDefault();const body=Object.fromEntries(new FormData(e.currentTarget));
