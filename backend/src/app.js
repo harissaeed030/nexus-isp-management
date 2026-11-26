@@ -133,12 +133,17 @@ app.post("/api/v1/auth/reset-password",rateLimit({windowMs:15*60*1000,limit:10,s
   if(!row)return fail(res,400,"Reset token is invalid, used or expired.");
   const user=db.prepare("SELECT id,tenant_id FROM users WHERE id=? AND tenant_id=? AND status='active'").get(row.user_id,row.tenant_id);
   if(!user)return fail(res,400,"Reset token is invalid, used or expired.");
-  withTransaction(db,()=>{
-    db.prepare("UPDATE users SET password_hash=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),user.id,user.tenant_id);
-    db.prepare("UPDATE password_resets SET used_at=? WHERE id=?").run(new Date().toISOString(),row.id);
-    db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
-    audit({id:user.id,tenant_id:user.tenant_id},"password_reset_completed","user",user.id);
-  });
+  const now=new Date().toISOString();
+  try{
+    withTransaction(db,()=>{
+      const consumed=db.prepare("UPDATE password_resets SET used_at=? WHERE id=? AND token_hash=? AND used_at IS NULL AND expires_at>?").run(now,row.id,hashToken(b.token),now);
+      if(consumed.changes!==1){const error=new Error("Reset token is invalid, used or expired.");error.code="RESET_TOKEN_INVALID";throw error;}
+      db.prepare("UPDATE users SET password_hash=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),user.id,user.tenant_id);
+      db.prepare("DELETE FROM password_resets WHERE user_id=? AND tenant_id=? AND used_at IS NOT NULL").run(user.id,user.tenant_id);
+      db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
+      audit({id:user.id,tenant_id:user.tenant_id},"password_reset_completed","user",user.id);
+    });
+  }catch(error){if(error?.code==="RESET_TOKEN_INVALID")return fail(res,400,"Reset token is invalid, used or expired.");throw error;}
   return res.json({success:true,message:"Password updated. Please sign in with the new password."});
 });
 app.post("/api/v1/auth/logout",auth,(req,res)=>{db.prepare("DELETE FROM sessions WHERE token_hash=?").run(req.user.token_hash);res.json({success:true});});
