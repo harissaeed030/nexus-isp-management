@@ -564,8 +564,8 @@ if(path==='/api/audit-logs'&&m==='GET')return await listAudit(env,url,orgId);
 if(path==='/api/notifications'&&m==='GET')return await listNotifications(env,url,orgId,userId);
 if(path==='/api/notifications/read-all'&&m==='PUT')return await markAllNotificationsRead(env,orgId,userId);
 if(path.startsWith('/api/notifications/')&&path.endsWith('/read')&&m==='PUT')return await markNotificationRead(env,path,orgId,userId);
-if(path==='/api/tenant'&&m==='GET')return await getTenantCompat(env,orgId);
-if(path==='/api/tenant'&&m==='PUT')return await updateTenantCompat(request,env,orgId,userId,ip);
+if(path==='/api/tenant'&&m==='GET')return await getTenantCompat(env,orgId,role);
+if(path==='/api/tenant'&&m==='PUT')return await updateTenantCompat(request,env,orgId,userId,role,ip);
 if(path==='/api/settings'&&m==='GET')return await getSet(env,orgId);
 if(path==='/api/settings'&&m==='PUT')return await updSet(request,env,orgId,userId,ip);
 if(path==='/api/profile'&&m==='GET')return await getProf(env,auth);
@@ -1288,14 +1288,16 @@ async function updSet(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof
 async function getProf(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=?').bind(auth.userId).first();return json(u||{error:'Not found'},u?200:404)}
 async function updProf(r,env,auth,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Name must be 1-120 characters'},400);if(b.phone!==undefined&&String(b.phone).length>50)return json({error:'Phone is too long'},400);const f=['name','phone'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(auth.userId);await env.DB.prepare('UPDATE users SET '+u.join(', ')+' WHERE id=?').bind(...p).run();return json(await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=?').bind(auth.userId).first())}
 async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords required'},400);if(b.newPassword.length<8)return json({error:'Password must be at least 8 characters'},400);const u=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.userId).first();if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt))return json({error:'Current password incorrect'},401);const{hash,salt}=await hashPw(b.newPassword);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now')WHERE id=?").bind(hash,salt,auth.userId).run();return json({success:true,message:'Password changed'})}
-async function getTenantCompat(env,oid){
+async function getTenantCompat(env,oid,actorRole){
+ if(actorRole!=='owner')return json({error:'Only the workspace owner can view company settings'},403);
  const org=await env.DB.prepare('SELECT id,name,slug,plan,created_at,address,phone FROM organizations WHERE id=?').bind(oid).first();
  if(!org)return json({error:'Workspace not found'},404);
  const rows=await env.DB.prepare("SELECT key,value FROM settings WHERE organization_id=? AND key IN ('support_phone','brand_color')").bind(oid).all();
  const values=Object.fromEntries((rows.results||[]).map(row=>[row.key,row.value]));
  return json({success:true,data:{...org,support_phone:values.support_phone??org.phone??'',brand_color:values.brand_color||'#16a34a'}});
 }
-async function updateTenantCompat(request,env,oid,uid,ip){
+async function updateTenantCompat(request,env,oid,uid,actorRole,ip){
+ if(actorRole!=='owner')return json({error:'Only the workspace owner can update company settings'},403);
  const body=await parseBody(request);
  if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'Invalid body'},400);
  const allowed=['name','supportPhone','address','brandColor'];
@@ -1322,7 +1324,7 @@ async function updateTenantCompat(request,env,oid,uid,ip){
  if(body.brandColor!==undefined)settings.push(['brand_color',body.brandColor]);
  for(const [key,value] of settings)await env.DB.prepare("INSERT INTO settings(id,organization_id,key,value) VALUES(?,?,?,?) ON CONFLICT(organization_id,key) DO UPDATE SET value=excluded.value,updated_at=datetime('now')").bind(uuid(),oid,key,value).run();
  await audit(env,oid,uid,'update_tenant_settings','Workspace settings updated',ip);
- return await getTenantCompat(env,oid);
+ return await getTenantCompat(env,oid,actorRole);
 }
 
 async function getCo(env,oid){const o=await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first();return json(o||{error:'Not found'},o?200:404)}
