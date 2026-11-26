@@ -98,5 +98,9 @@ test("Local SQLite password reset consumes each token atomically before changing
   assert.match(handler, /consumed\.changes!==1/);
   assert.ok(handler.indexOf("UPDATE password_resets SET used_at") < handler.indexOf("UPDATE users SET password_hash"));
   assert.match(handler, /RESET_TOKEN_INVALID/);
-  assert.match(handler, /target\.role==="admin"&&req\.user\.role!=="owner"/);
+  const issueStart = localAppSource.indexOf('app.post("/api/v1/staff/:id/password-reset"');
+  const issueEnd = localAppSource.indexOf('app.post("/api/v1/auth/reset-password"', issueStart);
+  const issueHandler = localAppSource.slice(issueStart, issueEnd);
+  assert.ok(issueStart >= 0 && issueEnd > issueStart);
+  assert.match(issueHandler, /target\.role==="admin"&&req\.user\.role!=="owner"/);
 });
