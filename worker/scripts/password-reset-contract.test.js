@@ -33,6 +33,9 @@ test("password reset redemption is public only with a high-entropy one-time toke
   assert.match(source, /used_at IS NULL AND expires_at>\?/);
   assert.match(source, /password_hash=\?,password_salt=\?,token_version=COALESCE\(token_version,0\)\+1/);
   assert.match(source, /Reset token is invalid, used or expired/);
+  assert.match(source, /loginRateLimited\(env,ip,rateKey\)/);
+  assert.match(source, /Too many password reset attempts/);
+  assert.match(source, /recordLoginFailure\(env,ip,rateKey\)/);
 });
 
 test("reset token redemption consumes the token before changing the password", () => {
