@@ -139,7 +139,6 @@ app.post("/api/v1/auth/reset-password",rateLimit({windowMs:15*60*1000,limit:10,s
       const consumed=db.prepare("UPDATE password_resets SET used_at=? WHERE id=? AND token_hash=? AND used_at IS NULL AND expires_at>?").run(now,row.id,hashToken(b.token),now);
       if(consumed.changes!==1){const error=new Error("Reset token is invalid, used or expired.");error.code="RESET_TOKEN_INVALID";throw error;}
       db.prepare("UPDATE users SET password_hash=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),user.id,user.tenant_id);
-      db.prepare("DELETE FROM password_resets WHERE user_id=? AND tenant_id=? AND used_at IS NOT NULL").run(user.id,user.tenant_id);
       db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
       audit({id:user.id,tenant_id:user.tenant_id},"password_reset_completed","user",user.id);
     });
