@@ -118,6 +118,7 @@ app.post("/api/v1/staff/:id/password-reset",auth,(req,res)=>{
   if(!target)return fail(res,404,"Staff member not found.");
   if(target.status!=="active")return fail(res,400,"Staff account is not active.");
   if(target.role==="owner"&&req.user.role!=="owner")return fail(res,403,"Only the owner can reset the owner password.");
+  if(target.role==="admin"&&req.user.role!=="owner")return fail(res,403,"Only the owner can reset administrator passwords.");
   const token=randomBytes(32).toString("base64url"),expires=new Date(Date.now()+30*60*1000).toISOString();
   withTransaction(db,()=>{
     db.prepare("UPDATE password_resets SET used_at=? WHERE user_id=? AND tenant_id=? AND used_at IS NULL").run(new Date().toISOString(),target.id,req.user.tenant_id);
