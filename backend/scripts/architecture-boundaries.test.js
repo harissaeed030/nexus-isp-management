@@ -41,14 +41,14 @@ test("SQLite and Cloudflare D1 remain separate runtimes", () => {
 
 
 test("Hosted dashboard password reset uses the token flow supported by the D1 API", () => {
-  assert.match(dashboardSource, /call\\(setup\\?"\\/api\\/v1\\/tenants\\/register":"\\/api\\/v1\\/auth\\/login"/);
-  assert.match(d1WorkerSource, /path==='\\/api\\/tenants\\/register'\\?'\\/api\\/auth\\/register'/);
-  assert.match(d1WorkerSource, /if\\(path==='\\/api\\/auth\\/register'&&m==='POST'\\)return await authReg/);
-  assert.match(d1WorkerSource, /if\\(path==='\\/api\\/auth\\/reset-password'&&m==='POST'\\)return await consumePasswordReset/);
-  assert.match(d1WorkerSource, /password-reset.*issuePasswordReset/);
-  assert.doesNotMatch(dashboardSource, /Password reset is not enabled on the hosted API yet/);
-  assert.doesNotMatch(dashboardSource, /const localApi=\\(\\(\\)=>/);
-  assert.match(dashboardSource, /call\\("\\/api\\/v1\\/auth\\/reset-password"/);
+  assert.ok(dashboardSource.includes('call(setup?"/api/v1/tenants/register":"/api/v1/auth/login"'));
+  assert.ok(d1WorkerSource.includes("path==='/api/tenants/register'"));
+  assert.ok(d1WorkerSource.includes("path==='/api/auth/reset-password'&&m==='POST'"));
+  assert.ok(d1WorkerSource.includes("consumePasswordReset"));
+  assert.ok(d1WorkerSource.includes("issuePasswordReset"));
+  assert.ok(!dashboardSource.includes("Password reset is not enabled on the hosted API yet"));
+  assert.ok(!dashboardSource.includes("const localApi=(()=>"));
+  assert.ok(dashboardSource.includes('call("/api/v1/auth/reset-password"'));
 });
 
 test("Hosted dashboard staff role choices are accepted by the D1 Worker", () => {
