@@ -45,6 +45,7 @@ test("reset token redemption consumes the token before changing the password", (
 test("runtime bootstrap and numbered D1 migration both create reset-token storage", () => {
   assert.match(source, /CREATE TABLE IF NOT EXISTS password_reset_tokens/);
   assert.match(source, /idx_password_reset_tokens_org_user/);
+  assert.ok(source.indexOf("['users.rebuild','SPECIAL']") < source.indexOf("['password_reset_tokens',\"CREATE TABLE"));
   assert.match(migration, /CREATE TABLE IF NOT EXISTS password_reset_tokens/);
   assert.match(migration, /token_hash TEXT NOT NULL UNIQUE/);
   assert.match(migration, /VALUES \(22, '0022_password_reset_tokens'/);
