@@ -5,7 +5,7 @@ import { hashResetToken } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
 const dashboard = await readFile(new URL("../../assets/js/app.js", import.meta.url), "utf8");
-const migration = await readFile(new URL("../../cloudflare/d1/migrations/0022_password_reset_tokens.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../../cloudflare/d1/migrations/0026_password_reset_tokens.sql", import.meta.url), "utf8");
 
 test("reset tokens are stored as deterministic SHA-256 hashes, never plaintext", async () => {
   const first = await hashResetToken("a-long-one-time-reset-token");
@@ -56,5 +56,5 @@ test("runtime bootstrap and numbered D1 migration both create reset-token storag
   assert.ok(source.includes("trg_password_reset_tokens_tenant_guard"));
   assert.ok(migration.includes("BEFORE INSERT ON password_reset_tokens"));
   assert.ok(migration.includes("WHERE id = NEW.user_id AND organization_id = NEW.organization_id"));
-  assert.match(migration, /VALUES \(22, '0022_password_reset_tokens'/);
+  assert.match(migration, /VALUES \(26, '0026_password_reset_tokens'/);
 });
