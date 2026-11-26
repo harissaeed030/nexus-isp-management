@@ -99,7 +99,7 @@ try {
     encoding: "utf8"
   });
   assert.notEqual(invalidProduction.status, 0, "Unsafe production defaults must be rejected.");
-  assert.match(invalidProduction.stderr, /HTTPS origins only/);
+  assert.match(invalidProduction.stderr, /ROUTER_CREDENTIAL_KEY must be configured/);
   const validProduction = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
     cwd: process.cwd(),
     env: { ...process.env, NODE_ENV: "production", CORS_ORIGINS: "https://app.example.test", SQLITE_PATH: "/tmp/nexus.sqlite", SQLITE_BACKUP_DIR: "/tmp/nexus-backups", ROUTER_CREDENTIAL_KEY: "33".repeat(32) },
