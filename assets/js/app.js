@@ -6,7 +6,7 @@ const st=document.createElement("style");st.textContent=".nx-auth{position:fixed
 function msg(t){if(toast){toast.textContent=t;toast.classList.add("show");setTimeout(()=>toast.classList.remove("show"),2400)}}
 async function call(path,opt={}){let h={"Content-Type":"application/json",...(opt.headers||{})};if(token)h.Authorization="Bearer "+token;let r;try{r=await fetch(api.replace(/\/$/,"")+path,{...opt,headers:h})}catch{throw Error("API connect nahi hua. Backend aur API address check karein.")}let d=await r.json().catch(()=>({error:"Invalid server response"}));if(!r.ok||d.success===false)throw Error(d.error||"Request failed");return d}
 
-async function setWorkspaceIdentity(){try{const d=await call("/api/v1/auth/me");const workspace=$(".workspace b"),profile=$(".profile b");if(workspace)workspace.textContent=d.tenant.name;if(profile)profile.textContent=d.user.fullName}catch{}}
+async function setWorkspaceIdentity(){try{const d=await call("/api/v1/auth/me");const workspace=$(".workspace b"),profile=$(".profile b");if(workspace)workspace.textContent=d.tenant.name;if(profile)profile.textContent=d.user.fullName||d.user.name||d.user.email||"Workspace user"}catch{}}
 async function downloadCsv(type,from="",to=""){
  const params=new URLSearchParams();if(from)params.set("from",from);if(to)params.set("to",to);const query=params.toString();
  const base=api.replace(/\/$/,"");
