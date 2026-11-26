@@ -56,7 +56,7 @@ app.put("/api/v1/profile",auth,(req,res)=>{
   const b=req.body||{},name=b.name===undefined?req.user.full_name:(typeof b.name==="string"?b.name.trim():""),phone=b.phone===undefined?(req.user.phone||""):(typeof b.phone==="string"?b.phone.trim():"");
   if(!name||name.length>120)return fail(res,400,"Name must be 1–120 characters.");
   if(phone.length>50)return fail(res,400,"Phone is too long.");
-  db.prepare("UPDATE users SET full_name=?,phone=?,updated_at=? WHERE id=? AND tenant_id=?").run(name,phone||null,new Date().toISOString(),req.user.id,req.user.tenant_id);
+  db.prepare("UPDATE users SET full_name=?,phone=? WHERE id=? AND tenant_id=?").run(name,phone||null,req.user.id,req.user.tenant_id);
   audit(req.user,"profile_updated","user",req.user.id);
   return res.json({id:req.user.id,email:req.user.email,name,phone,role:req.user.role,status:req.user.status});
 });
@@ -65,7 +65,7 @@ app.put("/api/v1/profile/password",auth,rateLimit({windowMs:15*60*1000,limit:5,s
   if(typeof b.currentPassword!=="string"||typeof b.newPassword!=="string"||b.newPassword.length<10||b.newPassword.length>256)return fail(res,400,"Current password and a new password of 10–256 characters are required.");
   if(!verifyPassword(b.currentPassword,req.user.password_hash))return fail(res,401,"Current password is incorrect.");
   withTransaction(db,()=>{
-    db.prepare("UPDATE users SET password_hash=?,updated_at=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),new Date().toISOString(),req.user.id,req.user.tenant_id);
+    db.prepare("UPDATE users SET password_hash=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),req.user.id,req.user.tenant_id);
     db.prepare("DELETE FROM sessions WHERE user_id=?").run(req.user.id);
     audit(req.user,"password_changed","user",req.user.id);
   });
