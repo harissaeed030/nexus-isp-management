@@ -30,6 +30,7 @@ async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(n
 async function verifyPw(pw,h,salt){if(typeof pw!=='string'||typeof h!=='string'||typeof salt!=='string')return false;if(!/^[a-f0-9]{64}$/i.test(h)||!/^[a-f0-9]{32}$/i.test(salt))return false;const{hash}=await hashPw(pw,salt);let diff=0;const expected=h.toLowerCase();for(let i=0;i<64;i++)diff|=hash.charCodeAt(i)^expected.charCodeAt(i);return diff===0}
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
+export async function hashResetToken(token){const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));return b2h(new Uint8Array(digest))}
 async function signJWT(p,sec){const e=new TextEncoder();const h=b64u(e.encode(JSON.stringify({alg:'HS256',typ:'JWT'})));const p64=b64u(e.encode(JSON.stringify(p)));const d=h+'.'+p64;const k=await crypto.subtle.importKey('raw',e.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=await crypto.subtle.sign('HMAC',k,e.encode(d));return d+'.'+b64u(new Uint8Array(sig))}
 async function verifyJWT(t,sec){try{const ps=t.split('.');if(ps.length!==3)return null;const d=ps[0]+'.'+ps[1];const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(sec),{name:'HMAC',hash:'SHA-256'},false,['verify']);if(!await crypto.subtle.verify('HMAC',k,b64uDec(ps[2]),new TextEncoder().encode(d)))return null;const pl=JSON.parse(new TextDecoder().decode(b64uDec(ps[1])));if(!Number.isSafeInteger(pl.exp)||pl.exp<=Date.now())return null;return pl}catch{return null}}
 function b64u(b){return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
@@ -245,6 +246,8 @@ async function runMigrations(env){
  ['invoices.number_index','CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_org_number ON invoices(organization_id,invoice_number)'],
  ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"],
 
+ ['password_reset_tokens',"CREATE TABLE IF NOT EXISTS password_reset_tokens(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,used_at TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"],
+ ['password_reset_tokens.index',"CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_org_user ON password_reset_tokens(organization_id,user_id,expires_at)"],
  ['users.rebuild','SPECIAL'],
  ['ops.geo_locations',"CREATE TABLE IF NOT EXISTS geo_locations(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,parent_id TEXT,type TEXT NOT NULL CHECK(type IN('country','city','locality','street')),name TEXT NOT NULL,postal_code TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(parent_id) REFERENCES geo_locations(id) ON DELETE SET NULL)"],
  ['ops.coverage_areas',"CREATE TABLE IF NOT EXISTS coverage_areas(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,name TEXT NOT NULL,code TEXT,description TEXT,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN('active','inactive')),created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,name),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"],
@@ -455,6 +458,7 @@ async function handleAiChat(request,env,userId){
 async function handleApi(request,env,url,path,m){if(path.startsWith('/api/customer-portal/')){path='/api/portal'+path.slice('/api/customer-portal'.length);if(path==='/api/portal/login')path='/api/portal/auth/login';if(path==='/api/portal/logout')path='/api/portal/auth/logout';if(path==='/api/portal/complaints')path='/api/portal/tickets';}const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
+if(path==='/api/auth/reset-password'&&m==='POST')return await consumePasswordReset(request,env,ip);
 if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
@@ -503,6 +507,7 @@ if(path==='/api/complaints'&&m==='POST'){const body=normalizeTicketPayload(await
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
+if(path.match(/^\/api\/staff\/[^/]+\/password-reset$/)&&m==='POST')return await issuePasswordReset(env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
 if(path.match(/^\/api\/staff\/[^/]+\/permissions$/)&&['GET','PUT'].includes(m))return await staffPermissions(env,path,orgId,role,userId,request,ip);
@@ -1016,6 +1021,43 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
 }
 async function delStaff(env,path,oid,role,uid,ip){if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);const id=path.split('/')[3];if(id===uid)return json({error:'Cannot delete self'},400);const target=await env.DB.prepare('SELECT id,role FROM users WHERE id=? AND organization_id=?').bind(id,oid).first();if(!target)return json({error:'Not found'},404);if(target.role==='owner')return json({error:'The owner account cannot be deleted from staff management'},403);if(role!=='owner'&&target.role==='admin')return json({error:'Only the owner can delete administrators'},403);await env.DB.prepare('DELETE FROM users WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_staff','Staff:'+id,ip);return json({success:true})}
 
+
+async function issuePasswordReset(env,path,orgId,actorId,actorRole,ip){
+ if(!['owner','admin'].includes(actorRole))return json({error:'Owner or admin access required'},403);
+ const targetId=path.split('/')[3];
+ const target=await env.DB.prepare('SELECT id,role,status FROM users WHERE id=? AND organization_id=?').bind(targetId,orgId).first();
+ if(!target)return json({error:'Staff member not found'},404);
+ if(target.status!=='active')return json({error:'Staff account is not active'},400);
+ if(target.role==='owner'&&actorRole!=='owner')return json({error:'Only the owner can reset the owner password'},403);
+ if(actorRole!=='owner'&&target.role==='admin')return json({error:'Only the owner can reset administrator passwords'},403);
+ const token=b64u(crypto.getRandomValues(new Uint8Array(32)));
+ const tokenHash=await hashResetToken(token);
+ const now=new Date().toISOString(),expiresAt=new Date(Date.now()+30*60*1000).toISOString();
+ await env.DB.batch([
+  env.DB.prepare('UPDATE password_reset_tokens SET used_at=? WHERE organization_id=? AND user_id=? AND used_at IS NULL').bind(now,orgId,targetId),
+  env.DB.prepare('INSERT INTO password_reset_tokens(id,organization_id,user_id,token_hash,expires_at,created_by) VALUES(?,?,?,?,?,?)').bind(uuid(),orgId,targetId,tokenHash,expiresAt,actorId)
+ ]);
+ await audit(env,orgId,actorId,'password_reset_issued','User:'+targetId,ip);
+ return json({success:true,resetToken:token,expiresAt,note:'Give this one-time token to the staff member privately. It works once and expires in 30 minutes.'},201);
+}
+async function consumePasswordReset(request,env,ip){
+ const body=await parseBody(request);
+ if(!body||typeof body.token!=='string'||body.token.length<20||body.token.length>200||typeof body.newPassword!=='string'||body.newPassword.length<10||body.newPassword.length>256)
+  return json({error:'A valid reset token and a new password of 10–256 characters are required'},400);
+ const now=new Date().toISOString(),tokenHash=await hashResetToken(body.token);
+ const reset=await env.DB.prepare('SELECT id,organization_id,user_id FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>?').bind(tokenHash,now).first();
+ if(!reset)return json({error:'Reset token is invalid, used or expired'},400);
+ const user=await env.DB.prepare("SELECT id FROM users WHERE id=? AND organization_id=? AND status='active'").bind(reset.user_id,reset.organization_id).first();
+ if(!user)return json({error:'Reset token is invalid, used or expired'},400);
+ const credentials=await hashPw(body.newPassword);
+ const consumed=await env.DB.prepare('UPDATE password_reset_tokens SET used_at=? WHERE id=? AND token_hash=? AND used_at IS NULL AND expires_at>?').bind(now,reset.id,tokenHash,now).run();
+ if(Number(consumed?.meta?.changes||0)!==1)return json({error:'Reset token is invalid, used or expired'},400);
+ const updated=await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now') WHERE id=? AND organization_id=? AND status='active'").bind(credentials.hash,credentials.salt,reset.user_id,reset.organization_id).run();
+ if(Number(updated?.meta?.changes||0)!==1)return json({error:'Reset token is invalid, used or expired'},400);
+ await env.DB.prepare('UPDATE password_reset_tokens SET used_at=? WHERE organization_id=? AND user_id=? AND used_at IS NULL').bind(now,reset.organization_id,reset.user_id).run();
+ await audit(env,reset.organization_id,reset.user_id,'password_reset_completed','Password reset completed',ip);
+ return json({success:true,message:'Password updated. Please sign in with the new password.'});
+}
 
 async function getSub(env,path,oid){
  const id=path.split('/')[3],row=await env.DB.prepare('SELECT s.*,c.first_name,c.last_name,c.customer_code,c.account_number,p.name package_name,p.price,p.speed_mbps,p.speed_down,p.speed_up FROM subscriptions s LEFT JOIN customers c ON c.id=s.customer_id AND c.organization_id=s.organization_id LEFT JOIN packages p ON p.id=s.package_id AND p.organization_id=s.organization_id WHERE s.id=? AND s.organization_id=?').bind(id,oid).first();
