@@ -87,3 +87,15 @@ test("Profile and password settings are wired across local SQLite and hosted D1 
   assert.ok(userProfilePhoneMigration.includes("ALTER TABLE users ADD COLUMN phone TEXT"));
   assert.ok(database.includes("018_user_profile_phone"));
 });
+
+test("Local SQLite password reset consumes each token atomically before changing credentials", () => {
+  const start = localAppSource.indexOf('app.post("/api/v1/auth/reset-password"');
+  const end = localAppSource.indexOf('app.post("/api/v1/auth/logout"', start);
+  const handler = localAppSource.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(handler, /withTransaction\(db,\(\)=>/);
+  assert.match(handler, /UPDATE password_resets SET used_at=\? WHERE id=\? AND token_hash=\? AND used_at IS NULL AND expires_at>\?/);
+  assert.match(handler, /consumed\.changes!==1/);
+  assert.ok(handler.indexOf("UPDATE password_resets SET used_at") < handler.indexOf("UPDATE users SET password_hash"));
+  assert.match(handler, /RESET_TOKEN_INVALID/);
+});
