@@ -1044,6 +1044,9 @@ async function issuePasswordReset(env,path,orgId,actorId,actorRole,ip){
  return json({success:true,resetToken:token,expiresAt,note:'Give this one-time token to the staff member privately. It works once and expires in 30 minutes.'},201);
 }
 async function consumePasswordReset(request,env,ip){
+ const rateKey='password-reset:'+ip;
+ if(await loginRateLimited(env,ip,rateKey))return json({error:'Too many password reset attempts. Try again in 15 minutes.'},429);
+ await recordLoginFailure(env,ip,rateKey);
  const body=await parseBody(request);
  if(!body||typeof body.token!=='string'||body.token.length<20||body.token.length>200||typeof body.newPassword!=='string'||body.newPassword.length<10||body.newPassword.length>256)
   return json({error:'A valid reset token and a new password of 10–256 characters are required'},400);
@@ -1059,6 +1062,7 @@ async function consumePasswordReset(request,env,ip){
  if(Number(updated?.meta?.changes||0)!==1)return json({error:'Reset token is invalid, used or expired'},400);
  await env.DB.prepare('UPDATE password_reset_tokens SET used_at=? WHERE organization_id=? AND user_id=? AND used_at IS NULL').bind(now,reset.organization_id,reset.user_id).run();
  await audit(env,reset.organization_id,reset.user_id,'password_reset_completed','Password reset completed',ip);
+ await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
  return json({success:true,message:'Password updated. Please sign in with the new password.'});
 }
 
