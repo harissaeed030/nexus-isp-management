@@ -21,6 +21,8 @@ test("staff password reset issuance is an authenticated staff-management route",
   assert.match(source, /Only the owner can reset administrator passwords/);
   assert.match(source, /expiresAt=new Date\(Date\.now\(\)\+30\*60\*1000\)/);
   assert.match(dashboard, /\/api\/v1\/staff\/[\s\S]*?password-reset/);
+  assert.doesNotMatch(dashboard, /Password reset is not enabled on the hosted API yet/);
+  assert.match(dashboard, /<p>Account recovery<\\/p>/);
 });
 
 test("password reset redemption is public only with a high-entropy one-time token", () => {
