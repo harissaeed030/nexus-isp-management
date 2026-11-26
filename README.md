@@ -14,10 +14,14 @@ NEXUS is a multi-tenant ISP management system covering organization/user access,
 
 The production and staging Workers are separate and each binds only to its matching D1 database. Do not point staging at production data.
 
-## Verified deployment snapshot — 24 November 2026
+## Release status — 27 November 2026
 
-- Production Worker `nexus-saas-api`: version 41 deployed at 100% traffic; bound to production D1 database `nexus-saas-db`.
-- Staging Worker `nexus-saas-api-staging`: version 41 deployed at 100% traffic; bound only to staging D1 database `nexus-saas-staging-db`.
+**CONDITIONAL GO — HOSTED CORE ONLY.** NEXUS is deployed for controlled evaluation/pilot use; this is not full ISP production certification. Backup restore, schema-history reconciliation, production email sender configuration, independent security review, Android acceptance, payment-gateway verification, and live MikroTik/OLT/ONU/TR-069 lab tests remain outstanding. Keep `NETWORK_CONNECTOR_ENABLED=false`. Do not rely on NEXUS as the sole live billing/system-of-record until those gates pass.
+
+## Verified deployment snapshot — 27 November 2026
+
+- Production Worker `nexus-saas-api` is present and bound to production D1 database `nexus-saas-db` (version/traffic state should be rechecked before the next release).
+- Staging Worker `nexus-saas-api-staging` is present and bound only to staging D1 database `nexus-saas-staging-db` (version/traffic state should be rechecked before the next release).
 - Existing Worker secret-text, D1 and plain-text bindings were preserved through both code deployments. Logs and traces remain enabled.
 - Hosted owner/staff password recovery (PR #109) and the follow-up rate-limit isolation fix (PR #112) are merged and deployed to both Workers. Password-reset email delivery remains disabled until a valid Resend API key and verified sender address are configured; no secrets are stored in Git.
 - Cloudflare Pages production deployment for the latest code and documentation updates is successful.
