@@ -82,6 +82,7 @@ test("Profile and password settings are wired across local SQLite and hosted D1 
   assert.ok(d1WorkerSource.includes("if(path==='/api/profile'&&m==='GET')"));
   assert.ok(d1WorkerSource.includes("if(path==='/api/profile/password'&&m==='PUT')"));
   assert.ok(dashboardSource.includes('"Change Username / Password":"profile"'));
+  assert.ok(dashboardSource.includes('d.user.fullName||d.user.name||d.user.email||"Workspace user"'));
   assert.ok(dashboardSource.includes('call("/api/v1/profile/password"'));
   assert.ok(userProfilePhoneMigration.includes("ALTER TABLE users ADD COLUMN phone TEXT"));
   assert.ok(database.includes("018_user_profile_phone"));
