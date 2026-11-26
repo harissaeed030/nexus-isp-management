@@ -15,7 +15,7 @@
 
 ## Important limitations and findings
 
-- The security test wiring change must pass the PR CI run before it is considered accepted.
+- The security test wiring change was merged to `main` in PR #114 after the final PR-head checks passed: backend verification, security regression suite, database hardening, production/staging endpoint smoke, staging tenant/customer portal E2E, frontend syntax, Cloudflare Pages, and SQLite-D1 contract checks.
 - A static review and self-run tests cannot establish the absence of vulnerabilities. No authenticated external penetration test was performed.
 - GitHub code-scanning, Dependabot-alert, and secret-scanning alert APIs were not accessible through the available repository read interface in this audit; their alert state is therefore **unknown**, not "zero alerts".
 - Cloudflare R2 is not enabled for this account. The repository has local SQLite backup/restore scripts, but no Cloudflare R2 bucket or remote backup object was available to validate.
@@ -51,4 +51,4 @@
 - [ ] Critical/high findings are fixed and retested.
 - [ ] Production recovery procedure is approved separately.
 
-**Conclusion:** The safe code-side improvement is prepared in this PR. R2 restore and independent security sign-off remain blocked by account setup and an external reviewer; neither is represented as complete.
+**Conclusion:** The safe code-side improvement is merged to `main` (merge commit `384446f6541e4d24c1e53029ca945b677065a41f`). R2 restore and independent security sign-off remain blocked by account setup and an external reviewer; neither is represented as complete.
