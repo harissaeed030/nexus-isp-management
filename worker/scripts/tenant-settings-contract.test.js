@@ -10,6 +10,8 @@ test("hosted D1 exposes the tenant compatibility routes used by company settings
   assert.ok(source.includes("if(path==='/api/tenant'&&m==='PUT')return await updateTenantCompat"));
   assert.ok(source.includes("async function getTenantCompat"));
   assert.ok(source.includes("async function updateTenantCompat"));
+  assert.ok(source.includes("Only the workspace owner can view company settings"));
+  assert.ok(source.includes("Only the workspace owner can update company settings"));
   assert.ok(dashboard.includes('call("/api/v1/tenant")'));
   assert.ok(dashboard.includes('call("/api/v1/tenant",{method:"PATCH"'));
 });
