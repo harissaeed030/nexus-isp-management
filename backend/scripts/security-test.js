@@ -95,11 +95,18 @@ try {
   assert.equal(throttled.status, 429, "Authentication limiter must block the 11th login attempt.");
   const invalidProduction = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
     cwd: process.cwd(),
-    env: { ...process.env, NODE_ENV: "production", CORS_ORIGINS: "http://localhost", SQLITE_PATH: "./data/nexus.sqlite", SQLITE_BACKUP_DIR: "./backups" },
+    env: { ...process.env, NODE_ENV: "production", CORS_ORIGINS: "http://localhost", SQLITE_PATH: "./data/nexus.sqlite", SQLITE_BACKUP_DIR: "./backups", ROUTER_CREDENTIAL_KEY: "33".repeat(32) },
     encoding: "utf8"
   });
-  assert.notEqual(invalidProduction.status, 0, "Unsafe production defaults must be rejected.");
-  assert.match(invalidProduction.stderr, /ROUTER_CREDENTIAL_KEY must be configured/);
+  assert.notEqual(invalidProduction.status, 0, "Unsafe production CORS origins must be rejected.");
+  assert.match(invalidProduction.stderr, /CORS_ORIGINS must contain HTTPS origins only/);
+  const invalidRouterKey = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
+    cwd: process.cwd(),
+    env: { ...process.env, NODE_ENV: "production", CORS_ORIGINS: "https://app.example.test", SQLITE_PATH: "/tmp/nexus.sqlite", SQLITE_BACKUP_DIR: "/tmp/nexus-backups", ROUTER_CREDENTIAL_KEY: "" },
+    encoding: "utf8"
+  });
+  assert.notEqual(invalidRouterKey.status, 0, "Missing production router credential keys must be rejected.");
+  assert.match(invalidRouterKey.stderr, /ROUTER_CREDENTIAL_KEY must be configured/);
   const validProduction = spawnSync(process.execPath, ["--input-type=module", "-e", 'import("./src/config/env.js")'], {
     cwd: process.cwd(),
     env: { ...process.env, NODE_ENV: "production", CORS_ORIGINS: "https://app.example.test", SQLITE_PATH: "/tmp/nexus.sqlite", SQLITE_BACKUP_DIR: "/tmp/nexus-backups", ROUTER_CREDENTIAL_KEY: "33".repeat(32) },
