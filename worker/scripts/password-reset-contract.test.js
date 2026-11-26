@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import { hashResetToken } from "../src/d1-api-worker.js";
 
 const source = await readFile(new URL("../src/d1-api-worker.js", import.meta.url), "utf8");
@@ -57,4 +58,27 @@ test("runtime bootstrap and numbered D1 migration both create reset-token storag
   assert.ok(migration.includes("BEFORE INSERT ON password_reset_tokens"));
   assert.ok(migration.includes("WHERE id = NEW.user_id AND organization_id = NEW.organization_id"));
   assert.match(migration, /VALUES \(26, '0026_password_reset_tokens'/);
+});
+
+test("D1 migration 0026 applies cleanly without overwriting deployed migration 0022", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys=ON");
+    db.exec("CREATE TABLE organizations(id TEXT PRIMARY KEY)");
+    db.exec("CREATE TABLE users(id TEXT PRIMARY KEY, organization_id TEXT NOT NULL, FOREIGN KEY(organization_id) REFERENCES organizations(id))");
+    db.exec("CREATE TABLE schema_migrations(id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)");
+    db.prepare("INSERT INTO schema_migrations(id,name,applied_at) VALUES(22,'0022_payment_promises','2026-11-24'),(25,'0025_payment_promises_updated_by_guard','2026-11-24'),(100,'sync_ledger_and_failures_tables','2026-11-16')").run();
+    db.exec(migration);
+    const versions = db.prepare("SELECT id,name FROM schema_migrations ORDER BY id").all();
+    assert.ok(versions.some(row => row.id === 22 && row.name === "0022_payment_promises"));
+    assert.ok(versions.some(row => row.id === 26 && row.name === "0026_password_reset_tokens"));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='password_reset_tokens'").get().n, 1);
+    db.exec("INSERT INTO organizations(id) VALUES('org-a'),('org-b')");
+    db.exec("INSERT INTO users(id,organization_id) VALUES('owner-a','org-a'),('owner-b','org-b')");
+    assert.throws(() => db.prepare("INSERT INTO password_reset_tokens(id,organization_id,user_id,token_hash,expires_at,created_by) VALUES('bad','org-a','owner-b','hash-bad','2099-01-01','owner-a')").run());
+    db.prepare("INSERT INTO password_reset_tokens(id,organization_id,user_id,token_hash,expires_at,created_by) VALUES('good','org-a','owner-a','hash-good','2099-01-01','owner-a')").run();
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM password_reset_tokens").get().n, 1);
+  } finally {
+    db.close();
+  }
 });
