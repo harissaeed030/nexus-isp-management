@@ -1,8 +1,38 @@
-# NEXUS completion status — 2026-11-24
+# NEXUS completion status — 2026-11-27
 
-## Current decision
+## Current release decision
 
-**Core hosted software and D1 reconciliation: verified. Full ISP production acceptance: still NO-GO.**
+**CONDITIONAL GO — HOSTED CORE ONLY.** The previous 2026-11-24 blanket “Full ISP production acceptance: NO-GO” wording below is historical and is superseded by this scoped decision. This is a documentation/status clarification, not a declaration that every ISP operation is production-certified.
+
+### What is approved by this status
+- Hosted frontend deployment exists at https://nexus-isp-management.pages.dev.
+- Production Worker `nexus-saas-api` and staging Worker `nexus-saas-api-staging` exist with separate production/staging D1 bindings.
+- Production and staging both retain `NETWORK_CONNECTOR_ENABLED=false`.
+- The latest read-only audit found production records present (1 organization, 1 user, 5 customers, 1 invoice, 1 payment); staging has no live tenant/customer/billing records.
+- The latest Pages deployment observed in the 2026-11-27 audit was successful for main commit `1bd5bb84c2241e497f31a7b4d8e497cfb1a4543e`.
+
+### Scope limitations — not certified for unattended live ISP operations
+1. **Backup/restore:** isolated D1 restore and row/schema comparison are not verified. R2 bucket access was not enabled in the audit session.
+2. **Schema history:** production/staging migration ledger and some DDL definitions differ. Do not fabricate ledger rows, replay historical migrations, or rebuild tables without a reviewed forward-only plan and verified backup.
+3. **Password-reset email:** production Worker is missing `RESEND_API_KEY` and `PASSWORD_RESET_FROM`; email delivery is not configured. Add valid provider credentials and a verified sender through Cloudflare Worker secrets before advertising email recovery.
+4. **Security:** independent security review remains outstanding.
+5. **Client acceptance:** physical Android Chrome/WebView testing with real owner/staff/customer accounts remains outstanding.
+6. **Payments:** a live payment gateway has not been configured and end-to-end verified.
+7. **Network integrations:** MikroTik live connector, HSGQ-G04R/Huawei ONU control, and GenieACS/TR-069 inform cycle remain unverified. The network connector must stay disabled until a safe authorized lab acceptance is complete.
+8. **Password hashing performance:** Worker-runtime PBKDF2 CPU-budget benchmark remains outstanding.
+
+### Operational decision
+NEXUS may be described as a **deployed hosted-core / conditional pilot** for controlled evaluation, with manual operational fallback and no assumption of live router/OLT/ACS/payment automation. Do not describe it as fully ISP-certified, do not use it as the sole system of record for live customer billing, and do not enable network automation until the relevant gates pass.
+
+No production data, secrets, D1 schema, Worker deployment, or network-device configuration was changed by this documentation update.
+
+---
+
+## Historical report — 2026-11-24 (superseded status wording)
+
+## Historical decision (2026-11-24; superseded by the 2026-11-27 scoped decision above)
+
+**At that time: core hosted software and D1 reconciliation were verified; full ISP production acceptance was recorded as NO-GO.**
 
 This status separates code/Cloudflare work that has passed from real-world integrations and acceptance work that cannot be proven by repository tests alone.
 
