@@ -751,7 +751,7 @@ async function authReg(r,env,ip){
  if(!b.slug&&b.companyName)b.slug=b.companyName.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48);
  const missing=vReq(b,['companyName','email','password','name']);if(missing.length)return json({error:'Missing fields',fields:missing},400);
  if(!vEmail(b.email))return json({error:'Invalid email'},400);
- if(typeof b.password!=='string'||b.password.length<8)return json({error:'Password must be at least 8 characters'},400);
+ if(typeof b.password!=='string'||b.password.length<10||b.password.length>256)return json({error:'Password must be 10–256 characters'},400);
  if(typeof b.companyName!=='string'||b.companyName.length>120)return json({error:'Company name must be 1-120 characters'},400);
  if(typeof b.name!=='string'||b.name.length>120)return json({error:'Owner name must be 1-120 characters'},400);
  if(!b.slug)return json({error:'A valid organization slug could not be generated'},400);
@@ -1010,7 +1010,8 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
  if(role!=='owner'&&ex.role==='admin')return json({error:'Only the owner can manage administrators'},403);
  const allowed=['admin','billing','support','technician','staff'];
  if(b.role!==undefined&&!allowed.includes(b.role))return json({error:'Invalid role'},400);
- if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8))return json({error:'Password must be at least 8 characters'},400);
+ if(b.role==='admin'&&role!=='owner')return json({error:'Only the owner can promote staff to administrator'},403);
+ if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<10||b.password.length>256))return json({error:'Password must be 10–256 characters'},400);
  if(b.status!==undefined&&!['active','inactive','disabled'].includes(b.status))return json({error:'Invalid user status'},400);
  if(id===uid&&b.role!==undefined&&b.role!==role)return json({error:'You cannot change your own role'},400);
  const fields=['name','role','phone','status'],sets=[],params=[];
