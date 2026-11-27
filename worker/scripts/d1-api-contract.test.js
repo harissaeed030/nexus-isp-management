@@ -29,7 +29,7 @@ test("profile reads, updates and password changes are scoped to the authenticate
   assert.ok(profile.includes("UPDATE users SET '+u.join(', ')+' WHERE id=? AND organization_id=?'"));
   assert.ok(profile.includes("p.push(auth.userId,auth.orgId)"));
   assert.ok(profile.includes(".bind(auth.userId,auth.orgId)"));
-  assert.ok(profile.includes(".bind(hash,salt,auth.userId,auth.orgId)"));
+  assert.ok(profile.includes(".bind(credentials.hash,credentials.salt,auth.userId,auth.orgId)"));
   const passwordChangeStart = profile.indexOf("async function chgPw");
   const passwordChange = profile.slice(passwordChangeStart);
   assert.ok(passwordChangeStart >= 0);
