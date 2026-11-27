@@ -30,6 +30,16 @@ test("profile reads, updates and password changes are scoped to the authenticate
   assert.ok(profile.includes("p.push(auth.userId,auth.orgId)"));
   assert.ok(profile.includes(".bind(auth.userId,auth.orgId)"));
   assert.ok(profile.includes(".bind(hash,salt,auth.userId,auth.orgId)"));
+  const passwordChangeStart = profile.indexOf("async function chgPw");
+  const passwordChange = profile.slice(passwordChangeStart);
+  assert.ok(passwordChangeStart >= 0);
+  assert.ok(passwordChange.includes("password-change:'+auth.userId"));
+  assert.ok(passwordChange.includes("loginRateLimited(env,ip,rateKey)"));
+  assert.ok(passwordChange.includes("recordLoginFailure(env,ip,rateKey)"));
+  assert.ok(passwordChange.includes("b.newPassword.length<10||b.newPassword.length>256"));
+  assert.ok(passwordChange.includes("token_version=COALESCE(token_version,0)+1"));
+  assert.ok(passwordChange.includes("password_changed"));
+  assert.ok(passwordChange.includes("WHERE id=? AND organization_id=? AND status='active'"));
   const authMeStart = source.indexOf("async function authMe");
   const authMeEnd = source.indexOf("async function dashStats", authMeStart);
   assert.ok(authMeStart >= 0 && authMeEnd > authMeStart);
