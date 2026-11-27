@@ -2,18 +2,22 @@ name: Cloudflare D1 API Worker
 
 on:
   push:
-    branches: [build/nexus-isp-core]
+    branches: [build/nexus-isp-core, work/password-reset-d1-compat]
     paths:
       - "worker/src/d1-api-worker.js"
       - "worker/wrangler.api.toml"
       - "worker/scripts/d1-api-contract.test.js"
+      - "worker/scripts/password-reset-contract.test.js"
+      - "worker/scripts/tenant-settings-contract.test.js"
+      - "cloudflare/d1/migrations/0026_password_reset_tokens.sql"
+      - "assets/js/app.js"
       - "worker/scripts/d1-staging-readonly-smoke.mjs"
       - ".github/workflows/d1-staging-readonly-smoke.yml"
       - "backend/package.json"
       - "backend/scripts/architecture-boundaries.test.js"
       - ".github/workflows/d1-api-worker.yml"
   pull_request:
-    branches: [main]
+    branches: [main, build/nexus-isp-core]
     paths:
       - "worker/src/d1-api-worker.js"
       - "worker/wrangler.api.toml"
@@ -32,4 +36,4 @@ jobs:
           node-version: 22
       - run: node --check worker/src/d1-api-worker.js
       - run: node --check worker/scripts/d1-staging-readonly-smoke.mjs
-      - run: node --test worker/scripts/d1-api-contract.test.js
+      - run: node --test worker/scripts/d1-api-contract.test.js worker/scripts/password-reset-contract.test.js worker/scripts/tenant-settings-contract.test.js

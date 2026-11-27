@@ -35,7 +35,7 @@ function auth(req,res,next){
   if(!raw)return fail(res,401,"Authentication required.");
   const u=db.prepare("SELECT u.*,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active'").get(hashToken(raw),new Date().toISOString());
   if(!u)return fail(res,401,"Session expired or invalid.");
-  const selfRoute=req.path==="/api/v1/auth/me"||req.path==="/api/v1/auth/logout"||req.path==="/api/v1/tenant";
+  const selfRoute=req.path==="/api/v1/auth/me"||req.path==="/api/v1/auth/logout"||req.path==="/api/v1/tenant"||req.path==="/api/v1/profile"||req.path==="/api/v1/profile/password";
   const staffAdminRoute=req.path==="/api/v1/staff"||req.path.startsWith("/api/v1/staff/");
   if(!selfRoute&&!staffAdminRoute){
     const permission=permissionFor(req.path,req.method);
@@ -51,6 +51,26 @@ app.get("/api/v1/health",(_q,r)=>r.json({success:true,status:"running",database:
 app.post("/api/v1/setup",(req,res)=>{const b=req.body||{};if(!required(b.companyName)||!required(b.fullName)||!required(b.email)||!required(b.password)||b.password.length<10)return fail(res,400,"Company, name, email and password (minimum 10 characters) are required.");let created;try{created=withTransaction(db,()=>{if(db.prepare("SELECT COUNT(*) n FROM users").get().n>0)throw new Error("SETUP_ALREADY_COMPLETE");const tid=id(),uid=id(),slug=b.companyName.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-")+"-"+tid.slice(0,6);db.prepare("INSERT INTO tenants(id,name,slug,plan,customer_limit) VALUES(?,?,?,'pro',100000)").run(tid,b.companyName.trim(),slug);db.prepare("INSERT INTO users(id,tenant_id,email,password_hash,full_name,role) VALUES(?,?,?,?,?,'owner')").run(uid,tid,b.email.trim().toLowerCase(),passwordHash(b.password),b.fullName.trim());const token=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hashToken(token),uid,new Date(Date.now()+604800000).toISOString());audit({id:uid,tenant_id:tid},"initial_setup","tenant",tid);return {tid,uid,token};});}catch(e){if(e.message==="SETUP_ALREADY_COMPLETE")return fail(res,409,"Initial setup is already complete. Sign in instead.");throw e;}const {tid,uid,token}=created;res.status(201).json({success:true,token,user:cleanUser(db.prepare("SELECT * FROM users WHERE id=?").get(uid)),tenant:{id:tid,name:b.companyName.trim()}});});
 app.post("/api/v1/auth/login",rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:"draft-7",legacyHeaders:false,message:{success:false,error:"Too many login attempts. Try again in 15 minutes."}}),(req,res)=>{const b=req.body||{};if(!required(b.email)||!required(b.password))return fail(res,400,"Email and password are required.");const rows=db.prepare("SELECT u.*,t.name tenant_name,t.slug tenant_slug FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.email=? COLLATE NOCASE AND u.status='active' AND t.status='active' ORDER BY u.created_at").all(b.email.trim());let matches=rows.filter(u=>verifyPassword(b.password,u.password_hash));if(required(b.tenantSlug))matches=matches.filter(u=>u.tenant_slug===b.tenantSlug.trim());if(!matches.length)return fail(res,401,"Invalid email, password or workspace.");if(matches.length>1)return fail(res,409,"This login matches more than one workspace. Enter the workspace slug and try again.");const u=matches[0],token=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hashToken(token),u.id,new Date(Date.now()+604800000).toISOString());res.json({success:true,token,user:cleanUser(u),tenant:{id:u.tenant_id,name:u.tenant_name,slug:u.tenant_slug}});});
 app.get("/api/v1/auth/me",auth,(req,res)=>res.json({success:true,user:cleanUser(req.user),tenant:db.prepare("SELECT id,name,brand_color,plan FROM tenants WHERE id=?").get(req.user.tenant_id)}));
+app.get("/api/v1/profile",auth,(req,res)=>res.json({id:req.user.id,email:req.user.email,name:req.user.full_name,phone:req.user.phone||"",role:req.user.role,status:req.user.status}));
+app.put("/api/v1/profile",auth,(req,res)=>{
+  const b=req.body||{},name=b.name===undefined?req.user.full_name:(typeof b.name==="string"?b.name.trim():""),phone=b.phone===undefined?(req.user.phone||""):(typeof b.phone==="string"?b.phone.trim():"");
+  if(!name||name.length>120)return fail(res,400,"Name must be 1–120 characters.");
+  if(phone.length>50)return fail(res,400,"Phone is too long.");
+  db.prepare("UPDATE users SET full_name=?,phone=? WHERE id=? AND tenant_id=?").run(name,phone||null,req.user.id,req.user.tenant_id);
+  audit(req.user,"profile_updated","user",req.user.id);
+  return res.json({id:req.user.id,email:req.user.email,name,phone,role:req.user.role,status:req.user.status});
+});
+app.put("/api/v1/profile/password",auth,rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:"draft-7",legacyHeaders:false,message:{success:false,error:"Too many password changes. Try again later."}}),(req,res)=>{
+  const b=req.body||{};
+  if(typeof b.currentPassword!=="string"||typeof b.newPassword!=="string"||b.newPassword.length<10||b.newPassword.length>256)return fail(res,400,"Current password and a new password of 10–256 characters are required.");
+  if(!verifyPassword(b.currentPassword,req.user.password_hash))return fail(res,401,"Current password is incorrect.");
+  withTransaction(db,()=>{
+    db.prepare("UPDATE users SET password_hash=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),req.user.id,req.user.tenant_id);
+    db.prepare("DELETE FROM sessions WHERE user_id=?").run(req.user.id);
+    audit(req.user,"password_changed","user",req.user.id);
+  });
+  return res.json({success:true,message:"Password changed. Please sign in again."});
+});
 
 app.post("/api/v1/tenants/register",rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:"draft-7",legacyHeaders:false,message:{success:false,error:"Too many workspace registrations. Try again later."}}),(req,res)=>{
   const b=req.body||{},company=typeof b.companyName==="string"?b.companyName.trim():"",fullName=typeof b.fullName==="string"?b.fullName.trim():"",email=typeof b.email==="string"?b.email.trim().toLowerCase():"",password=b.password;
@@ -98,6 +118,7 @@ app.post("/api/v1/staff/:id/password-reset",auth,(req,res)=>{
   if(!target)return fail(res,404,"Staff member not found.");
   if(target.status!=="active")return fail(res,400,"Staff account is not active.");
   if(target.role==="owner"&&req.user.role!=="owner")return fail(res,403,"Only the owner can reset the owner password.");
+  if(target.role==="admin"&&req.user.role!=="owner")return fail(res,403,"Only the owner can reset administrator passwords.");
   const token=randomBytes(32).toString("base64url"),expires=new Date(Date.now()+30*60*1000).toISOString();
   withTransaction(db,()=>{
     db.prepare("UPDATE password_resets SET used_at=? WHERE user_id=? AND tenant_id=? AND used_at IS NULL").run(new Date().toISOString(),target.id,req.user.tenant_id);
@@ -113,12 +134,16 @@ app.post("/api/v1/auth/reset-password",rateLimit({windowMs:15*60*1000,limit:10,s
   if(!row)return fail(res,400,"Reset token is invalid, used or expired.");
   const user=db.prepare("SELECT id,tenant_id FROM users WHERE id=? AND tenant_id=? AND status='active'").get(row.user_id,row.tenant_id);
   if(!user)return fail(res,400,"Reset token is invalid, used or expired.");
-  withTransaction(db,()=>{
-    db.prepare("UPDATE users SET password_hash=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),user.id,user.tenant_id);
-    db.prepare("UPDATE password_resets SET used_at=? WHERE id=?").run(new Date().toISOString(),row.id);
-    db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
-    audit({id:user.id,tenant_id:user.tenant_id},"password_reset_completed","user",user.id);
-  });
+  const now=new Date().toISOString();
+  try{
+    withTransaction(db,()=>{
+      const consumed=db.prepare("UPDATE password_resets SET used_at=? WHERE id=? AND token_hash=? AND used_at IS NULL AND expires_at>?").run(now,row.id,hashToken(b.token),now);
+      if(consumed.changes!==1){const error=new Error("Reset token is invalid, used or expired.");error.code="RESET_TOKEN_INVALID";throw error;}
+      db.prepare("UPDATE users SET password_hash=? WHERE id=? AND tenant_id=?").run(passwordHash(b.newPassword),user.id,user.tenant_id);
+      db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
+      audit({id:user.id,tenant_id:user.tenant_id},"password_reset_completed","user",user.id);
+    });
+  }catch(error){if(error?.code==="RESET_TOKEN_INVALID")return fail(res,400,"Reset token is invalid, used or expired.");throw error;}
   return res.json({success:true,message:"Password updated. Please sign in with the new password."});
 });
 app.post("/api/v1/auth/logout",auth,(req,res)=>{db.prepare("DELETE FROM sessions WHERE token_hash=?").run(req.user.token_hash);res.json({success:true});});

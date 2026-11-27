@@ -30,6 +30,7 @@ async function hashPw(pw,salt){const s=salt?hex2b(salt):crypto.getRandomValues(n
 async function verifyPw(pw,h,salt){if(typeof pw!=='string'||typeof h!=='string'||typeof salt!=='string')return false;if(!/^[a-f0-9]{64}$/i.test(h)||!/^[a-f0-9]{32}$/i.test(salt))return false;const{hash}=await hashPw(pw,salt);let diff=0;const expected=h.toLowerCase();for(let i=0;i<64;i++)diff|=hash.charCodeAt(i)^expected.charCodeAt(i);return diff===0}
 function b2h(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function hex2b(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
+export async function hashResetToken(token){const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));return b2h(new Uint8Array(digest))}
 async function signJWT(p,sec){const e=new TextEncoder();const h=b64u(e.encode(JSON.stringify({alg:'HS256',typ:'JWT'})));const p64=b64u(e.encode(JSON.stringify(p)));const d=h+'.'+p64;const k=await crypto.subtle.importKey('raw',e.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=await crypto.subtle.sign('HMAC',k,e.encode(d));return d+'.'+b64u(new Uint8Array(sig))}
 async function verifyJWT(t,sec){try{const ps=t.split('.');if(ps.length!==3)return null;const d=ps[0]+'.'+ps[1];const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(sec),{name:'HMAC',hash:'SHA-256'},false,['verify']);if(!await crypto.subtle.verify('HMAC',k,b64uDec(ps[2]),new TextEncoder().encode(d)))return null;const pl=JSON.parse(new TextDecoder().decode(b64uDec(ps[1])));if(!Number.isSafeInteger(pl.exp)||pl.exp<=Date.now())return null;return pl}catch{return null}}
 function b64u(b){return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
@@ -246,6 +247,9 @@ async function runMigrations(env){
  ['payments.reference_index',"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_org_reference ON payments(organization_id,transaction_ref) WHERE transaction_ref IS NOT NULL AND transaction_ref<>''"],
 
  ['users.rebuild','SPECIAL'],
+ ['password_reset_tokens',"CREATE TABLE IF NOT EXISTS password_reset_tokens(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,used_at TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"],
+ ['password_reset_tokens.index',"CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_org_user ON password_reset_tokens(organization_id,user_id,expires_at)"],
+ ['password_reset_tokens.tenant_guard',"CREATE TRIGGER IF NOT EXISTS trg_password_reset_tokens_tenant_guard BEFORE INSERT ON password_reset_tokens BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'password reset user tenant mismatch') END; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.created_by AND organization_id=NEW.organization_id) THEN RAISE(ABORT,'password reset actor tenant mismatch') END; END"],
  ['ops.geo_locations',"CREATE TABLE IF NOT EXISTS geo_locations(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,parent_id TEXT,type TEXT NOT NULL CHECK(type IN('country','city','locality','street')),name TEXT NOT NULL,postal_code TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(parent_id) REFERENCES geo_locations(id) ON DELETE SET NULL)"],
  ['ops.coverage_areas',"CREATE TABLE IF NOT EXISTS coverage_areas(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,name TEXT NOT NULL,code TEXT,description TEXT,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN('active','inactive')),created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,name),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE)"],
  ['ops.connection_applications',"CREATE TABLE IF NOT EXISTS connection_applications(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,application_no TEXT NOT NULL,full_name TEXT NOT NULL,phone TEXT NOT NULL,address TEXT NOT NULL,coverage_area_id TEXT,package_id TEXT,notes TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN('pending','approved','rejected','installed','cancelled')),created_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')),UNIQUE(organization_id,application_no),FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,FOREIGN KEY(coverage_area_id) REFERENCES coverage_areas(id),FOREIGN KEY(package_id) REFERENCES packages(id))"],
@@ -455,6 +459,7 @@ async function handleAiChat(request,env,userId){
 async function handleApi(request,env,url,path,m){if(path.startsWith('/api/customer-portal/')){path='/api/portal'+path.slice('/api/customer-portal'.length);if(path==='/api/portal/login')path='/api/portal/auth/login';if(path==='/api/portal/logout')path='/api/portal/auth/logout';if(path==='/api/portal/complaints')path='/api/portal/tickets';}const ip=request.headers.get('CF-Connecting-IP')||'unknown';try{
 if(path==='/api/auth/register'&&m==='POST')return await authReg(request,env,ip);
 if(path==='/api/auth/login'&&m==='POST')return await authLogin(request,env,ip);
+if(path==='/api/auth/reset-password'&&m==='POST')return await consumePasswordReset(request,env,ip);
 if(path==='/api/portal/auth/login'&&m==='POST')return await portalLogin(request,env,ip);
 const auth=await getAuth(request,env);if(!auth)return json({error:'Authentication required'},401);
 if(auth.principalType==='customer')return await handlePortalApi(request,env,url,path,m,auth,ip);
@@ -503,6 +508,7 @@ if(path==='/api/complaints'&&m==='POST'){const body=normalizeTicketPayload(await
 if(path.match(/^\/api\/complaints\/[^/]+$/)&&m==='PUT')return await updateComp(request,env,path,orgId,userId,ip);
 if(path==='/api/staff'&&m==='GET')return await listStaff(env,orgId);
 if(path==='/api/staff'&&m==='POST')return await createStaff(request,env,orgId,userId,role,ip);
+if(path.match(/^\/api\/staff\/[^/]+\/password-reset$/)&&m==='POST')return await issuePasswordReset(env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='PUT')return await updateStaff(request,env,path,orgId,userId,role,ip);
 if(path.match(/^\/api\/staff\/[^/]+$/)&&m==='DELETE')return await delStaff(env,path,orgId,role,userId,ip);
 if(path.match(/^\/api\/staff\/[^/]+\/permissions$/)&&['GET','PUT'].includes(m))return await staffPermissions(env,path,orgId,role,userId,request,ip);
@@ -559,6 +565,8 @@ if(path==='/api/audit-logs'&&m==='GET')return await listAudit(env,url,orgId);
 if(path==='/api/notifications'&&m==='GET')return await listNotifications(env,url,orgId,userId);
 if(path==='/api/notifications/read-all'&&m==='PUT')return await markAllNotificationsRead(env,orgId,userId);
 if(path.startsWith('/api/notifications/')&&path.endsWith('/read')&&m==='PUT')return await markNotificationRead(env,path,orgId,userId);
+if(path==='/api/tenant'&&m==='GET')return await getTenantCompat(env,orgId,role);
+if(path==='/api/tenant'&&m==='PUT')return await updateTenantCompat(request,env,orgId,userId,role,ip);
 if(path==='/api/settings'&&m==='GET')return await getSet(env,orgId);
 if(path==='/api/settings'&&m==='PUT')return await updSet(request,env,orgId,userId,ip);
 if(path==='/api/profile'&&m==='GET')return await getProf(env,auth);
@@ -743,7 +751,7 @@ async function authReg(r,env,ip){
  if(!b.slug&&b.companyName)b.slug=b.companyName.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48);
  const missing=vReq(b,['companyName','email','password','name']);if(missing.length)return json({error:'Missing fields',fields:missing},400);
  if(!vEmail(b.email))return json({error:'Invalid email'},400);
- if(typeof b.password!=='string'||b.password.length<8)return json({error:'Password must be at least 8 characters'},400);
+ if(typeof b.password!=='string'||b.password.length<10||b.password.length>256)return json({error:'Password must be 10–256 characters'},400);
  if(typeof b.companyName!=='string'||b.companyName.length>120)return json({error:'Company name must be 1-120 characters'},400);
  if(typeof b.name!=='string'||b.name.length>120)return json({error:'Owner name must be 1-120 characters'},400);
  if(!b.slug)return json({error:'A valid organization slug could not be generated'},400);
@@ -780,7 +788,7 @@ const tk=await signJWT({userId:u.id,orgId:u.organization_id,role:u.role,email:u.
 await audit(env,u.organization_id,u.id,'login','User logged in',ip);
 return json({success:true,token:tk,user:{id:u.id,email:u.email,name:u.name||u.email,role:u.role,orgId:u.organization_id}})}
 
-async function authMe(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status,organization_id FROM users WHERE id=?').bind(auth.userId).first();if(!u)return json({error:'Not found'},404);const org=await env.DB.prepare('SELECT id,name,slug,email,phone,address,currency FROM organizations WHERE id=?').bind(auth.orgId).first();return json({user:u,tenant:org})}
+async function authMe(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status,organization_id FROM users WHERE id=? AND organization_id=?').bind(auth.userId,auth.orgId).first();if(!u)return json({error:'Not found'},404);const org=await env.DB.prepare('SELECT id,name,slug,email,phone,address,currency FROM organizations WHERE id=?').bind(auth.orgId).first();return json({user:u,tenant:org})}
 
 async function dashStats(env,oid){const c=await env.DB.prepare('SELECT COUNT(*)v FROM customers WHERE organization_id=?').bind(oid).first();const ac=await env.DB.prepare("SELECT COUNT(*)v FROM customers WHERE organization_id=? AND account_status='active'").bind(oid).first();const pk=await env.DB.prepare('SELECT COUNT(*)v FROM packages WHERE organization_id=?').bind(oid).first();const sc=await env.DB.prepare('SELECT COUNT(*)v FROM subscriptions WHERE organization_id=?').bind(oid).first();const pi=await env.DB.prepare("SELECT COUNT(*)v,COALESCE(SUM(total-COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)),0)amt FROM invoices WHERE organization_id=? AND status IN ('pending','overdue') AND total>COALESCE((SELECT SUM(p.amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=p.id AND r.organization_id=p.organization_id AND r.status='completed'),0)) FROM payments p WHERE p.invoice_id=invoices.id AND p.organization_id=invoices.organization_id AND p.status='completed'),0)").bind(oid).first();const rev=await env.DB.prepare("SELECT COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)v FROM payments WHERE organization_id=? AND status='completed'").bind(oid).first();const oc=await env.DB.prepare("SELECT COUNT(*)v FROM support_tickets WHERE organization_id=? AND status='open'").bind(oid).first();const st=await env.DB.prepare('SELECT COUNT(*)v FROM users WHERE organization_id=?').bind(oid).first();const mr=await env.DB.prepare("SELECT strftime('%Y-%m',paid_at)m,COALESCE(SUM(amount-COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.payment_id=payments.id AND r.organization_id=payments.organization_id AND r.status='completed'),0)),0)t FROM payments WHERE organization_id=? AND status='completed'AND paid_at>=datetime('now','-6 months')GROUP BY m ORDER BY m").bind(oid).all();return json({customers:c.v,activeCustomers:ac.v,packages:pk.v,subscriptions:sc.v,pendingInvoices:pi.v,pendingAmount:pi.amt,totalRevenue:rev.v,openComplaints:oc.v,staff:st.v,monthlyRevenue:mr.results||[]})}
 
@@ -984,7 +992,7 @@ async function createStaff(r,env,oid,uid,role,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ms=vReq(b,['email','password','name']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
  if(!vEmail(b.email))return json({error:'Invalid email'},400);
- if(typeof b.password!=='string'||b.password.length<8)return json({error:'Password must be at least 8 characters'},400);
+ if(typeof b.password!=='string'||b.password.length<10||b.password.length>256)return json({error:'Password must be 10–256 characters'},400);
  const allowed=['admin','billing','support','technician','staff'],assigned=b.role||'staff';
  if(!allowed.includes(assigned))return json({error:'Invalid role'},400);
  if(assigned==='admin'&&role!=='owner')return json({error:'Only the owner can create administrators'},403);
@@ -1002,7 +1010,8 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
  if(role!=='owner'&&ex.role==='admin')return json({error:'Only the owner can manage administrators'},403);
  const allowed=['admin','billing','support','technician','staff'];
  if(b.role!==undefined&&!allowed.includes(b.role))return json({error:'Invalid role'},400);
- if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<8))return json({error:'Password must be at least 8 characters'},400);
+ if(b.role==='admin'&&role!=='owner')return json({error:'Only the owner can promote staff to administrator'},403);
+ if(b.password!==undefined&&(typeof b.password!=='string'||b.password.length<10||b.password.length>256))return json({error:'Password must be 10–256 characters'},400);
  if(b.status!==undefined&&!['active','inactive','disabled'].includes(b.status))return json({error:'Invalid user status'},400);
  if(id===uid&&b.role!==undefined&&b.role!==role)return json({error:'You cannot change your own role'},400);
  const fields=['name','role','phone','status'],sets=[],params=[];
@@ -1016,6 +1025,47 @@ async function updateStaff(r,env,path,oid,uid,role,ip){
 }
 async function delStaff(env,path,oid,role,uid,ip){if(!['owner','admin'].includes(role))return json({error:'Owner or admin access required'},403);const id=path.split('/')[3];if(id===uid)return json({error:'Cannot delete self'},400);const target=await env.DB.prepare('SELECT id,role FROM users WHERE id=? AND organization_id=?').bind(id,oid).first();if(!target)return json({error:'Not found'},404);if(target.role==='owner')return json({error:'The owner account cannot be deleted from staff management'},403);if(role!=='owner'&&target.role==='admin')return json({error:'Only the owner can delete administrators'},403);await env.DB.prepare('DELETE FROM users WHERE id=? AND organization_id=?').bind(id,oid).run();await audit(env,oid,uid,'delete_staff','Staff:'+id,ip);return json({success:true})}
 
+
+async function issuePasswordReset(env,path,orgId,actorId,actorRole,ip){
+ if(!['owner','admin'].includes(actorRole))return json({error:'Owner or admin access required'},403);
+ const targetId=path.split('/')[3];
+ const target=await env.DB.prepare('SELECT id,role,status FROM users WHERE id=? AND organization_id=?').bind(targetId,orgId).first();
+ if(!target)return json({error:'Staff member not found'},404);
+ if(target.status!=='active')return json({error:'Staff account is not active'},400);
+ if(target.role==='owner'&&actorRole!=='owner')return json({error:'Only the owner can reset the owner password'},403);
+ if(actorRole!=='owner'&&target.role==='admin')return json({error:'Only the owner can reset administrator passwords'},403);
+ const token=b64u(crypto.getRandomValues(new Uint8Array(32)));
+ const tokenHash=await hashResetToken(token);
+ const now=new Date().toISOString(),expiresAt=new Date(Date.now()+30*60*1000).toISOString();
+ await env.DB.batch([
+  env.DB.prepare('UPDATE password_reset_tokens SET used_at=? WHERE organization_id=? AND user_id=? AND used_at IS NULL').bind(now,orgId,targetId),
+  env.DB.prepare('INSERT INTO password_reset_tokens(id,organization_id,user_id,token_hash,expires_at,created_by) VALUES(?,?,?,?,?,?)').bind(uuid(),orgId,targetId,tokenHash,expiresAt,actorId)
+ ]);
+ await audit(env,orgId,actorId,'password_reset_issued','User:'+targetId,ip);
+ return json({success:true,resetToken:token,expiresAt,note:'Give this one-time token to the staff member privately. It works once and expires in 30 minutes.'},201);
+}
+async function consumePasswordReset(request,env,ip){
+ const rateKey='password-reset:'+ip;
+ if(await loginRateLimited(env,ip,rateKey))return json({error:'Too many password reset attempts. Try again in 15 minutes.'},429);
+ await recordLoginFailure(env,ip,rateKey);
+ const body=await parseBody(request);
+ if(!body||typeof body.token!=='string'||body.token.length<20||body.token.length>200||typeof body.newPassword!=='string'||body.newPassword.length<10||body.newPassword.length>256)
+  return json({error:'A valid reset token and a new password of 10–256 characters are required'},400);
+ const now=new Date().toISOString(),tokenHash=await hashResetToken(body.token);
+ const reset=await env.DB.prepare('SELECT id,organization_id,user_id FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>?').bind(tokenHash,now).first();
+ if(!reset)return json({error:'Reset token is invalid, used or expired'},400);
+ const user=await env.DB.prepare("SELECT id FROM users WHERE id=? AND organization_id=? AND status='active'").bind(reset.user_id,reset.organization_id).first();
+ if(!user)return json({error:'Reset token is invalid, used or expired'},400);
+ const credentials=await hashPw(body.newPassword);
+ const consumed=await env.DB.prepare('UPDATE password_reset_tokens SET used_at=? WHERE id=? AND token_hash=? AND used_at IS NULL AND expires_at>?').bind(now,reset.id,tokenHash,now).run();
+ if(Number(consumed?.meta?.changes||0)!==1)return json({error:'Reset token is invalid, used or expired'},400);
+ const updated=await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now') WHERE id=? AND organization_id=? AND status='active'").bind(credentials.hash,credentials.salt,reset.user_id,reset.organization_id).run();
+ if(Number(updated?.meta?.changes||0)!==1)return json({error:'Reset token is invalid, used or expired'},400);
+ await env.DB.prepare('UPDATE password_reset_tokens SET used_at=? WHERE organization_id=? AND user_id=? AND used_at IS NULL').bind(now,reset.organization_id,reset.user_id).run();
+ await audit(env,reset.organization_id,reset.user_id,'password_reset_completed','Password reset completed',ip);
+ await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
+ return json({success:true,message:'Password updated. Please sign in with the new password.'});
+}
 
 async function getSub(env,path,oid){
  const id=path.split('/')[3],row=await env.DB.prepare('SELECT s.*,c.first_name,c.last_name,c.customer_code,c.account_number,p.name package_name,p.price,p.speed_mbps,p.speed_down,p.speed_up FROM subscriptions s LEFT JOIN customers c ON c.id=s.customer_id AND c.organization_id=s.organization_id LEFT JOIN packages p ON p.id=s.package_id AND p.organization_id=s.organization_id WHERE s.id=? AND s.organization_id=?').bind(id,oid).first();
@@ -1241,8 +1291,65 @@ async function exportCsv(env,path,oid){
 async function listAudit(env,url,oid){const{page,pp,off}=pg(url,50);const cnt=await env.DB.prepare('SELECT COUNT(*)t FROM audit_log WHERE organization_id=?').bind(oid).first();const rows=await env.DB.prepare('SELECT a.*,u.name user_name FROM audit_log a LEFT JOIN users u ON a.user_id=u.id WHERE a.organization_id=? ORDER BY a.created_at DESC LIMIT? OFFSET?').bind(oid,pp,off).all();return json({data:rows.results||[],pagination:{page,pp,total:cnt.t,totalPages:Math.ceil(cnt.t/pp)}})}
 async function getSet(env,oid){const rows=await env.DB.prepare('SELECT key,value FROM settings WHERE organization_id=?').bind(oid).all();const s={};for(const r of rows.results||[])s[r.key]=r.value;return json(s)}
 async function updSet(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);const limits={support_phone:80,support_email:160,whatsapp_support:80,payment_instructions:2000};if(Object.entries(b).some(([k,v])=>!(k in limits)||typeof v!=='string'||v.length>limits[k]))return json({error:'Unsupported or oversized workspace setting'},400);if(b.support_email&&!vEmail(b.support_email))return json({error:'Invalid support email'},400);for(const[k,v]of Object.entries(b)){const ex=await env.DB.prepare('SELECT id FROM settings WHERE organization_id=? AND key=?').bind(oid,k).first();if(ex)await env.DB.prepare("UPDATE settings SET value=?,updated_at=datetime('now')WHERE id=?").bind(String(v),ex.id).run();else await env.DB.prepare('INSERT INTO settings(id,organization_id,key,value)VALUES(?,?,?,?)').bind(uuid(),oid,k,String(v)).run()}await audit(env,oid,uid,'update_settings','Settings updated',ip);return json({success:true})}
-async function getProf(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=?').bind(auth.userId).first();return json(u||{error:'Not found'},u?200:404)}
-async function updProf(r,env,auth,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Name must be 1-120 characters'},400);if(b.phone!==undefined&&String(b.phone).length>50)return json({error:'Phone is too long'},400);const f=['name','phone'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(auth.userId);await env.DB.prepare('UPDATE users SET '+u.join(', ')+' WHERE id=?').bind(...p).run();return json(await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=?').bind(auth.userId).first())}
-async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords required'},400);if(b.newPassword.length<8)return json({error:'Password must be at least 8 characters'},400);const u=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.userId).first();if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt))return json({error:'Current password incorrect'},401);const{hash,salt}=await hashPw(b.newPassword);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now')WHERE id=?").bind(hash,salt,auth.userId).run();return json({success:true,message:'Password changed'})}
+async function getProf(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=? AND organization_id=?').bind(auth.userId,auth.orgId).first();return json(u||{error:'Not found'},u?200:404)}
+async function updProf(r,env,auth,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Name must be 1-120 characters'},400);if(b.phone!==undefined&&String(b.phone).length>50)return json({error:'Phone is too long'},400);const f=['name','phone'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(auth.userId,auth.orgId);await env.DB.prepare('UPDATE users SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();return json(await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=? AND organization_id=?').bind(auth.userId,auth.orgId).first())}
+async function chgPw(r,env,auth,ip){
+ const rateKey='password-change:'+auth.userId;
+ if(await loginRateLimited(env,ip,rateKey))return json({error:'Too many password change attempts. Try again in 15 minutes.'},429);
+ const b=await parseBody(r);
+ if(!b||typeof b.currentPassword!=='string'||typeof b.newPassword!=='string'||b.newPassword.length<10||b.newPassword.length>256)
+  return json({error:'Current password and a new password of 10–256 characters are required'},400);
+ const u=await env.DB.prepare('SELECT password_hash,password_salt FROM users WHERE id=? AND organization_id=? AND status=\'active\'').bind(auth.userId,auth.orgId).first();
+ if(!u)return json({error:'Account is inactive or no longer exists'},401);
+ if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt)){
+  await recordLoginFailure(env,ip,rateKey);
+  return json({error:'Current password incorrect'},401);
+ }
+ const credentials=await hashPw(b.newPassword);
+ const updated=await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now') WHERE id=? AND organization_id=? AND status='active'").bind(credentials.hash,credentials.salt,auth.userId,auth.orgId).run();
+ if(Number(updated?.meta?.changes||0)!==1)return json({error:'Account is inactive or no longer exists'},401);
+ await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
+ await audit(env,auth.orgId,auth.userId,'password_changed','User changed password',ip);
+ return json({success:true,message:'Password changed. Please sign in again.'});
+}
+async function getTenantCompat(env,oid,actorRole){
+ if(actorRole!=='owner')return json({error:'Only the workspace owner can view company settings'},403);
+ const org=await env.DB.prepare('SELECT id,name,slug,plan,created_at,address,phone FROM organizations WHERE id=?').bind(oid).first();
+ if(!org)return json({error:'Workspace not found'},404);
+ const rows=await env.DB.prepare("SELECT key,value FROM settings WHERE organization_id=? AND key IN ('support_phone','brand_color')").bind(oid).all();
+ const values=Object.fromEntries((rows.results||[]).map(row=>[row.key,row.value]));
+ return json({success:true,data:{...org,support_phone:values.support_phone??org.phone??'',brand_color:values.brand_color||'#16a34a'}});
+}
+async function updateTenantCompat(request,env,oid,uid,actorRole,ip){
+ if(actorRole!=='owner')return json({error:'Only the workspace owner can update company settings'},403);
+ const body=await parseBody(request);
+ if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'Invalid body'},400);
+ const allowed=['name','supportPhone','address','brandColor'];
+ if(Object.keys(body).some(key=>!allowed.includes(key)))return json({error:'Unsupported workspace setting'},400);
+ const sets=[],params=[];
+ if(body.name!==undefined){
+  if(typeof body.name!=='string'||body.name.trim().length<2||body.name.trim().length>120)return json({error:'Company name must be 2–120 characters'},400);
+  sets.push('name=?');params.push(body.name.trim());
+ }
+ if(body.supportPhone!==undefined){
+  if(body.supportPhone!==null&&(typeof body.supportPhone!=='string'||body.supportPhone.length>30))return json({error:'Support phone must be 30 characters or fewer'},400);
+  const phone=String(body.supportPhone??'').trim();
+  sets.push('phone=?');params.push(phone||null);
+ }
+ if(body.address!==undefined){
+  if(body.address!==null&&(typeof body.address!=='string'||body.address.length>300))return json({error:'Address must be 300 characters or fewer'},400);
+  sets.push('address=?');params.push(String(body.address??'').trim()||null);
+ }
+ if(body.brandColor!==undefined&&(typeof body.brandColor!=='string'||!/^#[0-9a-fA-F]{6}$/.test(body.brandColor)))return json({error:'Brand colour must look like #16a34a'},400);
+ if(!sets.length&&body.brandColor===undefined)return json({error:'No workspace settings provided'},400);
+ if(sets.length){sets.push("updated_at=datetime('now')");params.push(oid);await env.DB.prepare('UPDATE organizations SET '+sets.join(', ')+' WHERE id=?').bind(...params).run()}
+ const settings=[];
+ if(body.supportPhone!==undefined)settings.push(['support_phone',String(body.supportPhone??'').trim()]);
+ if(body.brandColor!==undefined)settings.push(['brand_color',body.brandColor]);
+ for(const [key,value] of settings)await env.DB.prepare("INSERT INTO settings(id,organization_id,key,value) VALUES(?,?,?,?) ON CONFLICT(organization_id,key) DO UPDATE SET value=excluded.value,updated_at=datetime('now')").bind(uuid(),oid,key,value).run();
+ await audit(env,oid,uid,'update_tenant_settings','Workspace settings updated',ip);
+ return await getTenantCompat(env,oid,actorRole);
+}
+
 async function getCo(env,oid){const o=await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first();return json(o||{error:'Not found'},o?200:404)}
 async function updCo(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Company name must be 1-120 characters'},400);if(b.email&&!vEmail(b.email))return json({error:'Invalid company email'},400);if(b.currency!==undefined&&!/^[A-Z]{3}$/.test(String(b.currency)))return json({error:'Currency must be a 3-letter ISO code'},400);const f=['name','email','phone','address','logo','currency'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(oid);await env.DB.prepare('UPDATE organizations SET '+u.join(', ')+' WHERE id=?').bind(...p).run();await audit(env,oid,uid,'update_company','Company updated',ip);return json(await env.DB.prepare('SELECT id,name,slug,email,phone,address,logo,currency,plan,created_at FROM organizations WHERE id=?').bind(oid).first())}

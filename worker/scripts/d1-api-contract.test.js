@@ -20,6 +20,32 @@ test("D1 API Worker includes authenticated organization registration and login",
   assert.match(source, /tokenVersion/);
 });
 
+test("profile reads, updates and password changes are scoped to the authenticated organization", () => {
+  const profileStart = source.indexOf("async function getProf");
+  const profileEnd = source.indexOf("async function getTenantCompat", profileStart);
+  const profile = source.slice(profileStart, profileEnd);
+  assert.ok(profileStart >= 0 && profileEnd > profileStart);
+  assert.ok(profile.includes("FROM users WHERE id=? AND organization_id=?"));
+  assert.ok(profile.includes("UPDATE users SET '+u.join(', ')+' WHERE id=? AND organization_id=?'"));
+  assert.ok(profile.includes("p.push(auth.userId,auth.orgId)"));
+  assert.ok(profile.includes(".bind(auth.userId,auth.orgId)"));
+  assert.ok(profile.includes(".bind(credentials.hash,credentials.salt,auth.userId,auth.orgId)"));
+  const passwordChangeStart = profile.indexOf("async function chgPw");
+  const passwordChange = profile.slice(passwordChangeStart);
+  assert.ok(passwordChangeStart >= 0);
+  assert.ok(passwordChange.includes("password-change:'+auth.userId"));
+  assert.ok(passwordChange.includes("loginRateLimited(env,ip,rateKey)"));
+  assert.ok(passwordChange.includes("recordLoginFailure(env,ip,rateKey)"));
+  assert.ok(passwordChange.includes("b.newPassword.length<10||b.newPassword.length>256"));
+  assert.ok(passwordChange.includes("token_version=COALESCE(token_version,0)+1"));
+  assert.ok(passwordChange.includes("password_changed"));
+  assert.ok(passwordChange.includes("WHERE id=? AND organization_id=? AND status='active'"));
+  const authMeStart = source.indexOf("async function authMe");
+  const authMeEnd = source.indexOf("async function dashStats", authMeStart);
+  assert.ok(authMeStart >= 0 && authMeEnd > authMeStart);
+  assert.ok(source.slice(authMeStart, authMeEnd).includes("WHERE id=? AND organization_id=?"));
+});
+
 test("dashboard workspace registration URL is normalized to the D1 auth registration handler", () => {
   assert.equal(normalizeApiPath("/api/v1/tenants/register"), "/api/auth/register");
   assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
@@ -38,6 +64,21 @@ test("staff API contract supports frontend edits and DTO compatibility", () => {
   assert.ok(source.includes("path.match(/^\\/api\\/staff\\/[^/]+$/)&&m==='DELETE')return await delStaff"));
   assert.deepEqual(mapStaffRow({id:"u1",name:"A Khan",status:"disabled"}), {id:"u1",name:"A Khan",status:"inactive",full_name:"A Khan"});
   assert.deepEqual(mapStaffRow({id:"u2",full_name:"S Khan",status:"active"}), {id:"u2",full_name:"S Khan",status:"active"});
+});
+
+test("admin cannot promote staff to administrator and staff passwords meet the workspace policy", () => {
+  const createStart = source.indexOf("async function createStaff");
+  const updateStart = source.indexOf("async function updateStaff");
+  const deleteStart = source.indexOf("async function delStaff", updateStart);
+  const create = source.slice(createStart, updateStart);
+  const update = source.slice(updateStart, deleteStart);
+  assert.ok(createStart >= 0 && updateStart > createStart && deleteStart > updateStart);
+  assert.ok(create.includes("b.password.length<10||b.password.length>256"));
+  assert.ok(update.includes("b.password.length<10||b.password.length>256"));
+  assert.ok(update.includes("b.role==='admin'&&role!=='owner'"));
+  assert.ok(update.includes("Only the owner can promote staff to administrator"));
+  assert.ok(update.includes("WHERE id=? AND organization_id=?"));
+  assert.ok(create.includes("assigned==='admin'&&role!=='owner'"));
 });
 
 test("D1 API Worker includes network inventory and staff permission modules", () => {

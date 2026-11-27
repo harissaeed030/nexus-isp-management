@@ -7,6 +7,8 @@ const database = read("../src/config/database.js");
 const workerReadme = read("../../worker/README.md");
 const workerSource = read("../../worker/src/index.js");
 const d1WorkerSource = read("../../worker/src/d1-api-worker.js");
+const localAppSource = read("../src/app.js");
+const userProfilePhoneMigration = read("../migrations/018_user_profile_phone.sql");
 const dashboardSource = read("../../assets/js/app.js");
 const pagesProxy = read("../../functions/api/[[path]].js");
 const pagesRoutes = JSON.parse(read("../../_routes.json"));
@@ -40,16 +42,16 @@ test("SQLite and Cloudflare D1 remain separate runtimes", () => {
 });
 
 
-test("Hosted dashboard signup targets the D1 tenant registration route and local-only reset UX does not claim hosted support", () => {
-  assert.match(dashboardSource, /call\(setup\?"\/api\/v1\/tenants\/register":"\/api\/v1\/auth\/login"/);
-  assert.match(d1WorkerSource, /path==='\/api\/tenants\/register'\?'\/api\/auth\/register'/);
-  assert.match(d1WorkerSource, /if\(path==='\/api\/auth\/register'&&m==='POST'\)return await authReg/);
-  assert.match(dashboardSource, /Password reset is not enabled on the hosted API yet/);
-  assert.match(dashboardSource, /const localApi=\(\(\)=>/);
-  assert.match(dashboardSource, /if\(!localApi\)/);
-  assert.match(dashboardSource, /call\("\/api\/v1\/auth\/reset-password"/);
+test("Hosted dashboard password reset uses the token flow supported by the D1 API", () => {
+  assert.ok(dashboardSource.includes('call(setup?"/api/v1/tenants/register":"/api/v1/auth/login"'));
+  assert.ok(d1WorkerSource.includes("path==='/api/tenants/register'"));
+  assert.ok(d1WorkerSource.includes("path==='/api/auth/reset-password'&&m==='POST'"));
+  assert.ok(d1WorkerSource.includes("consumePasswordReset"));
+  assert.ok(d1WorkerSource.includes("issuePasswordReset"));
+  assert.ok(!dashboardSource.includes("Password reset is not enabled on the hosted API yet"));
+  assert.ok(!dashboardSource.includes("const localApi=(()=>"));
+  assert.ok(dashboardSource.includes('call("/api/v1/auth/reset-password"'));
 });
-
 
 test("Hosted dashboard staff role choices are accepted by the D1 Worker", () => {
   assert.match(dashboardSource, /const roleChoices=\[\["billing","Billing"\],\["support","Customer support"\],\["technician","Network \/ NOC & Field Technician"\],\["staff","Limited staff"\]\]/);
@@ -69,4 +71,36 @@ test("Cloudflare Pages routes API traffic to the environment-specific Worker wit
   assert.match(pagesProxy, /incoming\.pathname\.startsWith\("\/api\/"\)/);
   assert.deepEqual(pagesRoutes, { version: 1, include: ["/api/*"], exclude: [] });
   assert.match(portalSource, /fetch\("\/api\/v1\/customer-portal"/);
+});
+
+test("Profile and password settings are wired across local SQLite and hosted D1 APIs", () => {
+  assert.ok(localAppSource.includes('app.get("/api/v1/profile",auth'));
+  assert.ok(localAppSource.includes('app.put("/api/v1/profile",auth'));
+  assert.ok(localAppSource.includes('app.put("/api/v1/profile/password",auth'));
+  assert.ok(localAppSource.includes('req.path==="/api/v1/profile/password"'));
+  assert.ok(localAppSource.includes('DELETE FROM sessions WHERE user_id=?'));
+  assert.ok(d1WorkerSource.includes("if(path==='/api/profile'&&m==='GET')"));
+  assert.ok(d1WorkerSource.includes("if(path==='/api/profile/password'&&m==='PUT')"));
+  assert.ok(dashboardSource.includes('"Change Username / Password":"profile"'));
+  assert.ok(dashboardSource.includes('d.user.fullName||d.user.name||d.user.email||"Workspace user"'));
+  assert.ok(dashboardSource.includes('call("/api/v1/profile/password"'));
+  assert.ok(userProfilePhoneMigration.includes("ALTER TABLE users ADD COLUMN phone TEXT"));
+  assert.ok(database.includes("018_user_profile_phone"));
+});
+
+test("Local SQLite password reset consumes each token atomically before changing credentials", () => {
+  const start = localAppSource.indexOf('app.post("/api/v1/auth/reset-password"');
+  const end = localAppSource.indexOf('app.post("/api/v1/auth/logout"', start);
+  const handler = localAppSource.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(handler, /withTransaction\(db,\(\)=>/);
+  assert.match(handler, /UPDATE password_resets SET used_at=\? WHERE id=\? AND token_hash=\? AND used_at IS NULL AND expires_at>\?/);
+  assert.match(handler, /consumed\.changes!==1/);
+  assert.ok(handler.indexOf("UPDATE password_resets SET used_at") < handler.indexOf("UPDATE users SET password_hash"));
+  assert.match(handler, /RESET_TOKEN_INVALID/);
+  const issueStart = localAppSource.indexOf('app.post("/api/v1/staff/:id/password-reset"');
+  const issueEnd = localAppSource.indexOf('app.post("/api/v1/auth/reset-password"', issueStart);
+  const issueHandler = localAppSource.slice(issueStart, issueEnd);
+  assert.ok(issueStart >= 0 && issueEnd > issueStart);
+  assert.match(issueHandler, /target\.role==="admin"&&req\.user\.role!=="owner"/);
 });
