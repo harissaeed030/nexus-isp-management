@@ -66,6 +66,21 @@ test("staff API contract supports frontend edits and DTO compatibility", () => {
   assert.deepEqual(mapStaffRow({id:"u2",full_name:"S Khan",status:"active"}), {id:"u2",full_name:"S Khan",status:"active"});
 });
 
+test("admin cannot promote staff to administrator and staff passwords meet the workspace policy", () => {
+  const createStart = source.indexOf("async function createStaff");
+  const updateStart = source.indexOf("async function updateStaff");
+  const deleteStart = source.indexOf("async function delStaff", updateStart);
+  const create = source.slice(createStart, updateStart);
+  const update = source.slice(updateStart, deleteStart);
+  assert.ok(createStart >= 0 && updateStart > createStart && deleteStart > updateStart);
+  assert.ok(create.includes("b.password.length<10||b.password.length>256"));
+  assert.ok(update.includes("b.password.length<10||b.password.length>256"));
+  assert.ok(update.includes("b.role==='admin'&&role!=='owner'"));
+  assert.ok(update.includes("Only the owner can promote staff to administrator"));
+  assert.ok(update.includes("WHERE id=? AND organization_id=?"));
+  assert.ok(create.includes("assigned==='admin'&&role!=='owner'"));
+});
+
 test("D1 API Worker includes network inventory and staff permission modules", () => {
   for (const route of ["/api/staff", "/api/pppoe", "/api/onus", "/api/network/devices", "/api/audit-logs", "/api/notifications"]) {
     assert.ok(source.includes(route), `Missing API route family: ${route}`);
