@@ -1292,7 +1292,25 @@ async function getSet(env,oid){const rows=await env.DB.prepare('SELECT key,value
 async function updSet(r,env,oid,uid,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);const limits={support_phone:80,support_email:160,whatsapp_support:80,payment_instructions:2000};if(Object.entries(b).some(([k,v])=>!(k in limits)||typeof v!=='string'||v.length>limits[k]))return json({error:'Unsupported or oversized workspace setting'},400);if(b.support_email&&!vEmail(b.support_email))return json({error:'Invalid support email'},400);for(const[k,v]of Object.entries(b)){const ex=await env.DB.prepare('SELECT id FROM settings WHERE organization_id=? AND key=?').bind(oid,k).first();if(ex)await env.DB.prepare("UPDATE settings SET value=?,updated_at=datetime('now')WHERE id=?").bind(String(v),ex.id).run();else await env.DB.prepare('INSERT INTO settings(id,organization_id,key,value)VALUES(?,?,?,?)').bind(uuid(),oid,k,String(v)).run()}await audit(env,oid,uid,'update_settings','Settings updated',ip);return json({success:true})}
 async function getProf(env,auth){const u=await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=? AND organization_id=?').bind(auth.userId,auth.orgId).first();return json(u||{error:'Not found'},u?200:404)}
 async function updProf(r,env,auth,ip){const b=await parseBody(r);if(!b||typeof b!=='object'||Array.isArray(b))return json({error:'Invalid body'},400);if(b.name!==undefined&&(!s(b.name)||s(b.name).length>120))return json({error:'Name must be 1-120 characters'},400);if(b.phone!==undefined&&String(b.phone).length>50)return json({error:'Phone is too long'},400);const f=['name','phone'];const u=[],p=[];for(const x of f){if(b[x]!==undefined){u.push(x+'=?');p.push(b[x])}}if(!u.length)return json({error:'No fields'},400);u.push("updated_at=datetime('now')");p.push(auth.userId,auth.orgId);await env.DB.prepare('UPDATE users SET '+u.join(', ')+' WHERE id=? AND organization_id=?').bind(...p).run();return json(await env.DB.prepare('SELECT id,email,name,role,phone,status FROM users WHERE id=? AND organization_id=?').bind(auth.userId,auth.orgId).first())}
-async function chgPw(r,env,auth,ip){const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);if(!b.currentPassword||!b.newPassword)return json({error:'Both passwords required'},400);if(b.newPassword.length<8)return json({error:'Password must be at least 8 characters'},400);const u=await env.DB.prepare('SELECT * FROM users WHERE id=? AND organization_id=?').bind(auth.userId,auth.orgId).first();if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt))return json({error:'Current password incorrect'},401);const{hash,salt}=await hashPw(b.newPassword);await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now')WHERE id=? AND organization_id=?").bind(hash,salt,auth.userId,auth.orgId).run();return json({success:true,message:'Password changed'})}
+async function chgPw(r,env,auth,ip){
+ const rateKey='password-change:'+auth.userId;
+ if(await loginRateLimited(env,ip,rateKey))return json({error:'Too many password change attempts. Try again in 15 minutes.'},429);
+ const b=await parseBody(r);
+ if(!b||typeof b.currentPassword!=='string'||typeof b.newPassword!=='string'||b.newPassword.length<10||b.newPassword.length>256)
+  return json({error:'Current password and a new password of 10–256 characters are required'},400);
+ const u=await env.DB.prepare('SELECT password_hash,password_salt FROM users WHERE id=? AND organization_id=? AND status=\'active\'').bind(auth.userId,auth.orgId).first();
+ if(!u)return json({error:'Account is inactive or no longer exists'},401);
+ if(!await verifyPw(b.currentPassword,u.password_hash,u.password_salt)){
+  await recordLoginFailure(env,ip,rateKey);
+  return json({error:'Current password incorrect'},401);
+ }
+ const credentials=await hashPw(b.newPassword);
+ const updated=await env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,token_version=COALESCE(token_version,0)+1,updated_at=datetime('now') WHERE id=? AND organization_id=? AND status='active'").bind(credentials.hash,credentials.salt,auth.userId,auth.orgId).run();
+ if(Number(updated?.meta?.changes||0)!==1)return json({error:'Account is inactive or no longer exists'},401);
+ await env.DB.prepare('DELETE FROM login_attempts WHERE ip_address=? AND email=?').bind(ip,rateKey).run();
+ await audit(env,auth.orgId,auth.userId,'password_changed','User changed password',ip);
+ return json({success:true,message:'Password changed. Please sign in again.'});
+}
 async function getTenantCompat(env,oid,actorRole){
  if(actorRole!=='owner')return json({error:'Only the workspace owner can view company settings'},403);
  const org=await env.DB.prepare('SELECT id,name,slug,plan,created_at,address,phone FROM organizations WHERE id=?').bind(oid).first();
