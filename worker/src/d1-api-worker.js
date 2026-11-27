@@ -992,7 +992,7 @@ async function createStaff(r,env,oid,uid,role,ip){
  const b=await parseBody(r);if(!b)return json({error:'Invalid body'},400);
  const ms=vReq(b,['email','password','name']);if(ms.length)return json({error:'Missing fields',fields:ms},400);
  if(!vEmail(b.email))return json({error:'Invalid email'},400);
- if(typeof b.password!=='string'||b.password.length<8)return json({error:'Password must be at least 8 characters'},400);
+ if(typeof b.password!=='string'||b.password.length<10||b.password.length>256)return json({error:'Password must be 10–256 characters'},400);
  const allowed=['admin','billing','support','technician','staff'],assigned=b.role||'staff';
  if(!allowed.includes(assigned))return json({error:'Invalid role'},400);
  if(assigned==='admin'&&role!=='owner')return json({error:'Only the owner can create administrators'},403);
