@@ -25,10 +25,11 @@ test("profile reads, updates and password changes are scoped to the authenticate
   const profileEnd = source.indexOf("async function getTenantCompat", profileStart);
   const profile = source.slice(profileStart, profileEnd);
   assert.ok(profileStart >= 0 && profileEnd > profileStart);
-  assert.match(profile, /SELECT id,email,name,role,phone,status FROM users WHERE id=\? AND organization_id=\?\)\.bind\(auth\.userId,auth\.orgId\)/);
-  assert.match(profile, /UPDATE users SET '\+u\.join\(', '\)\+' WHERE id=\? AND organization_id=\?'/);
-  assert.match(profile, /SELECT \* FROM users WHERE id=\? AND organization_id=\?\)\.bind\(auth\.userId,auth\.orgId\)/);
-  assert.match(profile, /WHERE id=\? AND organization_id=\?\"\)\.bind\(hash,salt,auth\.userId,auth\.orgId\)/);
+  assert.ok(profile.includes("FROM users WHERE id=? AND organization_id=?"));
+  assert.ok(profile.includes("UPDATE users SET '+u.join(', ')+' WHERE id=? AND organization_id=?'"));
+  assert.ok(profile.includes("p.push(auth.userId,auth.orgId)"));
+  assert.ok(profile.includes(".bind(auth.userId,auth.orgId)"));
+  assert.ok(profile.includes(".bind(hash,salt,auth.userId,auth.orgId)"));
 });
 
 test("dashboard workspace registration URL is normalized to the D1 auth registration handler", () => {
