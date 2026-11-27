@@ -20,6 +20,17 @@ test("D1 API Worker includes authenticated organization registration and login",
   assert.match(source, /tokenVersion/);
 });
 
+test("profile reads, updates and password changes are scoped to the authenticated organization", () => {
+  const profileStart = source.indexOf("async function getProf");
+  const profileEnd = source.indexOf("async function getTenantCompat", profileStart);
+  const profile = source.slice(profileStart, profileEnd);
+  assert.ok(profileStart >= 0 && profileEnd > profileStart);
+  assert.match(profile, /SELECT id,email,name,role,phone,status FROM users WHERE id=\? AND organization_id=\?\)\.bind\(auth\.userId,auth\.orgId\)/);
+  assert.match(profile, /UPDATE users SET '\+u\.join\(', '\)\+' WHERE id=\? AND organization_id=\?'/);
+  assert.match(profile, /SELECT \* FROM users WHERE id=\? AND organization_id=\?\)\.bind\(auth\.userId,auth\.orgId\)/);
+  assert.match(profile, /WHERE id=\? AND organization_id=\?\"\)\.bind\(hash,salt,auth\.userId,auth\.orgId\)/);
+});
+
 test("dashboard workspace registration URL is normalized to the D1 auth registration handler", () => {
   assert.equal(normalizeApiPath("/api/v1/tenants/register"), "/api/auth/register");
   assert.equal(normalizeApiPath("/api/v1/auth/login"), "/api/auth/login");
