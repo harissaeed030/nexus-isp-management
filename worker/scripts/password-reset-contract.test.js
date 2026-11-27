@@ -75,7 +75,8 @@ test("D1 migration 0026 applies cleanly without overwriting deployed migration 0
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='password_reset_tokens'").get().n, 1);
     db.exec("INSERT INTO organizations(id) VALUES('org-a'),('org-b')");
     db.exec("INSERT INTO users(id,organization_id) VALUES('owner-a','org-a'),('owner-b','org-b')");
-    assert.throws(() => db.prepare("INSERT INTO password_reset_tokens(id,organization_id,user_id,token_hash,expires_at,created_by) VALUES('bad','org-a','owner-b','hash-bad','2099-01-01','owner-a')").run());
+    assert.throws(() => db.prepare("INSERT INTO password_reset_tokens(id,organization_id,user_id,token_hash,expires_at,created_by) VALUES('bad-user','org-a','owner-b','hash-bad-user','2099-01-01','owner-a')").run());
+    assert.throws(() => db.prepare("INSERT INTO password_reset_tokens(id,organization_id,user_id,token_hash,expires_at,created_by) VALUES('bad-actor','org-a','owner-a','hash-bad-actor','2099-01-01','owner-b')").run());
     db.prepare("INSERT INTO password_reset_tokens(id,organization_id,user_id,token_hash,expires_at,created_by) VALUES('good','org-a','owner-a','hash-good','2099-01-01','owner-a')").run();
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM password_reset_tokens").get().n, 1);
   } finally {
