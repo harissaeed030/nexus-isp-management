@@ -30,6 +30,10 @@ test("profile reads, updates and password changes are scoped to the authenticate
   assert.ok(profile.includes("p.push(auth.userId,auth.orgId)"));
   assert.ok(profile.includes(".bind(auth.userId,auth.orgId)"));
   assert.ok(profile.includes(".bind(hash,salt,auth.userId,auth.orgId)"));
+  const authMeStart = source.indexOf("async function authMe");
+  const authMeEnd = source.indexOf("async function dashStats", authMeStart);
+  assert.ok(authMeStart >= 0 && authMeEnd > authMeStart);
+  assert.ok(source.slice(authMeStart, authMeEnd).includes("WHERE id=? AND organization_id=?"));
 });
 
 test("dashboard workspace registration URL is normalized to the D1 auth registration handler", () => {
